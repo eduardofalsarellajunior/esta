@@ -1,0 +1,16 @@
+{
+  "name": "esta",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Modernização do sistema de estacionamento (legado Clipper/DOS)",
+  "scripts": {
+    "test": "node --import tsx --test packages/tarifacao/*.test.ts",
+    "build": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
