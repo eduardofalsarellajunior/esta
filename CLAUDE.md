@@ -1,176 +1,217 @@
 # CLAUDE.md — esta (Modernização do Sistema de Estacionamento)
 
-> Arquivo de contexto persistente para o Claude Code.
-> Leia este arquivo antes de qualquer alteração. Ele descreve o objetivo, a
-> arquitetura, as decisões já tomadas e o estado atual do projeto.
+> Arquivo de contexto persistente para o Claude Code. Leia antes de qualquer
+> alteração. Descreve objetivo, arquitetura, estado atual e como subir o projeto.
+>
+> **Última atualização:** build autônomo das Fases 1–5 concluído; app funcional
+> versionado no GitHub. Fase 6 depende de terceiros (ver §9).
 
 ---
 
-## 1. Visão geral do projeto
+## 1. Visão geral
 
-**esta** é a **modernização de um sistema legado de estacionamento** (originalmente
-do pai do Eduardo), escrito em **Clipper/DOS com arquivos DBF**, para uma
-**plataforma web + app móvel**.
+**esta** é a modernização de um **ERP de estacionamento** legado (do pai do Eduardo),
+originalmente em **Clipper/DOS com arquivos DBF** (~94.500 linhas em 182 fontes
+`.PRG`), para **web (PWA) + Supabase**. Não é só "controlar o pátio": tem operação,
+fiscal (NFS-e), financeiro e fidelidade.
 
-- **Repositório:** `eduardofalsarellajunior/esta`
-- **Natureza real do legado:** não é um simples "controlador de pátio" — é um
-  **ERP completo de operação de estacionamento**: ~**94.500 linhas** de Clipper em
-  **182 fontes `.PRG`**, com módulos operacional, fiscal, financeiro e de fidelidade.
-- **Estratégia de migração:** **incremental (Strangler Fig)**, NÃO "big bang".
-  Começar pelo núcleo operacional (entrada/saída/tarifação), que é o que gera caixa.
+- **Repositório:** `eduardofalsarellajunior/esta` (branch `main`).
+- **Estratégia:** migração incremental **Strangler Fig**, começando pelo núcleo que
+  gera caixa (entrada/saída/tarifação).
+- **Filial de exemplo:** Falsarella e Scarpini (Campinas-SP), id fixo
+  `00000000-0000-0000-0000-0000000000f1`.
 
 ### Módulos do legado (mapeados)
 | Prefixo | Domínio |
 |---------|---------|
-| `ESTA*` | Operação do estacionamento (núcleo) |
-| `SIS*`  | Infraestrutura do sistema |
-| `RPS*`  | Fiscal / NFS-e |
-| `CRC*`  | Contas a receber |
-| `CPG*`  | Contas a pagar |
-| `BAN*`  | Banco / fluxo de caixa |
-| —       | Trilhas de auditoria |
+| `ESTA*` (127) | Operação (núcleo) |
+| `SIS*` (15) | Infraestrutura/menu/parâmetros |
+| `RPS*`/`ESTARPS*` | Fiscal (NFS-e — Campinas, Padrão Nacional/ABRASF/DSF) |
+| `CRC*` (15) | Contas a receber |
+| `CPG*` (10) | Contas a pagar |
+| `BAN*` (7) | Banco / fluxo de caixa |
+
+> Detalhe completo em [docs/ANALISE-E-ARQUITETURA.md](docs/ANALISE-E-ARQUITETURA.md)
+> e status por fase em [docs/STATUS-E-INTEGRACOES.md](docs/STATUS-E-INTEGRACOES.md).
 
 ---
 
-## 2. Stack técnica
+## 2. Subir o projeto em uma máquina nova
 
-| Camada         | Tecnologia                          |
-|----------------|-------------------------------------|
-| Front-end / PDV| **React 18 + Vite 5** (PWA)         |
-| Backend/dados  | **Supabase** (Postgres + Auth + RLS + Realtime) |
-| Hospedagem     | **Vercel**                          |
-| App móvel      | PWA responsivo → React Native/Expo se precisar de nativo (câmera/LPR, push) |
-| Testes         | `node --test` via `tsx`             |
+O banco (Supabase) é **em nuvem** — não depende da máquina. Trocar de computador
+significa só clonar o repo e reconfigurar as chaves locais.
 
-> Cuidados do Vite: config em `vite.config.js`, `index.html` na raiz, variáveis
-> com prefixo `VITE_` via `import.meta.env`.
+```bash
+git clone https://github.com/eduardofalsarellajunior/esta.git
+cd esta
+npm install
+# criar .env.local a partir de .env.example e preencher com as chaves do Supabase
+npm run dev          # PDV em http://localhost:5174
+npm test             # testes do motor de tarifação (20)
+npm run build        # build de produção (Vite)
+```
 
----
+**Pré-requisitos:** Node 24+, git.
 
-## 3. Decisões de arquitetura já tomadas (confirmadas pelo Eduardo)
+**`.env.local`** (NÃO versionado — recriar em cada máquina):
+```
+VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+VITE_SUPABASE_ANON_KEY=sua-anon-key-publica
+```
+(Supabase → Project Settings → API.)
 
-1. **Multi-tenant desde o dia 1.** Opera com **1 filial** inicialmente, mas com
-   `filial_id` em toda tabela operacional + **RLS** isolando por filial (função
-   auxiliar `filial_do_usuario()`). Preparado para escalar a SaaS/multi-pátio sem
-   refatorar.
-2. **Módulos financeiros no escopo** (contas a pagar/receber e banco — ex-`CRC*` /
-   `CPG*` / `BAN*`): paridade obrigatória com o legado.
-3. **Todas as funcionalidades futuras aprovadas:**
-   - Pagamento **Pix/cartão** + **app do cliente**;
-   - **LPR** (reconhecimento de placa);
-   - integração com **cancela/hardware**;
-   - **BI em tempo real**.
-4. **Operação ONLINE (não offline-first).** ⚠️ Decisão importante: o Eduardo
-   **rejeitou** a proposta inicial de "offline-first", pois os estabelecimentos têm
-   internet. O modelo é:
-   - o **PWA no navegador fica sempre online e simples**;
-   - a contingência para quedas curtas de internet fica num **agente local na
-     cabine**, com um **buffer leve** ("para-quedas");
-   - esse agente também faz a **ponte com o hardware** (cancela, impressora,
-     câmera), já que o navegador não acessa serial/USB de forma confiável.
-   - Este é o desenho "Opção B" que o Eduardo escolheu.
+**O que NÃO vem pelo git** (recriar/obter à parte):
+- `.env.local` — as chaves.
+- `supabase/seed/local/seed_cadastros.sql` — seed com **dados pessoais** de
+  mensalistas/clientes (gitignored). Os dados já estão no Supabase; só é preciso se
+  quiser recarregar. Gerado a partir dos DBFs.
+- Os `.zip`/`.dbf` do legado (ficam em `Downloads/` na máquina antiga) — necessários
+  só para **regenerar seeds**. O seed de referência já está versionado.
 
 ---
 
-## 4. Modelo de dados (Supabase) — já projetado
+## 3. Stack
 
-Foi produzido um par de migrations que estabelece o modelo multi-tenant completo do
-núcleo:
+| Camada | Tecnologia |
+|--------|------------|
+| Front-end / PDV | **React 18 + Vite 5** (PWA), `react-router-dom` |
+| Backend/dados | **Supabase** (Postgres + Auth + RLS + Realtime) |
+| Hospedagem | **Vercel** (deploy no push da `main`) |
+| App móvel | PWA responsivo → React Native/Expo se precisar nativo (LPR/push) |
+| Agente de cabine | Serviço local (ponte serial/USB + buffer offline) — Fase 6 |
+| Testes | `node --test` via `tsx` |
 
-- **`0001_core_schema.sql`** — tabelas: `filiais`, `perfis` (via Supabase Auth),
-  `tabelas_preco` + `tabela_preco_faixas` (normalizado a partir da estrutura plana
-  do `ESTAHORA`), `modelos_veiculo`, `convenios`, `mensalistas` +
-  `mensalista_veiculos` (removendo o **limite legado de 3 placas** → agora 1:N) +
-  `mensalidades`, `formas_pagamento`, `vagas` (com *delay* de reuso via
-  `liberavel_em`), e `movimentos` como **log append-only** com índice único que
-  impede entrada dupla para a mesma placa (no máximo 1 carro aberto por placa).
-- **`0002_rls.sql`** — Row-Level Security isolando tudo por `filial_id`.
-
-> ⚠️ **Estado:** o schema foi **projetado e entregue**, mas confirmar se já foi
-> aplicado no Supabase deste projeto. (Diferente do Comercial-INEPAD, aqui a
-> aplicação do SQL ainda precisa ser verificada.)
+> Vite: config em `vite.config.js` (porta **5174**, para não conflitar com outro app
+> local na 5173), `index.html` na raiz, variáveis `VITE_` via `import.meta.env`.
 
 ---
 
-## 5. Motor de tarifação (peça mais crítica)
+## 4. Estrutura do repositório
 
-- **`packages/tarifacao/tarifacao.ts`** — função **pura, sem I/O**, que replica a
-  lógica do `ESTAHORA`/`ESTALANC`:
-  `tempo decorrido → tolerância → seleção de faixa (menor ateHoras >= decorrido)
-  → excedente (repete última faixa ou pernoite) → convênio (fixo, % ou coluna
-  valorConvenio da faixa) → piso em zero → pontos de fidelidade`.
-- **`packages/tarifacao/tarifacao.test.ts`** — **15 testes, todos passando**
-  (`node --test` via `tsx`).
-
-### ⚠️ Três regras marcadas `[VALIDAR]` no código (semântica INFERIDA, não confirmada)
-Devem ser conferidas rodando movimentos históricos reais do `ESTALANC` no motor novo:
-1. **Tolerância** — o legado rotula como "%", mas foi modelada como **minutos** de
-   carência. Confirmar.
-2. **Pernoite** — regra de "aplica valor fixo se cruzar a janela e for maior".
-   Confirmar interação com as faixas.
-3. **`usaValorConvenioDaFaixa`** — quando o convênio usa a coluna "VALOR CONVENIO"
-   da faixa como valor final.
-
-> **Bloqueio conhecido:** a reconciliação contra dados reais está travada porque o
-> ZIP enviado continha só os **fontes** (`.PRG`), **não os arquivos `.dbf`** de
-> dados. Para validar as 3 regras, é preciso extrair os `.dbf` (encoding **CP850**)
-> para tabelas de staging e reconciliar.
-
----
-
-## 6. Protótipo de PDV (já existe)
-
-- **`pdv-prototipo.jsx`** — fluxo completo de entrada/saída: digitar placa dispara
-  detecção de mensalista, atribuição de vaga ou roteamento de saída; a tela de saída
-  mostra o **valor recalculado a cada segundo** usando a função real `calcularTarifa`,
-  com seletores de convênio e forma de pagamento.
-- Design: base grafite + âmbar (linguagem visual de estacionamento), placa no
-  **formato Mercosul**, tipografia monoespaçada nos valores.
-- ⚠️ **Estado:** usa **dados em memória (seed)** — ainda **não** está ligado ao
-  Supabase. Integração é o próximo passo.
+```
+packages/tarifacao/      Motor de tarifação (puro, testado) — o coração
+  tarifacao.ts           HORAS/PERNOITE/faixas/convênio/pernoite/selos/…
+  tarifacao.test.ts      20 testes
+  README.md              Semântica + estado da reconciliação
+src/
+  App.jsx                Auth gate + roteamento
+  main.jsx, styles.css
+  componentes/
+    Layout.jsx           Navegação lateral
+    Crud.jsx             CRUD genérico (base dos cadastros)
+  lib/
+    supabase.js          Cliente Supabase (env)
+    dados.js             Carregadores (tabelas de preço, pátio) + mapeamento p/ motor
+    tempo.js             Hora comercial HH.MM, formatadores
+    fiscal.js            Geração de XML DPS (Padrão Nacional) + numeração RPS
+  telas/
+    Patio.jsx            Entrada (detecta mensalista/convênio) + saída (cálculo real, split pagto, fidelidade)
+    Caixa.jsx            Abertura/sangria/fechamento por operador
+    BI.jsx               Painel de KPIs em tempo real
+    Precos.jsx           Tabelas de preço + faixas (1:N)
+    cadastros.jsx        Convênios, Formas, Vagas, Modelos, Mensalistas
+    financeiro.jsx       Receber (ponte mensalidade→título), Pagar, Banco
+    Fiscal.jsx           Geração de RPS/NFS-e
+supabase/
+  migrations/            0001 núcleo · 0002 RLS · 0003 caixa · 0004 financeiro · 0005 fiscal
+  seed/
+    seed_referencia.sql  Seed sem PII (versionado)
+    local/               Seed com PII (gitignored)
+    README.md
+docs/                    ANALISE-E-ARQUITETURA.md · STATUS-E-INTEGRACOES.md
+```
 
 ---
 
-## 7. Fluxo de trabalho por serviço
+## 5. Banco de dados (Supabase) — migrations e seeds
 
-| Serviço      | Como funciona |
-|--------------|---------------|
-| **Código (React/Vite/TS)** | O Claude Code edita local, faz commit e push. |
-| **Vercel**   | Deploy automático a cada push na branch `main`. |
-| **Supabase** | **Fluxo manual.** O Code **escreve** o SQL / migrations; **não executa**. Eduardo roda no **SQL Editor** do painel. |
+Modelo **multi-tenant** (tudo com `filial_id` + **RLS** isolando por filial via
+`filial_do_usuario()`). Domínio `hora_comercial` (HH.MM) alinhado ao motor.
 
-### Regras do fluxo Supabase (manual)
-- Gerar SQL, **nunca executar**; **explicar em português** antes de entregar.
-- Cuidado redobrado com scripts destrutivos e com o motor de tarifação (afeta
-  cobrança real de clientes).
+**Ordem de aplicação no SQL Editor:**
+```
+0001_core_schema.sql   núcleo (filiais, perfis, tabelas_preco+faixas, convenios,
+                       mensalistas+veiculos+mensalidades, formas_pagamento, vagas,
+                       clientes, movimentos+movimento_pagamentos, modelos_veiculo)
+0002_rls.sql           RLS por filial
+0003_caixa.sql         caixas, sangrias, movimentos.caixa_id
+0004_financeiro.sql    fornecedores, contas_bancarias, titulos_receber/pagar, lancamentos_banco
+0005_fiscal.sql        notas_fiscais, fiscal_sequencias
+--- seeds ---
+seed/seed_referencia.sql       filial + preços + convênios + formas + modelos
+seed/local/seed_cadastros.sql  mensalistas + clientes (PII, à parte)
+```
+**Estado:** `0001`/`0002` e o seed de referência **aplicados**. `0003`–`0005`:
+confirmar se já foram aplicados na nuvem (necessários para Caixa/Financeiro/Fiscal).
 
----
-
-## 8. Estado atual e próximos passos
-
-**Estado:** arquitetura definida e validada; primeira leva de código produzida
-(schema + motor testado + protótipo de PDV). **Ainda não integrado nem versionado
-neste repositório** — trazer os arquivos para o repo é pré-requisito para continuar.
-
-**Sequência recomendada:**
-1. [ ] Trazer os arquivos já produzidos para dentro do repo `esta` (schema,
-   `tarifacao.ts` + testes, protótipo PDV).
-2. [ ] Aplicar/verificar o schema (`0001` + `0002`) no Supabase.
-3. [ ] **Ligar o PDV ao Supabase** (trocar seed por tabelas reais, com Auth + RLS).
-4. [ ] **CRUDs do núcleo** (tabelas de preço, convênios, mensalistas) para o supervisor.
-5. [ ] Quando houver os `.dbf`: **reconciliação + carga inicial** e validação das 3
-   regras `[VALIDAR]`.
+### Regras do fluxo Supabase (MANUAL)
+- O Code **escreve** SQL/migrations e **explica em português**; **não executa**.
+  O Eduardo roda no SQL Editor. Cuidado redobrado com scripts destrutivos e com o
+  motor de tarifação (afeta cobrança real).
+- Para criar um usuário do app: criar em *Authentication* e inserir em `perfis`
+  (`id` do usuário, `filial_id` da filial, `papel` = `supervisor`/`operador`).
 
 ---
 
-## 9. Convenções de trabalho
-- **Idioma:** interface e comunicação em **português (pt-BR)**.
-- **Commits:** mensagens claras e descritivas, em português.
-- **Confirmação:** antes de alterações estruturais ou `git push`, confirmar.
-- **Antes de concluir:** garantir que `npm run build` passa e que os testes do
-  motor de tarifação seguem verdes.
+## 6. Motor de tarifação (peça mais crítica) — DECODIFICADO
+
+`packages/tarifacao/tarifacao.ts` replica fielmente `SISPROC2.PRG` (HORAS/PERNOITE/
+MINUTO) e `ESTALAN2.PRG` (saída). **20 testes verdes.**
+
+- **Hora comercial `HH.MM`**: `14.30` = 14h30 (decimal = MINUTOS, não fração).
+- **Tolerância = PERCENTUAL** (não minutos): `y = janela_noturna × (100−TOL)/100`.
+- **Pernoite**: `{diárias, residual}`; valor = faixa(residual) + diárias×`valor_diaria`.
+- Até 45 faixas; convênio (tabela alt./grade CON/percentual/valor fixo); **2 segmentos**
+  (hora de corte); selos/vales; saldo devedor; bônus fidelidade; piso em zero.
+
+### Reconciliação contra dados reais
+Os DBFs reais existem (em `Downloads/hesta3.zip → filial01.zip`); `ESTAMORT.DBF` tem
+**2.575 movimentos**. ⚠️ A tabela de preço da época **não foi preservada** no backup,
+então a reconciliação valor-a-valor usa a **tarifa recuperada dos dados** (87,4% de
+acerto exato em P/2023 mesmo-dia). O motor está correto; o resto é explicável
+(tarifa dobrada por perda de ticket, tiers, pernoite). Ver `packages/tarifacao/README.md`.
 
 ---
 
-_Última atualização deste contexto: preparado na migração do projeto para o Claude
-Code, a partir do histórico de análise do legado e da arquitetura definida._
+## 7. Decisões de arquitetura (confirmadas)
+
+1. **Multi-tenant desde o dia 1** (1 filial hoje; SaaS depois), `filial_id` + RLS.
+2. **Financeiro no escopo** — mas **reescrito limpo**: o legado (CRC/CPG/BAN) é código
+   herdado de um sistema escolar e **não tem ponte automática** com o operacional.
+   O novo tem a ponte real: mensalidade/convênio → título a receber.
+3. **Operação ONLINE** (não offline-first): PWA sempre online; contingência de quedas
+   e ponte de hardware ficam num **agente local na cabine** ("Opção B").
+4. Funcionalidades futuras aprovadas: Pix/cartão, app do cliente, LPR, cancela, BI.
+
+---
+
+## 8. Estado por fase
+
+| Fase | Entrega | Estado |
+|------|---------|--------|
+| 1 — Motor | pacote puro + testes + reconciliação | ✅ funcional |
+| 2 — PDV | login, pátio (mensalista/convênio/pagamento/fidelidade), CRUDs | ✅ funcional |
+| 3 — Caixa + BI | abertura/sangria/fechamento, painel tempo real | ✅ funcional (após 0003) |
+| 5 — Financeiro | receber/pagar/banco + ponte mensalidade→título | ✅ funcional (após 0004) |
+| 4 — Fiscal | geração RPS/NFS-e (Padrão Nacional) + XML | ⚠️ geração ok (após 0005); assinatura+transmissão externas |
+| 6 — Integrações | Pix/cartão, app cliente, LPR, cancela | ⛔ dependem de terceiros |
+
+---
+
+## 9. Fase 6 — pendências externas (ver docs/STATUS-E-INTEGRACOES.md)
+
+- **Pix/cartão automático**: conta em PSP + webhook (registrar manualmente já funciona).
+- **App do cliente**: definição de autenticação do cliente (dados pessoais).
+- **LPR**: câmera + agente local (reconhecimento de placa).
+- **Cancela/impressora/serial**: agente local na cabine + hardware.
+
+---
+
+## 10. Convenções de trabalho
+
+- **Idioma:** pt-BR na interface e comunicação.
+- **Commits:** mensagens claras em português; terminar com `Co-Authored-By: Claude…`.
+- **Push:** `main` → deploy automático na Vercel (configurar as `VITE_*` também nas
+  Environment Variables da Vercel). Confirmar antes de push, salvo autorização explícita.
+- **Antes de concluir:** garantir `npm run build` (Vite) e `npm test` (motor) verdes.
+- **Windows/CRLF:** o git avisa sobre normalização LF→CRLF — inofensivo.
