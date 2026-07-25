@@ -1,0 +1,60 @@
+:root {
+  --bg: #16181c;
+  --panel: #1f232a;
+  --panel2: #262b33;
+  --linha: #333a44;
+  --texto: #e8eaed;
+  --suave: #9aa4b2;
+  --ambar: #f5a623;
+  --ambar-esc: #b9791a;
+  --ok: #3ddc84;
+  --erro: #ff6b6b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+
+.topo {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--linha);
+}
+.topo h1 { font-size: 18px; margin: 0; letter-spacing: 1px; }
+.topo .ambar { color: var(--ambar); }
+
+.container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+.card { background: var(--panel); border: 1px solid var(--linha); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--suave); margin: 0 0 12px; }
+
+input, select, button { font-size: 15px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--linha); background: var(--panel2); color: var(--texto); }
+input:focus, select:focus { outline: 2px solid var(--ambar); }
+button { cursor: pointer; }
+.btn-primary { background: var(--ambar); color: #201500; border: none; font-weight: 700; }
+.btn-primary:hover { background: var(--ambar-esc); }
+.btn-ghost { background: transparent; }
+
+.placa {
+  display: inline-block; font-weight: 700; letter-spacing: 2px;
+  background: #0e0f12; border: 2px solid var(--linha); border-radius: 6px;
+  padding: 4px 10px; text-transform: uppercase;
+}
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--linha); }
+th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
+.valor { color: var(--ambar); font-weight: 700; }
+
+.linha-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+.campo { display: flex; flex-direction: column; gap: 4px; }
+.campo label { font-size: 12px; color: var(--suave); }
+
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; }
+.modal { background: var(--panel); border: 1px solid var(--linha); border-radius: 12px; padding: 24px; width: 420px; }
+.grande { font-size: 40px; font-weight: 800; color: var(--ambar); text-align: center; margin: 12px 0; }
+
+.aviso { color: var(--erro); }
+.centro { display: flex; min-height: 70vh; align-items: center; justify-content: center; }
