@@ -1,0 +1,71 @@
+# esta — Status do build e pontos de integração
+
+Complemento do [ANALISE-E-ARQUITETURA.md](ANALISE-E-ARQUITETURA.md). Registra o
+que já está construído por fase e o que depende de terceiros.
+
+## Como colocar tudo no ar
+
+**1. Migrations (SQL Editor do Supabase, na ordem):**
+```
+supabase/migrations/0001_core_schema.sql   (núcleo)          ✅ aplicado
+supabase/migrations/0002_rls.sql           (RLS)             ✅ aplicado
+supabase/migrations/0003_caixa.sql         (Fase 3 — caixa)
+supabase/migrations/0004_financeiro.sql    (Fase 5)
+supabase/migrations/0005_fiscal.sql        (Fase 4)
+```
+**2. Seeds:** `seed_referencia.sql` (já aplicado) e, se quiser, `local/seed_cadastros.sql`.
+
+**3. App:** `.env.local` com as chaves + `npm run dev` (porta 5174). Na Vercel,
+as mesmas variáveis em *Settings → Environment Variables*.
+
+## Estado por fase
+
+| Fase | Entrega | Estado |
+|---|---|---|
+| **1 — Motor de tarifação** | Pacote puro + 20 testes; reconciliado (87% com tabela recuperada) | ✅ funcional |
+| **2 — PDV** | Login, Pátio (entrada com detecção de mensalista/convênio, saída com cálculo real + split de pagamento + fidelidade), CRUDs (preços/faixas, convênios, mensalistas, formas, vagas, modelos) | ✅ funcional |
+| **3 — Caixa + BI** | Abertura/sangria/fechamento por operador; painel de KPIs em tempo real | ✅ funcional (após 0003) |
+| **5 — Financeiro** | A receber (ponte mensalidade→título), a pagar, banco/lançamentos | ✅ funcional (após 0004) |
+| **4 — Fiscal** | Geração de RPS/NFS-e (Padrão Nacional) + XML; numeração por série | ⚠️ geração ok (após 0005); **assinatura + transmissão externas** |
+| **6 — Integrações** | Pix/cartão, app do cliente, LPR, cancela | ⛔ dependem de terceiros (abaixo) |
+
+## Fase 6 — pontos de integração (dependem de você)
+
+Estas funcionalidades não têm como "funcionar" só com software: precisam de conta
+em provedor, certificado ou hardware. Abaixo o contrato de cada uma, pronto para
+ligar quando o recurso existir.
+
+### Pagamento Pix / cartão (precisa de PSP)
+- **Hoje:** registrar Pix/cartão **manualmente** já funciona (formas de pagamento
+  são cadastro; o split na saída grava em `movimento_pagamentos`).
+- **Falta (automação):** conta em um PSP (ex.: Mercado Pago, PagBank, Stone, Asaas)
+  com chaves de API e URL de webhook.
+- **Contrato sugerido:** ao cobrar, chamar o PSP para criar cobrança (Pix → QR code;
+  cartão → link/maquininha); PSP confirma via **webhook** → uma Edge Function do
+  Supabase marca `movimento_pagamentos`/título como pago. Guardar `psp_id` no pagamento.
+
+### App do cliente (precisa de decisão de acesso)
+- **Base pronta:** tabela `clientes` (placa, visitas, pontos, aniversário).
+- **Falta:** um app/portal separado com **autenticação do cliente** (por placa+PIN,
+  telefone/OTP, ou e-mail). Como expõe dados pessoais, não pode ser consulta pública
+  aberta — precisa de credencial. Sugerido: Supabase Auth (OTP por SMS/e-mail) +
+  RLS específica para o cliente ver só os próprios dados.
+
+### LPR — leitura de placa (precisa de câmera + agente local)
+- **Falta:** câmera na cabine + o **agente local** rodando o reconhecimento
+  (OpenALPR/Plate Recognizer ou modelo próprio).
+- **Contrato:** o agente detecta a placa e faz `POST` para o PDV (ou grava direto
+  via Supabase) preenchendo o campo placa da entrada. O PDV já aceita a placa
+  digitada; a LPR só substitui a digitação.
+
+### Cancela / hardware (precisa do agente local + equipamento)
+- **Falta:** o **agente local na cabine** (serial/USB) — o navegador não controla
+  cancela/impressora/serial com segurança. Decisão "Opção B" já registrada na arquitetura.
+- **Contrato:** agente expõe um serviço local (ex.: `http://localhost:9123`) com
+  `abrir-cancela`, `imprimir-ticket`, e um **buffer offline** ("para-quedas") que
+  sincroniza com o Supabase quando a internet volta. O PDV chama esse serviço local.
+
+> Resumo: o **software está pronto para todas as fases**; Pix/cartão automático,
+> app do cliente, LPR e cancela ficam à espera de conta em PSP, definição de acesso
+> do cliente e do agente local + hardware. Nada disso bloqueia a operação do dia a
+> dia (entrada, saída, cobrança, caixa, BI, financeiro e geração fiscal já funcionam).
