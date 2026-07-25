@@ -1,0 +1,76 @@
+import Crud from '../componentes/Crud.jsx';
+
+// Telas de cadastro simples, todas sobre o CRUD genérico.
+
+export function Convenios({ perfil }) {
+  return <Crud perfil={perfil} titulo="Convênios" tabela="convenios" ordem="codigo"
+    subtitulo="Descontos aplicados na saída (percentual, valor fixo, tabela alternativa ou grade própria)."
+    colunas={[
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+      { campo: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: [{ valor: 'C', rotulo: 'Convênio' }, { valor: 'V', rotulo: 'Vale' }] },
+      { campo: 'razao', rotulo: 'Razão', obrigatorio: true },
+      { campo: 'perc_conv', rotulo: '% desc.', tipo: 'number' },
+      { campo: 'vlr_conv', rotulo: 'Vlr fixo', tipo: 'number' },
+      { campo: 'tab_conv', rotulo: 'Tabela alt.', naTabela: false },
+      { campo: 'tab_horas', rotulo: 'Grade própria (CON)', tipo: 'bool', naTabela: false },
+      { campo: 'hor_conv', rotulo: 'Hora corte', tipo: 'hora', naTabela: false },
+      { campo: 'pede_hora', rotulo: 'Pede hora', tipo: 'bool', naTabela: false },
+      { campo: 'selos', rotulo: 'Selos', tipo: 'number', naTabela: false },
+      { campo: 'valor_selo', rotulo: 'Vlr selo', tipo: 'number', naTabela: false },
+      { campo: 'so_supervisor', rotulo: 'Só supervisor', tipo: 'bool', naTabela: false },
+    ]} />;
+}
+
+export function Formas({ perfil }) {
+  return <Crud perfil={perfil} titulo="Formas de pagamento" tabela="formas_pagamento" ordem="codigo"
+    subtitulo="Dinheiro, débito, crédito, Pix… O % de ajuste altera o valor cobrado na forma."
+    colunas={[
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+      { campo: 'descricao', rotulo: 'Descrição', obrigatorio: true },
+      { campo: 'perc_ajuste', rotulo: '% ajuste', tipo: 'number' },
+      { campo: 'eh_dinheiro', rotulo: 'É dinheiro', tipo: 'bool' },
+      { campo: 'rps_sempre', rotulo: 'RPS sempre', tipo: 'bool', naTabela: false },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
+    ]} />;
+}
+
+export function Vagas({ perfil }) {
+  return <Crud perfil={perfil} titulo="Vagas / boxes" tabela="vagas" ordem="codigo"
+    colunas={[
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+      { campo: 'tipo', rotulo: 'Tipo' },
+      { campo: 'ocupada', rotulo: 'Ocupada', tipo: 'bool' },
+      { campo: 'placa_atual', rotulo: 'Placa', naTabela: true },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
+    ]} />;
+}
+
+export function Modelos({ perfil }) {
+  return <Crud perfil={perfil} titulo="Modelos de veículo" tabela="modelos_veiculo" ordem="codigo"
+    subtitulo="Catálogo de modelos e a tabela de preço padrão de cada um."
+    colunas={[
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+      { campo: 'nome', rotulo: 'Modelo', obrigatorio: true },
+      { campo: 'tabela_tipo', rotulo: 'Tabela padrão' },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
+    ]} />;
+}
+
+export function Mensalistas({ perfil }) {
+  return <Crud perfil={perfil} titulo="Mensalistas" tabela="mensalistas" ordem="codigo"
+    subtitulo="Cadastro de mensalistas/hóspedes. As placas ficam em 'mensalista_veiculos' (gerenciáveis via seed/SQL nesta fase)."
+    colunas={[
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+      { campo: 'razao', rotulo: 'Nome', obrigatorio: true },
+      { campo: 'tipo_mens', rotulo: 'Tipo', tipo: 'select', opcoes: [
+        { valor: 'I', rotulo: 'Mensalista' }, { valor: 'P', rotulo: 'Pacote' }, { valor: 'H', rotulo: 'Hóspede' }] },
+      { campo: 'telefone', rotulo: 'Telefone', naTabela: false },
+      { campo: 'celular', rotulo: 'Celular', naTabela: false },
+      { campo: 'email', rotulo: 'E-mail', naTabela: false },
+      { campo: 'box', rotulo: 'Box' },
+      { campo: 'dia_venc', rotulo: 'Dia venc.', tipo: 'number' },
+      { campo: 'tolerancia_dias', rotulo: 'Tol. dias', tipo: 'number', naTabela: false },
+      { campo: 'qte_vagas', rotulo: 'Vagas', tipo: 'number', naTabela: false },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
+    ]} />;
+}
