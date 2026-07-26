@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 
@@ -26,15 +27,17 @@ const GRUPOS = [
 ];
 
 export default function Layout({ perfil }) {
+  const [menuAberto, setMenuAberto] = useState(false);
   return (
     <div className="app">
-      <aside className="lateral">
+      <aside className={'lateral' + (menuAberto ? ' aberto' : '')}>
         <div className="marca">esta <span className="ambar">·PDV</span></div>
         {GRUPOS.map((g) => (
           <div key={g.titulo} className="nav-grupo">
             <div className="nav-titulo">{g.titulo}</div>
             {g.itens.map((i) => (
               <NavLink key={i.to} to={i.to} end={i.fim}
+                onClick={() => setMenuAberto(false)}
                 className={({ isActive }) => 'nav-item' + (isActive ? ' ativo' : '')}>
                 {i.rotulo}
               </NavLink>
@@ -42,9 +45,13 @@ export default function Layout({ perfil }) {
           </div>
         ))}
       </aside>
+      {menuAberto && <div className="menu-fundo" onClick={() => setMenuAberto(false)} />}
       <main className="conteudo">
         <header className="topo">
-          <span className="filial-nome">{perfil.nome} · {perfil.papel}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button className="menu-toggle btn-ghost" onClick={() => setMenuAberto((v) => !v)} aria-label="Menu">☰</button>
+            <span className="filial-nome">{perfil.nome} · {perfil.papel}</span>
+          </div>
           <button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button>
         </header>
         <div className="container">

@@ -59,6 +59,7 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .linha-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
 .campo { display: flex; flex-direction: column; gap: 4px; }
 .campo label { font-size: 12px; color: var(--suave); }
+.campo-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .kpi { background: var(--panel); border: 1px solid var(--linha); border-radius: 10px; padding: 14px 16px; }
@@ -86,3 +87,20 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .sugestao-item:hover { background: var(--panel); }
 
 .centro { display: flex; min-height: 90vh; align-items: center; justify-content: center; }
+
+.menu-toggle { display: none; font-size: 18px; line-height: 1; padding: 6px 10px; }
+.menu-fundo { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 39; }
+
+@media (max-width: 760px) {
+  .menu-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  .lateral {
+    position: fixed; left: 0; top: 0; height: 100vh; z-index: 40; max-width: 85vw;
+    transform: translateX(-100%); transition: transform .2s ease; box-shadow: 2px 0 16px rgba(0,0,0,.4);
+  }
+  .lateral.aberto { transform: translateX(0); }
+  .container { padding: 14px; }
+  .topo { padding: 10px 14px; }
+  .card { padding: 12px; }
+  .grande { font-size: 32px; }
+  .modal { width: 92vw !important; padding: 16px; }
+}

@@ -89,8 +89,8 @@ function HeaderModal({ inicial, onSalvar, onFechar }) {
                 value={t[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={k === 'tipo' || k === 'descricao'} />
             </div>
           ))}
-          <label className="campo"><input type="checkbox" checked={!!t.por_minuto} onChange={(e) => set('por_minuto', e.target.checked)} /> Cobrança por minuto</label>
-          <label className="campo" style={{ marginTop: 6 }}><input type="checkbox" checked={!!t.selecao_manual} onChange={(e) => set('selecao_manual', e.target.checked)} /> Seleção manual na Entrada</label>
+          <label className="campo-check"><input type="checkbox" checked={!!t.por_minuto} onChange={(e) => set('por_minuto', e.target.checked)} /> Cobrança por minuto</label>
+          <label className="campo-check" style={{ marginTop: 6 }}><input type="checkbox" checked={!!t.selecao_manual} onChange={(e) => set('selecao_manual', e.target.checked)} /> Seleção manual na Entrada</label>
           <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
             <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
             <button type="submit" className="btn-primary">Salvar</button>
