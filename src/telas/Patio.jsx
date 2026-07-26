@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { carregarTabelasPreco, carregarPatio } from '../lib/dados.js';
+import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais } from '../lib/dados.js';
 import { agoraHHMM, hojeISO, dataDeISO, fmtHora, fmtBRL } from '../lib/tempo.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
+
+function normalizar(s) {
+  return (s || '').toUpperCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+}
 
 export default function Patio({ perfil }) {
   const [tabelas, setTabelas] = useState({});
@@ -12,24 +16,38 @@ export default function Patio({ perfil }) {
   const [formas, setFormas] = useState([]);
   const [patio, setPatio] = useState([]);
   const [placa, setPlaca] = useState('');
-  const [tipo, setTipo] = useState('');
   const [detectado, setDetectado] = useState(null); // {mensalista, convenio_codigo, tipo_mens}
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
 
-  const tipos = useMemo(() => Object.keys(tabelas).sort(), [tabelas]);
+  // Busca de modelo de carro (Entrada) + fallback de tabela manual.
+  const [modelos, setModelos] = useState([]);
+  const [tabelasManuais, setTabelasManuais] = useState([]);
+  const [buscaModelo, setBuscaModelo] = useState('');
+  const [modeloSelecionado, setModeloSelecionado] = useState(null);
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+  const [tabelaManual, setTabelaManual] = useState('');
+  const [nomeCarroNovo, setNomeCarroNovo] = useState('');
+  const [confirmNovo, setConfirmNovo] = useState(null); // { nome, tipo }
+
+  const sugestoes = useMemo(() => {
+    const alvo = normalizar(buscaModelo);
+    if (alvo.length < 2) return [];
+    return modelos.filter((m) => normalizar(m.nome).includes(alvo)).slice(0, 8);
+  }, [buscaModelo, modelos]);
 
   async function recarregar() {
     try {
-      const [t, p, cv, fp] = await Promise.all([
+      const [t, p, cv, fp, md, tm] = await Promise.all([
         carregarTabelasPreco(), carregarPatio(),
         supabase.from('convenios').select('*'),
         supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo'),
+        carregarModelosVeiculo(), carregarTabelasManuais(),
       ]);
       setTabelas(t); setPatio(p);
       setConvenios(Object.fromEntries((cv.data || []).map((c) => [c.codigo, c])));
       setFormas(fp.data || []);
-      if (!tipo && Object.keys(t).length) setTipo(Object.keys(t).sort()[0]);
+      setModelos(md); setTabelasManuais(tm);
     } catch (e) { setErro(e.message); }
   }
   useEffect(() => { recarregar(); /* eslint-disable-next-line */ }, []);
@@ -51,21 +69,75 @@ export default function Patio({ perfil }) {
     setDetectado({ nome: m.razao, tipo_mens: m.tipo_mens, convenio_codigo: convCod });
   }
 
-  async function darEntrada(e) {
-    e.preventDefault();
-    setErro('');
+  function onBuscaModeloChange(v) {
+    setBuscaModelo(v);
+    setMostrarSugestoes(true);
+    setModeloSelecionado((m) => (m && normalizar(v) !== normalizar(m.nome)) ? null : m);
+  }
+
+  function selecionarModelo(m) {
+    setModeloSelecionado(m);
+    setBuscaModelo(m.nome);
+    setMostrarSugestoes(false);
+    setTabelaManual(''); setNomeCarroNovo('');
+  }
+
+  // Pré-preenche o nome do carro novo com o que foi digitado, enquanto nada foi
+  // selecionado do catálogo (o operador ainda pode editar antes de confirmar).
+  useEffect(() => {
+    if (!modeloSelecionado) setNomeCarroNovo(buscaModelo);
+    // eslint-disable-next-line
+  }, [buscaModelo]);
+
+  function limparFormEntrada() {
+    setPlaca(''); setDetectado(null);
+    setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
+    setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
+  }
+
+  async function registrarEntrada(tipoVeic, nomeModelo) {
     const p = placa.trim().toUpperCase();
-    if (!p || !tipo) return;
     const { error } = await supabase.from('movimentos').insert({
-      filial_id: perfil.filial_id, placa: p,
+      filial_id: perfil.filial_id, placa: p, modelo: nomeModelo || null,
       dt_entrada: hojeISO(), hr_entrada: agoraHHMM(),
-      tipo_veic: tipo,
+      tipo_veic: tipoVeic,
       tipo_mens: detectado?.tipo_mens || 'E',
       convenio_codigo: detectado?.convenio_codigo || null,
       usuario_entrada: perfil.id,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
-    setPlaca(''); setDetectado(null); recarregar();
+    limparFormEntrada();
+    recarregar();
+  }
+
+  async function darEntrada(e) {
+    e.preventDefault();
+    setErro('');
+    const p = placa.trim().toUpperCase();
+    if (!p) return;
+
+    if (modeloSelecionado) {
+      await registrarEntrada(modeloSelecionado.tabela_tipo, modeloSelecionado.nome);
+      return;
+    }
+    if (tabelaManual && nomeCarroNovo.trim()) {
+      setConfirmNovo({ nome: nomeCarroNovo.trim(), tipo: tabelaManual });
+      return;
+    }
+    setErro('Digite um carro do catálogo, ou selecione a tabela manual e o nome do carro novo.');
+  }
+
+  async function confirmarNovoCarro() {
+    if (!confirmNovo) return;
+    const { nome, tipo } = confirmNovo;
+    const codigo = `AUTO-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const { data: novo, error } = await supabase.from('modelos_veiculo')
+      .insert({ filial_id: perfil.filial_id, codigo, nome, tabela_tipo: tipo, ativo: true })
+      .select().single();
+    if (error) { setErro(error.message); setConfirmNovo(null); return; }
+    setModelos((ms) => [...ms, novo]);
+    setConfirmNovo(null);
+    await registrarEntrada(tipo, nome);
   }
 
   function prepararSaida(mov) {
@@ -143,12 +215,41 @@ export default function Patio({ perfil }) {
               onBlur={(e) => detectar(e.target.value)}
               placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 140 }} />
           </div>
-          <div className="campo">
-            <label>Tabela</label>
-            <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
-              {tipos.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+          <div className="campo campo-busca" style={{ minWidth: 220 }}>
+            <label>Carro</label>
+            <input value={buscaModelo}
+              onChange={(e) => onBuscaModeloChange(e.target.value)}
+              onFocus={() => setMostrarSugestoes(true)}
+              onBlur={() => setTimeout(() => setMostrarSugestoes(false), 150)}
+              placeholder="Digite o modelo do carro…" style={{ width: '100%' }} />
+            {mostrarSugestoes && sugestoes.length > 0 && (
+              <ul className="sugestoes-lista">
+                {sugestoes.map((m) => (
+                  <li key={m.id} className="sugestao-item"
+                    onMouseDown={(e) => { e.preventDefault(); selecionarModelo(m); }}>
+                    {m.nome}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+          {modeloSelecionado && <span className="badge-mens">Tabela: {modeloSelecionado.tabela_tipo}</span>}
+          {buscaModelo.trim().length >= 2 && !modeloSelecionado && sugestoes.length === 0 && (
+            <>
+              <div className="campo">
+                <label>Tabela de preço (carro não encontrado)</label>
+                <select value={tabelaManual} onChange={(e) => setTabelaManual(e.target.value)}>
+                  <option value="">—</option>
+                  {tabelasManuais.map((t) => <option key={t.tipo} value={t.tipo}>{t.tipo} · {t.descricao}</option>)}
+                </select>
+                {tabelasManuais.length === 0 && <span className="suave" style={{ fontSize: 11 }}>Nenhuma tabela liberada — marque em Preços.</span>}
+              </div>
+              <div className="campo">
+                <label>Nome do carro (novo)</label>
+                <input value={nomeCarroNovo} onChange={(e) => setNomeCarroNovo(e.target.value)} />
+              </div>
+            </>
+          )}
           <button className="btn-primary" type="submit">Registrar entrada</button>
           {detectado && (
             <span className="badge-mens">
@@ -179,6 +280,21 @@ export default function Patio({ perfil }) {
           </table>
         </div>
       </div>
+
+      {confirmNovo && (
+        <div className="modal-bg" onClick={() => setConfirmNovo(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Confirmar carro novo</h2>
+            <p className="suave">Confira se o nome está certo — ele entra no catálogo de modelos permanentemente.</p>
+            <div className="grande">{confirmNovo.nome}</div>
+            <p className="mono suave" style={{ textAlign: 'center' }}>Tabela: {confirmNovo.tipo}</p>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setConfirmNovo(null)}>Cancelar</button>
+              <button className="btn-primary" onClick={confirmarNovoCarro}>Confirmar e adicionar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {saindo && (
         <div className="modal-bg" onClick={() => setSaindo(null)}>

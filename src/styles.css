@@ -79,4 +79,10 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .modal { background: var(--panel); border: 1px solid var(--linha); border-radius: 12px; padding: 24px; width: 420px; }
 .grande { font-size: 40px; font-weight: 800; color: var(--ambar); text-align: center; margin: 12px 0; }
 
+.campo-busca { position: relative; }
+.sugestoes-lista { position: absolute; top: 100%; left: 0; background: var(--panel2); border: 1px solid var(--linha);
+  border-radius: 8px; margin-top: 4px; max-height: 220px; overflow-y: auto; z-index: 10; min-width: 220px; list-style: none; padding: 4px; }
+.sugestao-item { padding: 8px 12px; cursor: pointer; font-size: 14px; border-radius: 6px; }
+.sugestao-item:hover { background: var(--panel); }
+
 .centro { display: flex; min-height: 90vh; align-items: center; justify-content: center; }

@@ -21,6 +21,7 @@ export default function Precos({ perfil }) {
       por_minuto: !!t.por_minuto, pernoite_ini: Number(t.pernoite_ini || 0),
       pernoite_fim: Number(t.pernoite_fim || 0), valor_diaria: Number(t.valor_diaria || 0),
       tolerancia_pct: Number(t.tolerancia_pct || 0), qte_pontos: Number(t.qte_pontos || 0),
+      selecao_manual: !!t.selecao_manual,
     };
     const res = t.id
       ? await supabase.from('tabelas_preco').update(payload).eq('id', t.id)
@@ -39,7 +40,7 @@ export default function Precos({ perfil }) {
         {erro && <div className="aviso">{erro}</div>}
         <div className="tabela-scroll">
           <table>
-            <thead><tr><th>Tipo</th><th>Descrição</th><th>Pernoite</th><th>Diária</th><th>Tol.%</th><th></th></tr></thead>
+            <thead><tr><th>Tipo</th><th>Descrição</th><th>Pernoite</th><th>Diária</th><th>Tol.%</th><th>Seleção manual</th><th></th></tr></thead>
             <tbody>
               {tabelas.map((t) => (
                 <tr key={t.id}>
@@ -48,6 +49,7 @@ export default function Precos({ perfil }) {
                   <td className="mono">{Number(t.pernoite_ini) ? `${fmtHora(Number(t.pernoite_ini))}–${fmtHora(Number(t.pernoite_fim))}` : '—'}</td>
                   <td>{fmtBRL(Number(t.valor_diaria))}</td>
                   <td>{Number(t.tolerancia_pct)}</td>
+                  <td>{t.selecao_manual ? 'Sim' : 'Não'}</td>
                   <td style={{ textAlign: 'right' }}>
                     <button className="btn-ghost" onClick={() => setSel(t)}>Editar</button>
                   </td>
@@ -88,6 +90,7 @@ function HeaderModal({ inicial, onSalvar, onFechar }) {
             </div>
           ))}
           <label className="campo"><input type="checkbox" checked={!!t.por_minuto} onChange={(e) => set('por_minuto', e.target.checked)} /> Cobrança por minuto</label>
+          <label className="campo" style={{ marginTop: 6 }}><input type="checkbox" checked={!!t.selecao_manual} onChange={(e) => set('selecao_manual', e.target.checked)} /> Seleção manual na Entrada</label>
           <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
             <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
             <button type="submit" className="btn-primary">Salvar</button>

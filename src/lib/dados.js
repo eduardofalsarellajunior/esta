@@ -52,3 +52,26 @@ export async function carregarPatio() {
   if (error) throw error;
   return data;
 }
+
+/** Catálogo de modelos de veículo (para a busca na Entrada). */
+export async function carregarModelosVeiculo() {
+  const { data, error } = await supabase
+    .from('modelos_veiculo')
+    .select('id, codigo, nome, tabela_tipo')
+    .eq('ativo', true);
+  if (error) throw error;
+  return data;
+}
+
+/** Tabelas liberadas para seleção manual (carro fora do catálogo). */
+export async function carregarTabelasManuais() {
+  const { data, error } = await supabase
+    .from('tabelas_preco')
+    .select('tipo, descricao')
+    .eq('selecao_manual', true)
+    .is('vigencia_fim', null)
+    .eq('ativo', true)
+    .order('tipo');
+  if (error) throw error;
+  return data;
+}
