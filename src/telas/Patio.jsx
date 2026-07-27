@@ -13,6 +13,41 @@ function normalizar(s) {
 // Placa antiga (ABC1234) ou Mercosul (ABC1D23): 3 letras + 1 número + (3 números OU 1 letra + 2 números).
 const REGEX_PLACA = /^[A-Z]{3}\d(\d{3}|[A-Z]\d{2})$/;
 
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Impressão numa janela dedicada (não no modal): evita a duplicação de página que
+// ocorre ao imprimir conteúdo dentro de um overlay position:fixed.
+function imprimirTicket(ticket, filial) {
+  const cabecalho = filial && (filial.nome_fantasia || filial.endereco || filial.cnpj) ? `
+    ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
+    ${filial.endereco ? `<div class="linha-end">${escapeHtml(filial.endereco)}</div>` : ''}
+    ${filial.cnpj ? `<div class="linha-end">CNPJ: ${escapeHtml(filial.cnpj)}</div>` : ''}
+    <hr>` : '';
+  const corpo = ticket.linhas.map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(ticket.titulo)}</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; color: #000; padding: 16px; max-width: 320px; }
+      .nome { font-size: 16px; font-weight: 800; margin-bottom: 2px; }
+      .linha-end { font-size: 11px; color: #333; margin-bottom: 2px; }
+      hr { border: none; border-top: 1px dashed #999; margin: 10px 0; }
+      h2 { font-size: 14px; margin: 0 0 8px; }
+      p { font-size: 13px; margin: 4px 0; }
+    </style></head><body>
+      ${cabecalho}
+      <h2>${escapeHtml(ticket.titulo)}</h2>
+      ${corpo}
+    </body></html>`;
+  const win = window.open('', '_blank', 'width=380,height=600');
+  if (!win) { window.alert('Permita pop-ups para imprimir o ticket.'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.onafterprint = () => win.close();
+  win.focus();
+  win.print();
+}
+
 export default function Patio({ perfil }) {
   const [tabelas, setTabelas] = useState({});
   const [convenios, setConvenios] = useState({});
@@ -35,6 +70,8 @@ export default function Patio({ perfil }) {
   const [confirmPlaca, setConfirmPlaca] = useState(null); // placa digitada, fora do formato esperado
   const [ticket, setTicket] = useState(null); // { titulo, linhas: [[rotulo, valor], ...] }
   const [celularTicket, setCelularTicket] = useState('');
+  const [filial, setFilial] = useState(null); // { nome_fantasia, endereco, cnpj } — cabeçalho do ticket
+  const [saidasRecentes, setSaidasRecentes] = useState([]);
 
   const sugestoes = useMemo(() => {
     const alvo = normalizar(buscaModelo);
@@ -44,16 +81,20 @@ export default function Patio({ perfil }) {
 
   async function recarregar() {
     try {
-      const [t, p, cv, fp, md, tm] = await Promise.all([
+      const [t, p, cv, fp, md, tm, sr, fl] = await Promise.all([
         carregarTabelasPreco(), carregarPatio(),
         supabase.from('convenios').select('*'),
         supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo'),
         carregarModelosVeiculo(), carregarTabelasManuais(),
+        supabase.from('movimentos').select('*').eq('dt_saida', hojeISO()).order('hr_saida', { ascending: false }).limit(50),
+        supabase.from('filiais').select('nome_fantasia, endereco, cnpj').eq('id', perfil.filial_id).maybeSingle(),
       ]);
       setTabelas(t); setPatio(p);
       setConvenios(Object.fromEntries((cv.data || []).map((c) => [c.codigo, c])));
       setFormas(fp.data || []);
       setModelos(md); setTabelasManuais(tm);
+      setSaidasRecentes(sr.data || []);
+      setFilial(fl.data || null);
     } catch (e) { setErro(e.message); }
   }
   useEffect(() => { recarregar(); /* eslint-disable-next-line */ }, []);
@@ -236,6 +277,27 @@ export default function Patio({ perfil }) {
     setSaindo(null); recarregar();
   }
 
+  async function reimprimirSaida(mov) {
+    const { data: pagtos } = await supabase.from('movimento_pagamentos')
+      .select('forma_pagamento, valor').eq('movimento_id', mov.id);
+    const formaTexto = pagtos && pagtos.length
+      ? pagtos.map((p) => formas.find((f) => f.codigo === p.forma_pagamento)?.descricao || p.forma_pagamento).join(' + ')
+      : (MENSALISTA.has(mov.tipo_mens) ? 'Mensalista/hóspede' : '—');
+    setTicket({
+      titulo: 'Ticket de saída (reimpressão)',
+      linhas: [
+        ['Placa', mov.placa],
+        ['Carro', mov.modelo || '—'],
+        ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
+        ['Valor', fmtBRL(Number(mov.valor || 0))],
+        ['Pagamento', formaTexto],
+        ['Saída', `${mov.dt_saida.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_saida))}`],
+        ['Reimpresso por', perfil.nome],
+      ],
+    });
+    setCelularTicket('');
+  }
+
   async function atualizarFidelidade(placa, pontos) {
     try {
       const { data: c } = await supabase.from('clientes').select('*').eq('placa', placa).maybeSingle();
@@ -333,6 +395,27 @@ export default function Patio({ perfil }) {
         </div>
       </div>
 
+      <div className="card">
+        <h2>Saídas de hoje ({saidasRecentes.length})</h2>
+        <div className="tabela-scroll">
+          <table>
+            <thead><tr><th>Placa</th><th>Carro</th><th>Saída</th><th>Valor</th><th></th></tr></thead>
+            <tbody>
+              {saidasRecentes.map((m) => (
+                <tr key={m.id}>
+                  <td><span className="placa mono">{m.placa}</span></td>
+                  <td>{m.modelo || '—'}</td>
+                  <td className="mono">{fmtHora(Number(m.hr_saida))}</td>
+                  <td>{fmtBRL(Number(m.valor || 0))}</td>
+                  <td style={{ textAlign: 'right' }}><button className="btn-ghost" onClick={() => reimprimirSaida(m)}>Reimprimir</button></td>
+                </tr>
+              ))}
+              {saidasRecentes.length === 0 && <tr><td colSpan={5} className="suave">Nenhuma saída hoje.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {confirmPlaca && (
         <div className="modal-bg" onClick={corrigirPlaca}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -378,7 +461,7 @@ export default function Patio({ perfil }) {
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setTicket(null)}>Fechar</button>
               <a className="btn-ghost" href={linkWhatsApp(ticket, celularTicket)} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
-              <button className="btn-primary" onClick={() => window.print()}>Imprimir</button>
+              <button className="btn-primary" onClick={() => imprimirTicket(ticket, filial)}>Imprimir</button>
             </div>
           </div>
         </div>

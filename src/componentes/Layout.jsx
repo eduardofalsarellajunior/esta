@@ -24,6 +24,9 @@ const GRUPOS = [
   { titulo: 'Fiscal', itens: [
     { to: '/fiscal', rotulo: 'NFS-e / RPS' },
   ]},
+  { titulo: 'Configurações', itens: [
+    { to: '/configuracoes', rotulo: 'Dados do estacionamento' },
+  ]},
 ];
 
 export default function Layout({ perfil }) {

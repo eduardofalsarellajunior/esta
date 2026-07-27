@@ -9,6 +9,7 @@ import Precos from './telas/Precos.jsx';
 import { Convenios, Formas, Vagas, Modelos, Mensalistas } from './telas/cadastros.jsx';
 import { Receber, Pagar, Banco } from './telas/financeiro.jsx';
 import Fiscal from './telas/Fiscal.jsx';
+import Configuracoes from './telas/Configuracoes.jsx';
 
 export default function App() {
   const [sessao, setSessao] = useState(null);
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="pagar" element={<Pagar perfil={perfil} />} />
           <Route path="banco" element={<Banco perfil={perfil} />} />
           <Route path="fiscal" element={<Fiscal perfil={perfil} />} />
+          <Route path="configuracoes" element={<Configuracoes perfil={perfil} />} />
         </Route>
       </Routes>
     </BrowserRouter>

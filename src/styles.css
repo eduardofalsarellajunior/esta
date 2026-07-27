@@ -108,9 +108,3 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 
 .ticket-impressao { color: var(--texto); }
 .ticket-impressao h2 { margin-top: 0; }
-@media print {
-  body * { visibility: hidden; }
-  .ticket-impressao, .ticket-impressao * { visibility: visible; }
-  .ticket-impressao { position: absolute; left: 0; top: 0; width: 100%; color: #000; }
-  .ticket-impressao h2 { color: #000; }
-}
