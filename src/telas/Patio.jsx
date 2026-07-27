@@ -10,6 +10,9 @@ function normalizar(s) {
   return (s || '').toUpperCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 }
 
+// Placa antiga (ABC1234) ou Mercosul (ABC1D23): 3 letras + 1 número + (3 números OU 1 letra + 2 números).
+const REGEX_PLACA = /^[A-Z]{3}\d(\d{3}|[A-Z]\d{2})$/;
+
 export default function Patio({ perfil }) {
   const [tabelas, setTabelas] = useState({});
   const [convenios, setConvenios] = useState({});
@@ -29,6 +32,7 @@ export default function Patio({ perfil }) {
   const [tabelaManual, setTabelaManual] = useState('');
   const [nomeCarroNovo, setNomeCarroNovo] = useState('');
   const [confirmNovo, setConfirmNovo] = useState(null); // { nome, tipo }
+  const [confirmPlaca, setConfirmPlaca] = useState(null); // placa digitada, fora do formato esperado
   const [ticket, setTicket] = useState(null); // { titulo, linhas: [[rotulo, valor], ...] }
   const [celularTicket, setCelularTicket] = useState('');
 
@@ -130,7 +134,11 @@ export default function Patio({ perfil }) {
     setErro('');
     const p = placa.trim().toUpperCase();
     if (!p) return;
+    if (!REGEX_PLACA.test(p)) { setConfirmPlaca(p); return; }
+    await prosseguirEntrada();
+  }
 
+  async function prosseguirEntrada() {
     if (modeloSelecionado) {
       await registrarEntrada(modeloSelecionado.tabela_tipo, modeloSelecionado.nome);
       return;
@@ -140,6 +148,17 @@ export default function Patio({ perfil }) {
       return;
     }
     setErro('Digite um carro do catálogo, ou selecione a tabela manual e o nome do carro novo.');
+  }
+
+  async function confirmarPlacaForcada() {
+    setConfirmPlaca(null);
+    await prosseguirEntrada();
+  }
+
+  function corrigirPlaca() {
+    setConfirmPlaca(null);
+    setPlaca('');
+    setDetectado(null);
   }
 
   async function confirmarNovoCarro() {
@@ -205,6 +224,7 @@ export default function Patio({ perfil }) {
       linhas: [
         ['Placa', mov.placa],
         ['Carro', mov.modelo || '—'],
+        ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
         ['Tempo', resultado.mensalista ? '—' : fmtHora(resultado.tempoDecorrido)],
         ['Valor', fmtBRL(resultado.valor)],
         ['Pagamento', formaTexto],
@@ -243,7 +263,7 @@ export default function Patio({ perfil }) {
           <div className="campo">
             <label>Placa</label>
             <input className="mono" value={placa}
-              onChange={(e) => { setPlaca(e.target.value); }}
+              onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); }}
               onBlur={(e) => detectar(e.target.value)}
               placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 140 }} />
           </div>
@@ -312,6 +332,20 @@ export default function Patio({ perfil }) {
           </table>
         </div>
       </div>
+
+      {confirmPlaca && (
+        <div className="modal-bg" onClick={corrigirPlaca}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Confirmar placa</h2>
+            <p className="suave">Essa placa não parece ter um formato válido (ex.: ABC1234 ou ABC1D23).</p>
+            <div className="grande mono">{confirmPlaca}</div>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={corrigirPlaca}>Não, digitar outra</button>
+              <button className="btn-primary" onClick={confirmarPlacaForcada}>Sim, está correta</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmNovo && (
         <div className="modal-bg" onClick={() => setConfirmNovo(null)}>
