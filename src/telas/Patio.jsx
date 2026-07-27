@@ -293,6 +293,9 @@ export default function Patio({ perfil }) {
         ['Carro', mov.modelo || '—'],
         ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
         ['Tempo', resultado.mensalista ? '—' : fmtHora(resultado.tempoDecorrido)],
+        ...(convenioCodigo && resultado.valorConvenio > 0
+          ? [['Convênio', convenioCodigo], ['Desconto convênio', `-${fmtBRL(resultado.valorConvenio)}`]]
+          : []),
         ['Valor', fmtBRL(resultado.valor)],
         ['Pagamento', formaTexto],
         ['Saída', `${dtSaida.split('-').reverse().join('/')} ${fmtHora(Number(hrSaida))}`],
@@ -309,12 +312,16 @@ export default function Patio({ perfil }) {
     const formaTexto = pagtos && pagtos.length
       ? pagtos.map((p) => formas.find((f) => f.codigo === p.forma_pagamento)?.descricao || p.forma_pagamento).join(' + ')
       : (MENSALISTA.has(mov.tipo_mens) ? 'Mensalista/hóspede' : '—');
+    const valorConvenio = Number(mov.valor_convenio || 0);
     setTicket({
       titulo: 'Ticket de saída (reimpressão)',
       linhas: [
         ['Placa', mov.placa],
         ['Carro', mov.modelo || '—'],
         ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
+        ...(mov.convenio_codigo && valorConvenio > 0
+          ? [['Convênio', mov.convenio_codigo], ['Desconto convênio', `-${fmtBRL(valorConvenio)}`]]
+          : []),
         ['Valor', fmtBRL(Number(mov.valor || 0))],
         ['Pagamento', formaTexto],
         ['Saída', `${mov.dt_saida.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_saida))}`],
