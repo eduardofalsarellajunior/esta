@@ -122,7 +122,7 @@ export default function Patio({ perfil }) {
       }
     }
 
-    const { data: mv } = await supabase.from('mensalista_veiculos').select('mensalista_id').eq('placa', p).maybeSingle();
+    const { data: mv } = await supabase.from('mensalista_veiculos').select('mensalista_id, modelo, tipo_veic').eq('placa', p).maybeSingle();
     if (!mv) return;
     const { data: m } = await supabase.from('mensalistas').select('*').eq('id', mv.mensalista_id).maybeSingle();
     if (!m || !m.ativo) return;
@@ -146,6 +146,13 @@ export default function Patio({ perfil }) {
       const { data: c } = await supabase.from('convenios').select('codigo').eq('id', m.convenio_id).maybeSingle();
       convCod = c?.codigo ?? null;
     }
+
+    // Veículo já cadastrado com tabela definida: completa a entrada sozinho.
+    if (mv.tipo_veic) {
+      await registrarEntrada(mv.tipo_veic, mv.modelo, m.tipo_mens, convCod);
+      return;
+    }
+
     setDetectado({ nome: m.razao, tipo_mens: m.tipo_mens, convenio_codigo: convCod });
   }
 
@@ -176,7 +183,7 @@ export default function Patio({ perfil }) {
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
   }
 
-  async function registrarEntrada(tipoVeic, nomeModelo) {
+  async function registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo) {
     const p = placa.trim().toUpperCase();
     const dtEntrada = hojeISO();
     const hrEntrada = agoraHHMM();
@@ -184,8 +191,8 @@ export default function Patio({ perfil }) {
       filial_id: perfil.filial_id, placa: p, modelo: nomeModelo || null,
       dt_entrada: dtEntrada, hr_entrada: hrEntrada,
       tipo_veic: tipoVeic,
-      tipo_mens: detectado?.tipo_mens || 'E',
-      convenio_codigo: detectado?.convenio_codigo || null,
+      tipo_mens: tipoMens ?? detectado?.tipo_mens ?? 'E',
+      convenio_codigo: convenioCodigo ?? detectado?.convenio_codigo ?? null,
       usuario_entrada: perfil.id,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
