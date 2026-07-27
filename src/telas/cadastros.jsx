@@ -1,8 +1,18 @@
+import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase.js';
 import Crud from '../componentes/Crud.jsx';
 
 // Telas de cadastro simples, todas sobre o CRUD genérico.
 
 export function Convenios({ perfil }) {
+  const [tabelasOpcoes, setTabelasOpcoes] = useState([]);
+
+  useEffect(() => {
+    supabase.from('tabelas_preco').select('tipo, descricao')
+      .is('vigencia_fim', null).eq('ativo', true).order('tipo')
+      .then(({ data }) => setTabelasOpcoes((data || []).map((t) => ({ valor: t.tipo, rotulo: `${t.tipo} · ${t.descricao}` }))));
+  }, []);
+
   return <Crud perfil={perfil} titulo="Convênios" tabela="convenios" ordem="codigo"
     subtitulo="Descontos aplicados na saída (percentual, valor fixo, tabela alternativa ou grade própria)."
     colunas={[
@@ -11,7 +21,8 @@ export function Convenios({ perfil }) {
       { campo: 'razao', rotulo: 'Razão', obrigatorio: true },
       { campo: 'perc_conv', rotulo: '% desc.', tipo: 'number' },
       { campo: 'vlr_conv', rotulo: 'Vlr fixo', tipo: 'number' },
-      { campo: 'tab_conv', rotulo: 'Tabela alt.', naTabela: false },
+      { campo: 'tab_conv', rotulo: 'Tabela alt.', tipo: 'select', opcoes: tabelasOpcoes, naTabela: false,
+        ajuda: 'Só tabelas de preço já cadastradas em Preços.' },
       { campo: 'tab_horas', rotulo: 'Grade própria (CON)', tipo: 'bool', naTabela: false },
       { campo: 'hor_conv', rotulo: 'Hora corte', tipo: 'hora', naTabela: false },
       { campo: 'pede_hora', rotulo: 'Pede hora', tipo: 'bool', naTabela: false },
