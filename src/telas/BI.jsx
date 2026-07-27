@@ -57,6 +57,40 @@ function imprimirRelatorio(dados, de, ate, filial) {
   win.print();
 }
 
+// Versão em texto simples (sem HTML) do mesmo relatório, pra WhatsApp/Email.
+function textoRelatorio(dados, de, ate, filial) {
+  const linhas = [];
+  if (filial?.nome_fantasia) linhas.push(filial.nome_fantasia);
+  if (filial?.endereco) linhas.push(filial.endereco);
+  if (filial?.cnpj) linhas.push(`CNPJ: ${filial.cnpj}`);
+  if (linhas.length) linhas.push('');
+  linhas.push('Painel / BI');
+  linhas.push(`Período: ${de.split('-').reverse().join('/')} a ${ate.split('-').reverse().join('/')}`);
+  linhas.push('');
+  linhas.push(`Saídas: ${dados.totalVeic}`);
+  linhas.push(`Faturamento: ${fmtBRL(dados.faturamento)}`);
+  linhas.push(`Descontos (conv.): ${fmtBRL(dados.descontos)}`);
+  linhas.push(`Tempo médio: ${fmtHora(dados.tempoMedio)}`);
+  linhas.push('');
+  linhas.push('Por tipo:');
+  for (const [k, v] of Object.entries(dados.porTipo)) linhas.push(`  ${rotuloTipo(k)}: ${v}`);
+  linhas.push('');
+  linhas.push('Por forma de pagamento:');
+  const formas = Object.entries(dados.porForma);
+  if (formas.length) for (const [k, v] of formas) linhas.push(`  ${k}: ${fmtBRL(v)}`);
+  else linhas.push('  Sem pagamentos no período.');
+  return linhas.join('\n');
+}
+
+function linkWhatsAppRelatorio(texto) {
+  return `https://wa.me/?text=${encodeURIComponent(texto)}`;
+}
+
+function linkEmailRelatorio(texto, de, ate) {
+  const assunto = `Relatório BI — ${de.split('-').reverse().join('/')} a ${ate.split('-').reverse().join('/')}`;
+  return `mailto:?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(texto)}`;
+}
+
 export default function BI({ perfil }) {
   const [de, setDe] = useState(hojeISO());
   const [ate, setAte] = useState(hojeISO());
@@ -120,6 +154,14 @@ export default function BI({ perfil }) {
             <div className="campo"><label>De</label><input type="date" value={de} onChange={(e) => setDe(e.target.value)} /></div>
             <div className="campo"><label>Até</label><input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
             <button className="btn-ghost" onClick={carregar}>Atualizar</button>
+            <button className="btn-ghost" disabled={!dados}
+              onClick={() => window.open(linkWhatsAppRelatorio(textoRelatorio(dados, de, ate, filial)), '_blank')}>
+              Enviar por WhatsApp
+            </button>
+            <button className="btn-ghost" disabled={!dados}
+              onClick={() => { window.location.href = linkEmailRelatorio(textoRelatorio(dados, de, ate, filial), de, ate); }}>
+              Enviar por Email
+            </button>
             <button className="btn-primary" disabled={!dados} onClick={() => imprimirRelatorio(dados, de, ate, filial)}>Imprimir</button>
           </div>
         </div>
