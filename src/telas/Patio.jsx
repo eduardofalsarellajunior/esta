@@ -74,6 +74,9 @@ export default function Patio({ perfil }) {
     return modelos.filter((m) => normalizar(m.nome).includes(alvo)).slice(0, 8);
   }, [buscaModelo, modelos]);
 
+  const mensalistasNoPatio = useMemo(() => patio.filter((m) => MENSALISTA.has(m.tipo_mens)).length, [patio]);
+  const avulsosNoPatio = patio.length - mensalistasNoPatio;
+
   async function recarregar() {
     try {
       const [t, p, cv, fp, md, tm, sr, fl] = await Promise.all([
@@ -452,7 +455,7 @@ export default function Patio({ perfil }) {
       </div>
 
       <div className="card">
-        <h2>No pátio ({patio.length})</h2>
+        <h2>No pátio ({patio.length}) — {avulsosNoPatio} avulso(s), {mensalistasNoPatio} mensalista(s)</h2>
         <div className="tabela-scroll">
           <table>
             <thead><tr><th>Placa</th><th>Carro</th><th>Tabela</th><th>Tipo</th><th>Entrada</th><th></th></tr></thead>
