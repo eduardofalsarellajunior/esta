@@ -212,6 +212,13 @@ export default function Patio({ perfil }) {
       await registrarEntrada(modeloSelecionado.tabela_tipo, modeloSelecionado.nome);
       return;
     }
+    // Digitou o nome certinho mas não clicou na sugestão — casa mesmo assim.
+    const alvo = normalizar(buscaModelo);
+    const matchExato = alvo && modelos.find((m) => normalizar(m.nome) === alvo);
+    if (matchExato) {
+      await registrarEntrada(matchExato.tabela_tipo, matchExato.nome);
+      return;
+    }
     if (tabelaManual && nomeCarroNovo.trim()) {
       setConfirmNovo({ nome: nomeCarroNovo.trim(), tipo: tabelaManual });
       return;
