@@ -2,11 +2,71 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, fmtBRL, fmtHora } from '../lib/tempo.js';
 
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Impressão numa janela dedicada (mesmo padrão do ticket de entrada/saída).
+function imprimirRelatorio(dados, de, ate, filial) {
+  const cabecalho = filial && (filial.nome_fantasia || filial.endereco || filial.cnpj) ? `
+    ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
+    ${filial.endereco ? `<div class="linha-end">${escapeHtml(filial.endereco)}</div>` : ''}
+    ${filial.cnpj ? `<div class="linha-end">CNPJ: ${escapeHtml(filial.cnpj)}</div>` : ''}
+    <hr>` : '';
+
+  const kpis = [
+    ['Saídas', dados.totalVeic],
+    ['Faturamento', fmtBRL(dados.faturamento)],
+    ['Descontos (conv.)', fmtBRL(dados.descontos)],
+    ['Tempo médio', fmtHora(dados.tempoMedio)],
+  ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
+
+  const porTipo = Object.entries(dados.porTipo)
+    .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
+  const porForma = Object.entries(dados.porForma)
+    .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${escapeHtml(fmtBRL(v))}</td></tr>`).join('');
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório BI</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; color: #000; padding: 20px; max-width: 480px; }
+      .nome { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
+      .linha-end { font-size: 12px; color: #333; margin-bottom: 2px; }
+      hr { border: none; border-top: 1px dashed #999; margin: 12px 0; }
+      h1 { font-size: 16px; margin: 0 0 4px; }
+      h2 { font-size: 14px; margin: 16px 0 6px; }
+      p { font-size: 13px; margin: 3px 0; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      td { padding: 4px 0; border-bottom: 1px solid #ddd; }
+    </style></head><body>
+      ${cabecalho}
+      <h1>Painel / BI</h1>
+      <p class="linha-end">Período: ${escapeHtml(de.split('-').reverse().join('/'))} a ${escapeHtml(ate.split('-').reverse().join('/'))}</p>
+      ${kpis}
+      <h2>Por tipo</h2>
+      <table><tbody>${porTipo || '<tr><td>—</td></tr>'}</tbody></table>
+      <h2>Por forma de pagamento</h2>
+      <table><tbody>${porForma || '<tr><td>Sem pagamentos no período.</td></tr>'}</tbody></table>
+    </body></html>`;
+  const win = window.open('', '_blank', 'width=420,height=650');
+  if (!win) { window.alert('Permita pop-ups para imprimir o relatório.'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.onafterprint = () => win.close();
+  win.focus();
+  win.print();
+}
+
 export default function BI({ perfil }) {
   const [de, setDe] = useState(hojeISO());
   const [ate, setAte] = useState(hojeISO());
   const [dados, setDados] = useState(null);
+  const [filial, setFilial] = useState(null);
   const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    supabase.from('filiais').select('nome_fantasia, endereco, cnpj').eq('id', perfil.filial_id).maybeSingle()
+      .then(({ data }) => setFilial(data));
+  }, [perfil.filial_id]);
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -52,6 +112,7 @@ export default function BI({ perfil }) {
             <div className="campo"><label>De</label><input type="date" value={de} onChange={(e) => setDe(e.target.value)} /></div>
             <div className="campo"><label>Até</label><input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
             <button className="btn-ghost" onClick={carregar}>Atualizar</button>
+            <button className="btn-primary" disabled={!dados} onClick={() => imprimirRelatorio(dados, de, ate, filial)}>Imprimir</button>
           </div>
         </div>
         {erro && <div className="aviso">{erro}</div>}
