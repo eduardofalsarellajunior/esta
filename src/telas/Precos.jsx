@@ -18,7 +18,7 @@ export default function Precos({ perfil }) {
     setErro('');
     const payload = {
       filial_id: perfil.filial_id, tipo: t.tipo, descricao: t.descricao,
-      por_minuto: !!t.por_minuto, pernoite_ini: Number(t.pernoite_ini || 0),
+      pernoite_ini: Number(t.pernoite_ini || 0),
       pernoite_fim: Number(t.pernoite_fim || 0), valor_diaria: Number(t.valor_diaria || 0),
       tolerancia_pct: Number(t.tolerancia_pct || 0), qte_pontos: Number(t.qte_pontos || 0),
       selecao_manual: !!t.selecao_manual,
@@ -89,8 +89,7 @@ function HeaderModal({ inicial, onSalvar, onFechar }) {
                 value={t[k] ?? ''} onChange={(e) => set(k, e.target.value)} required={k === 'tipo' || k === 'descricao'} />
             </div>
           ))}
-          <label className="campo-check"><input type="checkbox" checked={!!t.por_minuto} onChange={(e) => set('por_minuto', e.target.checked)} /> Cobrança por minuto</label>
-          <label className="campo-check" style={{ marginTop: 6 }}><input type="checkbox" checked={!!t.selecao_manual} onChange={(e) => set('selecao_manual', e.target.checked)} /> Seleção manual na Entrada</label>
+          <label className="campo-check"><input type="checkbox" checked={!!t.selecao_manual} onChange={(e) => set('selecao_manual', e.target.checked)} /> Seleção manual na Entrada</label>
           <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
             <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
             <button type="submit" className="btn-primary">Salvar</button>
@@ -103,7 +102,7 @@ function HeaderModal({ inicial, onSalvar, onFechar }) {
 
 function Faixas({ perfil, tabela }) {
   const [faixas, setFaixas] = useState([]);
-  const [nova, setNova] = useState({ ate: '', valor_hora: '', valor_convenio: '' });
+  const [nova, setNova] = useState({ ate: '', valor_hora: '', valor_convenio: '', tipo_cobranca: 'fixo' });
 
   async function carregar() {
     const { data } = await supabase.from('tabela_preco_faixas')
@@ -118,8 +117,9 @@ function Faixas({ perfil, tabela }) {
     await supabase.from('tabela_preco_faixas').insert({
       filial_id: perfil.filial_id, tabela_preco_id: tabela.id, ordem,
       ate: Number(nova.ate), valor_hora: Number(nova.valor_hora), valor_convenio: Number(nova.valor_convenio || 0),
+      tipo_cobranca: nova.tipo_cobranca,
     });
-    setNova({ ate: '', valor_hora: '', valor_convenio: '' });
+    setNova({ ate: '', valor_hora: '', valor_convenio: '', tipo_cobranca: 'fixo' });
     carregar();
   }
   async function excluir(id) { await supabase.from('tabela_preco_faixas').delete().eq('id', id); carregar(); }
@@ -127,13 +127,19 @@ function Faixas({ perfil, tabela }) {
   return (
     <div className="card">
       <h2>Faixas — {tabela.tipo} · {tabela.descricao}</h2>
+      <p className="suave">
+        "Fixo": valor cheio da faixa. "Por hora": <code>valor_hora</code> vira taxa por hora,
+        cobrada a partir do teto da faixa anterior (fração arredonda pra cima).
+      </p>
       <table>
-        <thead><tr><th>Ordem</th><th>Até (HH.MM)</th><th>Valor</th><th>Valor convênio</th><th></th></tr></thead>
+        <thead><tr><th>Ordem</th><th>Até (HH.MM)</th><th>Tipo</th><th>Valor</th><th>Valor convênio</th><th></th></tr></thead>
         <tbody>
           {faixas.map((f) => (
             <tr key={f.id}>
               <td>{f.ordem}</td><td className="mono">{fmtHora(Number(f.ate))}</td>
-              <td>{fmtBRL(Number(f.valor_hora))}</td><td>{fmtBRL(Number(f.valor_convenio))}</td>
+              <td>{f.tipo_cobranca === 'hora' ? 'Por hora' : 'Fixo'}</td>
+              <td>{fmtBRL(Number(f.valor_hora))}{f.tipo_cobranca === 'hora' ? '/h' : ''}</td>
+              <td>{fmtBRL(Number(f.valor_convenio))}</td>
               <td style={{ textAlign: 'right' }}><button className="btn-ghost aviso-btn" onClick={() => excluir(f.id)}>Excluir</button></td>
             </tr>
           ))}
@@ -141,6 +147,13 @@ function Faixas({ perfil, tabela }) {
       </table>
       <form className="linha-form" onSubmit={adicionar} style={{ marginTop: 10 }}>
         <div className="campo"><label>Até (HH.MM)</label><input type="number" step="0.01" value={nova.ate} onChange={(e) => setNova({ ...nova, ate: e.target.value })} required /></div>
+        <div className="campo">
+          <label>Tipo</label>
+          <select value={nova.tipo_cobranca} onChange={(e) => setNova({ ...nova, tipo_cobranca: e.target.value })}>
+            <option value="fixo">Fixo</option>
+            <option value="hora">Por hora</option>
+          </select>
+        </div>
         <div className="campo"><label>Valor</label><input type="number" step="0.01" value={nova.valor_hora} onChange={(e) => setNova({ ...nova, valor_hora: e.target.value })} required /></div>
         <div className="campo"><label>Valor convênio</label><input type="number" step="0.01" value={nova.valor_convenio} onChange={(e) => setNova({ ...nova, valor_convenio: e.target.value })} /></div>
         <button className="btn-primary" type="submit">+ Faixa</button>

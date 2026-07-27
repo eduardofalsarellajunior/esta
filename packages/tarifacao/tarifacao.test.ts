@@ -6,6 +6,7 @@ import {
   horas,
   pernoite,
   selecionaFaixa,
+  calcularValorFaixas,
   calcularProporcional,
   calcularTarifa,
   type Faixa,
@@ -14,7 +15,8 @@ import {
 } from './tarifacao.ts';
 
 // Helpers -------------------------------------------------------------------
-const f = (ate: number, hor: number, con = 0): Faixa => ({ ate, hor, con });
+const f = (ate: number, hor: number, con = 0, tipoCobranca: 'fixo' | 'hora' = 'fixo'): Faixa =>
+  ({ ate, hor, con, tipoCobranca });
 const dia = (iso: string): Date => {
   const [y, m, d] = iso.split('-').map(Number) as [number, number, number];
   return new Date(y, m - 1, d);
@@ -69,6 +71,32 @@ test('selecionaFaixa: menor teto >= tempo', () => {
   assert.deepEqual(selecionaFaixa(G.faixas, 0.3), { valor: 7, indice: 1 });
   assert.equal(selecionaFaixa(G.faixas, 99.0), null); // estoura as faixas
   assert.deepEqual(selecionaFaixa(P.faixas, 2.54, true), { valor: 6, indice: 2 }); // coluna CON
+});
+
+// Faixas fixo/hora ------------------------------------------------------------
+// Exemplo exato validado com o Eduardo: até 0:30 fixo R$8; até 1:05 fixo R$10;
+// até 12:05 hora R$5; até 99999:00 hora R$3.
+const FAIXAS_MISTAS: Faixa[] = [
+  f(0.3, 8, 0, 'fixo'),
+  f(1.05, 10, 0, 'fixo'),
+  f(12.05, 5, 0, 'hora'),
+  f(99999.0, 3, 0, 'hora'),
+];
+
+test('faixas fixo/hora: 0:25 cai na 1ª faixa (fixo) = R$8', () => {
+  assert.deepEqual(calcularValorFaixas(FAIXAS_MISTAS, 0.25), { valor: 8, indice: 1 });
+});
+
+test('faixas fixo/hora: 1:03 cai na 2ª faixa (fixo) = R$10 (não soma com a 1ª)', () => {
+  assert.deepEqual(calcularValorFaixas(FAIXAS_MISTAS, 1.03), { valor: 10, indice: 2 });
+});
+
+test('faixas fixo/hora: 2:35 = R$10 (base) + 2h×R$5 (1:05→2:35 arred. pra cima) = R$20', () => {
+  assert.deepEqual(calcularValorFaixas(FAIXAS_MISTAS, 2.35), { valor: 20, indice: 3 });
+});
+
+test('faixas fixo/hora: 15:20 = R$10 + 11h×R$5 (faixa 3 inteira) + 4h×R$3 (3:15 arred.) = R$77', () => {
+  assert.deepEqual(calcularValorFaixas(FAIXAS_MISTAS, 15.2), { valor: 77, indice: 4 });
 });
 
 // Proporcional (avulso) -----------------------------------------------------

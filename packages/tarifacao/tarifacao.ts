@@ -19,17 +19,21 @@ export type HoraComercial = number;
 export interface Faixa {
   /** Teto de tempo da faixa, em HH.MM. */
   ate: HoraComercial;
-  /** Valor cobrado nesta faixa (coluna HOR). */
+  /** Valor cobrado nesta faixa (coluna HOR). Fixo (valor cheio) ou por hora, conforme `tipoCobranca`. */
   hor: number;
-  /** Valor quando a tabela é usada como grade de convênio (coluna CON). */
+  /** Valor quando a tabela é usada como grade de convênio (coluna CON). Sempre um valor fixo (ver `calcularValorFaixas`). */
   con: number;
+  /**
+   * 'fixo': `hor` é o valor cheio da faixa (substitui o total acumulado até aqui).
+   * 'hora': `hor` é uma taxa por hora, somada cumulativamente a partir do teto
+   * da faixa anterior, com fração de hora arredondada pra cima.
+   */
+  tipoCobranca: 'fixo' | 'hora';
 }
 
 export interface TabelaPreco {
   /** Código da tabela (ex.: "P", "G", "M", "D"). */
   tipo: string;
-  /** Cobrança proporcional por minuto (flag PORMINUTO). Reservado. */
-  porMinuto?: boolean;
   /** Início da janela de pernoite/diária, HH.MM (0 = sem pernoite). */
   ePernoite: HoraComercial;
   /** Fim da janela de pernoite/diária, HH.MM. */
@@ -263,6 +267,41 @@ export function selecionaFaixa(
 }
 
 /**
+ * Calcula o valor do tempo residual percorrendo as faixas em ordem, com uma
+ * "fronteira" (teto da faixa anterior, começando em 0:00) e um total
+ * acumulado:
+ *  - Faixa 'fixo': o total VIRA o valor da faixa (substitui, não soma, o que
+ *    veio antes) — é o comportamento de sempre (lookup único).
+ *  - Faixa 'hora': soma ao total `horas × hor`, onde `horas` é o tempo entre
+ *    a fronteira e (o tempo, se cai nesta faixa; senão o teto desta faixa),
+ *    sempre arredondado pra cima (fração de hora conta como 1h).
+ * A fronteira avança para o teto da faixa a cada passo, fixo ou hora.
+ * Retorna null se o tempo estourar todas as faixas (igual antes).
+ */
+export function calcularValorFaixas(
+  faixas: Faixa[],
+  tempo: HoraComercial,
+): { valor: number; indice: number } | null {
+  const alvo = Math.round(tempo * 100);
+  let fronteira: HoraComercial = 0;
+  let total = 0;
+  for (let i = 0; i < faixas.length; i++) {
+    const f = faixas[i]!;
+    const dentro = alvo <= Math.round(f.ate * 100);
+    if (f.tipoCobranca === 'hora') {
+      const fimBloco = dentro ? tempo : f.ate;
+      const horas = Math.ceil((minuto(fimBloco) - minuto(fronteira)) / 60);
+      total += horas * f.hor;
+    } else {
+      total = f.hor;
+    }
+    if (dentro) return { valor: total, indice: i + 1 };
+    fronteira = f.ate;
+  }
+  return null;
+}
+
+/**
  * Valor proporcional (de tabela, pré-convênio): faixa do tempo residual mais
  * as diárias. Réplica do trecho avulso de ESTALAN2.PRG (linhas 443-472).
  */
@@ -271,7 +310,7 @@ export function calcularProporcional(
   mov: Movimento,
 ): { valor: number | null; diarias: number; residual: HoraComercial } {
   const { diarias, residual } = pernoite(mov, tbl);
-  const faixa = selecionaFaixa(tbl.faixas, residual);
+  const faixa = calcularValorFaixas(tbl.faixas, residual);
   if (faixa === null) {
     return { valor: null, diarias, residual };
   }

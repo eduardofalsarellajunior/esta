@@ -5,7 +5,7 @@ portada de `SISPROC2.PRG` (funções `HORAS`/`PERNOITE`/`MINUTO`) e `ESTALAN2.PR
 (caminho de saída/cobrança).
 
 ```bash
-npm test          # node --test via tsx (14 casos)
+npm test          # node --test via tsx (24 casos)
 npm run build     # typecheck (tsc --noEmit)
 ```
 
@@ -23,10 +23,38 @@ Horários e durações usam o formato `HH.MM`, onde **a parte decimal são minut
 | **Pernoite** | Cada diária adiciona `VPERNOITE`; o tempo residual (fora da janela) cai nas faixas normais. `PERNOITE` devolve `{diárias, residual}`. |
 | **usaValorConvenioDaFaixa** | Quando `convenio.tabHoras`, usa a coluna `CON` da faixa como valor de convênio (marcado `[VALIDAR]` no código — semântica de "desconto vs. valor final" a confirmar). |
 
-## Cobertura atual (20 testes)
+## Faixas: fixo ou por hora
+
+Cada faixa (`tabela_preco_faixas`) tem um `tipo_cobranca`: **'fixo'** (padrão —
+valor cheio da faixa, como sempre foi) ou **'hora'** (o valor vira uma taxa por
+hora, cobrada cumulativamente a partir do teto da faixa anterior, com fração de
+hora arredondada pra cima). Implementado em `calcularValorFaixas`.
+
+Exemplo (validado com o Eduardo): até 0:30 fixo R$8; até 1:05 fixo R$10; até
+12:05 hora R$5; até 99999:00 hora R$3.
+
+| Tempo decorrido | Cálculo | Valor |
+|---|---|---|
+| 0:25 | cai na 1ª faixa (fixo) | R$8,00 |
+| 1:03 | cai na 2ª faixa (fixo) — não soma com a 1ª | R$10,00 |
+| 2:35 | R$10 (base) + 2h×R$5 (1:05→2:35, arred. pra cima) | R$20,00 |
+| 15:20 | R$10 + 11h×R$5 (faixa 3 inteira) + 4h×R$3 (3:15 arred.) | R$77,00 |
+
+Regra: faixas "fixo" **substituem** o total acumulado (não somam entre si);
+faixas "hora" **somam** ao total, cada uma cobrando apenas o intervalo desde o
+teto da faixa anterior. Faixas 100% "fixo" (todas as tabelas hoje) se
+comportam exatamente como antes — o `tipo_cobranca` nasce `'fixo'` em todas
+por padrão, então nenhuma tabela existente muda de valor sozinha.
+
+A grade de convênio (coluna CON, usada quando `convenio.tabHoras=true`)
+continua sendo sempre um valor fixo (`selecionaFaixa`) — não participa dessa
+lógica de fixo/hora.
+
+## Cobertura atual (24 testes)
 
 Coberto e testado:
 - Tempo decorrido (`HORAS`), seleção de faixa (até 45), pernoite/diária (`PERNOITE`).
+- Faixas fixo/hora (`calcularValorFaixas`) — 4 testes com o exemplo acima.
 - Convênio: tabela alternativa (`TABCONV`), grade própria (`TABHORAS/CON`),
   percentual (`PERCONV`), valor fixo (`VLRCONV`).
 - **Convênio em dois segmentos** (hora de corte `whoraconv`) — `ESTALAN2.PRG:473-534`.

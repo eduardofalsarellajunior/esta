@@ -22,7 +22,6 @@ export async function carregarTabelasPreco() {
   for (const t of tabelas) {
     mapa[t.tipo] = {
       tipo: t.tipo,
-      porMinuto: t.por_minuto,
       ePernoite: Number(t.pernoite_ini),
       sPernoite: Number(t.pernoite_fim),
       vPernoite: Number(t.valor_diaria),
@@ -35,6 +34,7 @@ export async function carregarTabelasPreco() {
           ate: Number(f.ate),
           hor: Number(f.valor_hora),
           con: Number(f.valor_convenio),
+          tipoCobranca: f.tipo_cobranca,
         })),
     };
   }
