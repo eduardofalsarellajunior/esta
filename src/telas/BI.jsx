@@ -91,10 +91,14 @@ function linkEmailRelatorio(texto, de, ate) {
   return `mailto:?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(texto)}`;
 }
 
+const MENSALISTA = new Set(['I', 'P', 'H']);
+
 export default function BI({ perfil }) {
   const [de, setDe] = useState(hojeISO());
   const [ate, setAte] = useState(hojeISO());
   const [dados, setDados] = useState(null);
+  const [veiculos, setVeiculos] = useState([]);
+  const [verVeiculos, setVerVeiculos] = useState(false);
   const [filial, setFilial] = useState(null);
   const [erro, setErro] = useState('');
 
@@ -133,14 +137,28 @@ export default function BI({ perfil }) {
       }
     }
     const porForma = {};
+    const pagtosPorMov = {};
     for (const p of pagtos) {
       const k = descForma[p.forma_pagamento] || p.forma_pagamento;
       porForma[k] = (porForma[k] || 0) + Number(p.valor || 0);
+      (pagtosPorMov[p.movimento_id] ||= []).push(k);
     }
     setDados({
       totalVeic: movs.length, faturamento, tabelaCheia, descontos: tabelaCheia - faturamento,
       porTipo, porForma, tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
     });
+
+    const detalhe = movs.map((m) => ({
+      id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: m.tipo_veic,
+      dt_entrada: m.dt_entrada, hr_entrada: m.hr_entrada, dt_saida: m.dt_saida, hr_saida: m.hr_saida,
+      valor: Number(m.valor || 0),
+      tempo: (m.hr_saida != null && m.hr_entrada != null) ? horas({
+        dtEntrada: dataDeISO(m.dt_entrada), entrada: Number(m.hr_entrada),
+        dtSaida: dataDeISO(m.dt_saida), saida: Number(m.hr_saida),
+      }) : null,
+      pagamento: pagtosPorMov[m.id]?.join(' + ') || (MENSALISTA.has(m.tipo_mens) ? 'Mensalista/hóspede' : '—'),
+    })).sort((a, b) => (a.dt_saida !== b.dt_saida ? b.dt_saida.localeCompare(a.dt_saida) : Number(b.hr_saida) - Number(a.hr_saida)));
+    setVeiculos(detalhe);
   }, [de, ate]);
 
   useEffect(() => { carregar(); const t = setInterval(carregar, 30000); return () => clearInterval(t); }, [carregar]);
@@ -153,6 +171,7 @@ export default function BI({ perfil }) {
           <div className="linha-form">
             <div className="campo"><label>De</label><input type="date" value={de} onChange={(e) => setDe(e.target.value)} /></div>
             <div className="campo"><label>Até</label><input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
+            <label className="campo-check"><input type="checkbox" checked={verVeiculos} onChange={(e) => setVerVeiculos(e.target.checked)} /> Ver veículos</label>
             <button className="btn-ghost" onClick={carregar}>Atualizar</button>
             <button className="btn-ghost" disabled={!dados}
               onClick={() => window.open(linkWhatsAppRelatorio(textoRelatorio(dados, de, ate, filial)), '_blank')}>
@@ -195,6 +214,35 @@ export default function BI({ perfil }) {
               {Object.keys(dados.porForma).length === 0 && <tr><td className="suave">Sem pagamentos no período.</td></tr>}
             </tbody></table>
           </div>
+
+          {verVeiculos && (
+            <div className="card">
+              <h2>Veículos ({veiculos.length})</h2>
+              <div className="tabela-scroll">
+                <table>
+                  <thead><tr>
+                    <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th>
+                    <th>Tempo</th><th>Pagamento</th><th>Valor</th>
+                  </tr></thead>
+                  <tbody>
+                    {veiculos.map((v) => (
+                      <tr key={v.id}>
+                        <td><span className="placa mono">{v.placa}</span></td>
+                        <td>{v.modelo || '—'}</td>
+                        <td className="mono">{v.tipo_veic}</td>
+                        <td className="mono">{v.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(v.hr_entrada))}</td>
+                        <td className="mono">{v.dt_saida.split('-').reverse().join('/')} {fmtHora(Number(v.hr_saida))}</td>
+                        <td className="mono">{v.tempo != null ? fmtHora(v.tempo) : '—'}</td>
+                        <td>{v.pagamento}</td>
+                        <td>{fmtBRL(v.valor)}</td>
+                      </tr>
+                    ))}
+                    {veiculos.length === 0 && <tr><td colSpan={8} className="suave">Nenhum veículo no período.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </>
