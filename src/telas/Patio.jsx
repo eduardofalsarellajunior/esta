@@ -29,7 +29,8 @@ export default function Patio({ perfil }) {
   const [tabelaManual, setTabelaManual] = useState('');
   const [nomeCarroNovo, setNomeCarroNovo] = useState('');
   const [confirmNovo, setConfirmNovo] = useState(null); // { nome, tipo }
-  const [ticket, setTicket] = useState(null); // { placa, modelo, tipo, dtEntrada, hrEntrada, operador }
+  const [ticket, setTicket] = useState(null); // { titulo, linhas: [[rotulo, valor], ...] }
+  const [celularTicket, setCelularTicket] = useState('');
 
   const sugestoes = useMemo(() => {
     const alvo = normalizar(buscaModelo);
@@ -109,7 +110,17 @@ export default function Patio({ perfil }) {
       usuario_entrada: perfil.id,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
-    setTicket({ placa: p, modelo: nomeModelo || '', tipo: tipoVeic, dtEntrada, hrEntrada, operador: perfil.nome });
+    setTicket({
+      titulo: 'Ticket de entrada',
+      linhas: [
+        ['Placa', p],
+        ['Carro', nomeModelo || '—'],
+        ['Tabela', tipoVeic],
+        ['Entrada', `${dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(hrEntrada))}`],
+        ['Operador', perfil.nome],
+      ],
+    });
+    setCelularTicket('');
     limparFormEntrada();
     recarregar();
   }
@@ -166,11 +177,13 @@ export default function Patio({ perfil }) {
 
   async function confirmarSaida() {
     const { mov, resultado, pagamentos } = saindo;
+    const dtSaida = hojeISO();
+    const hrSaida = agoraHHMM();
     // Liga ao caixa aberto do operador (se houver), para o fechamento.
     const { data: cx } = await supabase.from('caixas').select('id')
       .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
     const { error } = await supabase.from('movimentos').update({
-      dt_saida: hojeISO(), hr_saida: agoraHHMM(),
+      dt_saida: dtSaida, hr_saida: hrSaida,
       valor: resultado.valor, valor_proporcional: resultado.valorProporcional,
       valor_convenio: resultado.valorConvenio, pontos_ganhos: resultado.pontos,
       caixa_id: cx?.id ?? null, usuario_saida: perfil.id,
@@ -178,13 +191,28 @@ export default function Patio({ perfil }) {
     if (error) { setErro(error.message); return; }
 
     // Rateio de pagamento.
-    const linhas = pagamentos.filter((p) => Number(p.valor) > 0)
-      .map((p) => ({ filial_id: perfil.filial_id, movimento_id: mov.id, forma_pagamento: p.forma, valor: Number(p.valor) }));
-    if (linhas.length) await supabase.from('movimento_pagamentos').insert(linhas);
+    const pagos = pagamentos.filter((p) => Number(p.valor) > 0);
+    const linhasPag = pagos.map((p) => ({ filial_id: perfil.filial_id, movimento_id: mov.id, forma_pagamento: p.forma, valor: Number(p.valor) }));
+    if (linhasPag.length) await supabase.from('movimento_pagamentos').insert(linhasPag);
 
     // Fidelidade (best-effort).
     if (!resultado.mensalista) await atualizarFidelidade(mov.placa, resultado.pontos);
 
+    const formaTexto = resultado.mensalista ? 'Mensalista/hóspede'
+      : (pagos.map((p) => formas.find((f) => f.codigo === p.forma)?.descricao || p.forma).join(' + ') || '—');
+    setTicket({
+      titulo: 'Ticket de saída',
+      linhas: [
+        ['Placa', mov.placa],
+        ['Carro', mov.modelo || '—'],
+        ['Tempo', resultado.mensalista ? '—' : fmtHora(resultado.tempoDecorrido)],
+        ['Valor', fmtBRL(resultado.valor)],
+        ['Pagamento', formaTexto],
+        ['Saída', `${dtSaida.split('-').reverse().join('/')} ${fmtHora(Number(hrSaida))}`],
+        ['Operador', perfil.nome],
+      ],
+    });
+    setCelularTicket('');
     setSaindo(null); recarregar();
   }
 
@@ -304,16 +332,18 @@ export default function Patio({ perfil }) {
         <div className="modal-bg" onClick={() => setTicket(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="ticket-impressao">
-              <h2>Ticket de entrada</h2>
-              <p className="mono">Placa: <strong>{ticket.placa}</strong></p>
-              <p>Carro: {ticket.modelo || '—'}</p>
-              <p>Tabela: {ticket.tipo}</p>
-              <p className="mono">Entrada: {ticket.dtEntrada.split('-').reverse().join('/')} {fmtHora(Number(ticket.hrEntrada))}</p>
-              <p className="suave">Operador: {ticket.operador}</p>
+              <h2>{ticket.titulo}</h2>
+              {ticket.linhas.map(([rotulo, valor]) => (
+                <p className="mono" key={rotulo}>{rotulo}: <strong>{valor}</strong></p>
+              ))}
+            </div>
+            <div className="campo" style={{ marginTop: 10 }}>
+              <label>Celular para WhatsApp (opcional)</label>
+              <input value={celularTicket} onChange={(e) => setCelularTicket(e.target.value)} placeholder="(19) 99999-9999" />
             </div>
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setTicket(null)}>Fechar</button>
-              <a className="btn-ghost" href={linkWhatsApp(ticket)} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
+              <a className="btn-ghost" href={linkWhatsApp(ticket, celularTicket)} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
               <button className="btn-primary" onClick={() => window.print()}>Imprimir</button>
             </div>
           </div>
@@ -377,15 +407,11 @@ export default function Patio({ perfil }) {
   }
 }
 
-function linkWhatsApp(t) {
-  const texto = [
-    'Ticket de entrada',
-    `Placa: ${t.placa}`,
-    `Carro: ${t.modelo || '—'}`,
-    `Tabela: ${t.tipo}`,
-    `Entrada: ${t.dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(t.hrEntrada))}`,
-  ].join('\n');
-  return `https://wa.me/?text=${encodeURIComponent(texto)}`;
+function linkWhatsApp(ticket, celular) {
+  const texto = [ticket.titulo, ...ticket.linhas.map(([r, v]) => `${r}: ${v}`)].join('\n');
+  const digitos = (celular || '').replace(/\D/g, '');
+  const numero = digitos ? (digitos.startsWith('55') ? digitos : `55${digitos}`) : '';
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 }
 
 function rotuloTipo(t) {
