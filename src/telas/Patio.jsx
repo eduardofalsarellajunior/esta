@@ -55,6 +55,7 @@ export default function Patio({ perfil }) {
   const [patio, setPatio] = useState([]);
   const [placa, setPlaca] = useState('');
   const [detectado, setDetectado] = useState(null); // {mensalista, convenio_codigo, tipo_mens}
+  const [vagaEsgotada, setVagaEsgotada] = useState(null); // nome do mensalista, se as vagas dele já estão ocupadas
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
 
@@ -107,6 +108,7 @@ export default function Patio({ perfil }) {
   async function detectar(pl) {
     const p = pl.trim().toUpperCase();
     setDetectado(null);
+    setVagaEsgotada(null);
     if (p.length < 3) return;
 
     // Placa já estacionada? Pula direto pra rotina de saída.
@@ -130,6 +132,21 @@ export default function Patio({ perfil }) {
     if (!mv) return;
     const { data: m } = await supabase.from('mensalistas').select('*').eq('id', mv.mensalista_id).maybeSingle();
     if (!m || !m.ativo) return;
+
+    // Vagas contratadas já ocupadas por OUTROS veículos dele? Entra como avulso.
+    const { data: veiculosDele } = await supabase.from('mensalista_veiculos').select('placa').eq('mensalista_id', m.id);
+    const outrasPlacas = (veiculosDele || []).map((v) => v.placa).filter((pl) => pl !== p);
+    let ocupadas = 0;
+    if (outrasPlacas.length) {
+      const { count } = await supabase.from('movimentos')
+        .select('id', { count: 'exact', head: true }).in('placa', outrasPlacas).is('dt_saida', null);
+      ocupadas = count || 0;
+    }
+    if (ocupadas >= (m.qte_vagas || 1)) {
+      setVagaEsgotada(m.razao);
+      return;
+    }
+
     let convCod = null;
     if (m.convenio_id) {
       const { data: c } = await supabase.from('convenios').select('codigo').eq('id', m.convenio_id).maybeSingle();
@@ -160,7 +177,7 @@ export default function Patio({ perfil }) {
   }, [buscaModelo]);
 
   function limparFormEntrada() {
-    setPlaca(''); setDetectado(null);
+    setPlaca(''); setDetectado(null); setVagaEsgotada(null);
     setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
   }
@@ -379,7 +396,7 @@ export default function Patio({ perfil }) {
           <div className="campo">
             <label>Placa</label>
             <input className="mono" value={placa}
-              onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); }}
+              onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); }}
               onBlur={(e) => detectar(e.target.value)}
               placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 140 }} />
           </div>
@@ -423,6 +440,11 @@ export default function Patio({ perfil }) {
             <span className="badge-mens">
               {detectado.tipo_mens === 'H' ? 'Hóspede' : 'Mensalista'}: {detectado.nome}
               {detectado.convenio_codigo && ` · conv. ${detectado.convenio_codigo}`}
+            </span>
+          )}
+          {vagaEsgotada && (
+            <span className="badge-mens" style={{ color: 'var(--ambar)', borderColor: 'var(--ambar)', background: 'rgba(245,166,35,.12)' }}>
+              Vaga(s) de {vagaEsgotada} já ocupada(s) — entrando como avulso
             </span>
           )}
         </form>

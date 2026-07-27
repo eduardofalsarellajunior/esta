@@ -66,22 +66,3 @@ export function Modelos({ perfil }) {
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
     ]} />;
 }
-
-export function Mensalistas({ perfil }) {
-  return <Crud perfil={perfil} titulo="Mensalistas" tabela="mensalistas" ordem="codigo"
-    subtitulo="Cadastro de mensalistas/hóspedes. As placas ficam em 'mensalista_veiculos' (gerenciáveis via seed/SQL nesta fase)."
-    colunas={[
-      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
-      { campo: 'razao', rotulo: 'Nome', obrigatorio: true },
-      { campo: 'tipo_mens', rotulo: 'Tipo', tipo: 'select', opcoes: [
-        { valor: 'I', rotulo: 'Mensalista' }, { valor: 'P', rotulo: 'Pacote' }, { valor: 'H', rotulo: 'Hóspede' }] },
-      { campo: 'telefone', rotulo: 'Telefone', naTabela: false },
-      { campo: 'celular', rotulo: 'Celular', naTabela: false },
-      { campo: 'email', rotulo: 'E-mail', naTabela: false },
-      { campo: 'box', rotulo: 'Box' },
-      { campo: 'dia_venc', rotulo: 'Dia venc.', tipo: 'number' },
-      { campo: 'tolerancia_dias', rotulo: 'Tol. dias', tipo: 'number', naTabela: false },
-      { campo: 'qte_vagas', rotulo: 'Vagas', tipo: 'number', naTabela: false },
-      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
-    ]} />;
-}
