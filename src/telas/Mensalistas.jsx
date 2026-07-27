@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { carregarModelosVeiculo } from '../lib/dados.js';
+import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 
 // Mensalistas/hóspedes + os veículos de cada um (1:N) e a quantidade de vagas
 // contratadas simultâneas. Se mais veículos do que isso estiverem no pátio ao
@@ -158,8 +160,24 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
 
 function Veiculos({ perfil, mensalista }) {
   const [veiculos, setVeiculos] = useState([]);
-  const [nova, setNova] = useState({ placa: '', modelo: '', tipo_veic: '' });
+  const [placa, setPlaca] = useState('');
+  const [tipoVeic, setTipoVeic] = useState('');
   const [erro, setErro] = useState('');
+  const [confirmPlaca, setConfirmPlaca] = useState(null); // placa fora do formato, aguardando confirmação
+
+  // Busca de modelo no catálogo — mesmo comportamento da Entrada (Pátio).
+  const [modelos, setModelos] = useState([]);
+  const [buscaModelo, setBuscaModelo] = useState('');
+  const [modeloSelecionado, setModeloSelecionado] = useState(null);
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+
+  const sugestoes = useMemo(() => {
+    const alvo = normalizar(buscaModelo);
+    if (alvo.length < 2) return [];
+    return modelos.filter((m) => normalizar(m.nome).includes(alvo)).slice(0, 8);
+  }, [buscaModelo, modelos]);
+
+  useEffect(() => { carregarModelosVeiculo().then(setModelos); }, []);
 
   async function carregar() {
     const { data } = await supabase.from('mensalista_veiculos')
@@ -168,19 +186,45 @@ function Veiculos({ perfil, mensalista }) {
   }
   useEffect(() => { carregar(); }, [mensalista.id]);
 
-  async function adicionar(e) {
-    e.preventDefault();
+  function onBuscaModeloChange(v) {
+    const up = v.toUpperCase();
+    setBuscaModelo(up);
+    setMostrarSugestoes(true);
+    setModeloSelecionado((m) => (m && normalizar(up) !== normalizar(m.nome)) ? null : m);
+  }
+
+  function selecionarModelo(m) {
+    setModeloSelecionado(m);
+    setBuscaModelo(m.nome);
+    setMostrarSugestoes(false);
+    if (m.tabela_tipo) setTipoVeic(m.tabela_tipo);
+  }
+
+  function limparForm() {
+    setPlaca(''); setTipoVeic(''); setConfirmPlaca(null);
+    setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
+  }
+
+  async function inserirVeiculo(p) {
     setErro('');
     const { error } = await supabase.from('mensalista_veiculos').insert({
       filial_id: perfil.filial_id, mensalista_id: mensalista.id,
-      placa: nova.placa.trim().toUpperCase(),
-      modelo: nova.modelo.trim().toUpperCase() || null,
-      tipo_veic: nova.tipo_veic.trim().toUpperCase() || null,
+      placa: p, modelo: buscaModelo.trim() || null,
+      tipo_veic: tipoVeic.trim().toUpperCase() || null,
     });
-    if (error) { setErro(error.code === '23505' ? 'Essa placa já está cadastrada (nesta ou noutra filial).' : error.message); return; }
-    setNova({ placa: '', modelo: '', tipo_veic: '' });
+    if (error) { setErro(error.code === '23505' ? 'Essa placa já está cadastrada (nesta ou noutra filial).' : error.message); setConfirmPlaca(null); return; }
+    limparForm();
     carregar();
   }
+
+  async function adicionar(e) {
+    e.preventDefault();
+    const p = placa.trim().toUpperCase();
+    if (!p) return;
+    if (!REGEX_PLACA.test(p)) { setConfirmPlaca(p); return; }
+    await inserirVeiculo(p);
+  }
+
   async function excluir(id) { await supabase.from('mensalista_veiculos').delete().eq('id', id); carregar(); }
 
   return (
@@ -209,19 +253,49 @@ function Veiculos({ perfil, mensalista }) {
         <div className="campo">
           <label>Placa</label>
           <input className="mono" style={{ textTransform: 'uppercase', width: 140 }}
-            value={nova.placa} onChange={(e) => setNova({ ...nova, placa: e.target.value })} required />
+            value={placa} onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); }}
+            placeholder="ABC1D23" required />
         </div>
-        <div className="campo">
+        <div className="campo campo-busca" style={{ minWidth: 200 }}>
           <label>Modelo</label>
-          <input value={nova.modelo} onChange={(e) => setNova({ ...nova, modelo: e.target.value })} />
+          <input value={buscaModelo}
+            onChange={(e) => onBuscaModeloChange(e.target.value)}
+            onFocus={() => setMostrarSugestoes(true)}
+            onBlur={() => setTimeout(() => setMostrarSugestoes(false), 150)}
+            placeholder="Digite o modelo…" style={{ width: '100%' }} />
+          {mostrarSugestoes && sugestoes.length > 0 && (
+            <ul className="sugestoes-lista">
+              {sugestoes.map((m) => (
+                <li key={m.id} className="sugestao-item"
+                  onMouseDown={(e) => { e.preventDefault(); selecionarModelo(m); }}>
+                  {m.nome}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="campo">
           <label>Tabela</label>
           <input className="mono" style={{ width: 80, textTransform: 'uppercase' }}
-            value={nova.tipo_veic} onChange={(e) => setNova({ ...nova, tipo_veic: e.target.value })} />
+            value={tipoVeic} onChange={(e) => setTipoVeic(e.target.value)} />
         </div>
         <button className="btn-primary" type="submit">+ Veículo</button>
+        {modeloSelecionado && <span className="badge-mens">Tabela: {modeloSelecionado.tabela_tipo}</span>}
       </form>
+
+      {confirmPlaca && (
+        <div className="modal-bg" onClick={() => setConfirmPlaca(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Confirmar placa</h2>
+            <p className="suave">Essa placa não parece ter um formato válido (ex.: ABC1234 ou ABC1D23).</p>
+            <div className="grande mono">{confirmPlaca}</div>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setConfirmPlaca(null)}>Não, corrigir</button>
+              <button className="btn-primary" onClick={() => inserirVeiculo(confirmPlaca)}>Sim, está correta</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

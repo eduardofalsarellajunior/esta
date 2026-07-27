@@ -2,16 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais } from '../lib/dados.js';
 import { agoraHHMM, hojeISO, dataDeISO, fmtHora, fmtBRL } from '../lib/tempo.js';
+import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
-
-function normalizar(s) {
-  return (s || '').toUpperCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-}
-
-// Placa antiga (ABC1234) ou Mercosul (ABC1D23): 3 letras + 1 número + (3 números OU 1 letra + 2 números).
-const REGEX_PLACA = /^[A-Z]{3}\d(\d{3}|[A-Z]\d{2})$/;
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
