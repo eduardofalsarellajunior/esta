@@ -4,7 +4,8 @@ import { fmtHora, fmtBRL } from '../lib/tempo.js';
 
 export default function Precos({ perfil }) {
   const [tabelas, setTabelas] = useState([]);
-  const [sel, setSel] = useState(null); // tabela selecionada (edita faixas)
+  const [sel, setSel] = useState(null); // tabela cujas faixas aparecem embaixo
+  const [editando, setEditando] = useState(null); // objeto no modal de cabeçalho (null = fechado)
   const [erro, setErro] = useState('');
 
   async function carregar() {
@@ -24,9 +25,19 @@ export default function Precos({ perfil }) {
       selecao_manual: !!t.selecao_manual,
     };
     const res = t.id
-      ? await supabase.from('tabelas_preco').update(payload).eq('id', t.id)
-      : await supabase.from('tabelas_preco').insert(payload);
-    if (res.error) setErro(res.error.message); else { setSel(null); carregar(); }
+      ? await supabase.from('tabelas_preco').update(payload).eq('id', t.id).select().single()
+      : await supabase.from('tabelas_preco').insert(payload).select().single();
+    if (res.error) { setErro(res.error.message); return; }
+    // Fecha só o cabeçalho; mantém a tabela selecionada pra editar as faixas na hora.
+    setEditando(null); setSel(res.data); carregar();
+  }
+
+  async function excluirTabela(id) {
+    if (!window.confirm('Excluir esta tabela de preço? Isso também apaga as faixas dela e não pode ser desfeito.')) return;
+    setErro('');
+    const { error } = await supabase.from('tabelas_preco').delete().eq('id', id);
+    if (error) { setErro(error.message); return; }
+    setEditando(null); setSel(null); carregar();
   }
 
   return (
@@ -35,7 +46,7 @@ export default function Precos({ perfil }) {
         <div className="card-cab">
           <div><h2>Tabelas de preço</h2>
             <p className="suave">Grade por tipo de veículo, com pernoite/diária e tolerância. As mudanças de preço deveriam entrar como nova vigência (histórico).</p></div>
-          <button className="btn-primary" onClick={() => setSel({ novo: true })}>+ Nova tabela</button>
+          <button className="btn-primary" onClick={() => setEditando({ novo: true })}>+ Nova tabela</button>
         </div>
         {erro && <div className="aviso">{erro}</div>}
         <div className="tabela-scroll">
@@ -51,7 +62,7 @@ export default function Precos({ perfil }) {
                   <td>{Number(t.tolerancia_pct)}</td>
                   <td>{t.selecao_manual ? 'Sim' : 'Não'}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <button className="btn-ghost" onClick={() => setSel(t)}>Editar</button>
+                    <button className="btn-ghost" onClick={() => { setSel(t); setEditando(t); }}>Editar</button>
                   </td>
                 </tr>
               ))}
@@ -60,15 +71,17 @@ export default function Precos({ perfil }) {
         </div>
       </div>
 
-      {sel && !sel.novo && <Faixas perfil={perfil} tabela={sel} />}
-      {sel && (
-        <HeaderModal inicial={sel.novo ? {} : sel} onSalvar={salvarHeader} onFechar={() => setSel(null)} />
+      {sel && <Faixas perfil={perfil} tabela={sel} />}
+      {editando && (
+        <HeaderModal inicial={editando.novo ? {} : editando} onSalvar={salvarHeader}
+          onExcluir={editando.id ? () => excluirTabela(editando.id) : null}
+          onFechar={() => setEditando(null)} />
       )}
     </>
   );
 }
 
-function HeaderModal({ inicial, onSalvar, onFechar }) {
+function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
   const [t, setT] = useState(inicial);
   const set = (k, v) => setT((o) => ({ ...o, [k]: v }));
   const campos = [
@@ -90,9 +103,12 @@ function HeaderModal({ inicial, onSalvar, onFechar }) {
             </div>
           ))}
           <label className="campo-check"><input type="checkbox" checked={!!t.selecao_manual} onChange={(e) => set('selecao_manual', e.target.checked)} /> Seleção manual na Entrada</label>
-          <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-            <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
-            <button type="submit" className="btn-primary">Salvar</button>
+          <div className="linha-form" style={{ justifyContent: 'space-between', marginTop: 12 }}>
+            {onExcluir ? <button type="button" className="btn-ghost aviso-btn" onClick={onExcluir}>Excluir tabela</button> : <span />}
+            <div className="linha-form">
+              <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
+              <button type="submit" className="btn-primary">Salvar</button>
+            </div>
           </div>
         </form>
       </div>
