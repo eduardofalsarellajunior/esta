@@ -46,6 +46,7 @@ button { cursor: pointer; }
 .btn-ghost { background: transparent; }
 .btn-ghost:hover { background: var(--panel2); }
 .aviso-btn { color: var(--erro); }
+a.btn-primary, a.btn-ghost { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 
 .placa { display: inline-block; font-weight: 700; letter-spacing: 2px; background: #0e0f12; border: 2px solid var(--linha); border-radius: 6px; padding: 3px 9px; text-transform: uppercase; }
 .badge-mens { align-self: center; background: rgba(61,220,132,.12); color: var(--ok); border: 1px solid var(--ok); border-radius: 6px; padding: 4px 10px; font-size: 13px; }
@@ -103,4 +104,13 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
   .card { padding: 12px; }
   .grande { font-size: 32px; }
   .modal { width: 92vw !important; padding: 16px; }
+}
+
+.ticket-impressao { color: var(--texto); }
+.ticket-impressao h2 { margin-top: 0; }
+@media print {
+  body * { visibility: hidden; }
+  .ticket-impressao, .ticket-impressao * { visibility: visible; }
+  .ticket-impressao { position: absolute; left: 0; top: 0; width: 100%; color: #000; }
+  .ticket-impressao h2 { color: #000; }
 }

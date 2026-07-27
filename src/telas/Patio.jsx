@@ -29,6 +29,7 @@ export default function Patio({ perfil }) {
   const [tabelaManual, setTabelaManual] = useState('');
   const [nomeCarroNovo, setNomeCarroNovo] = useState('');
   const [confirmNovo, setConfirmNovo] = useState(null); // { nome, tipo }
+  const [ticket, setTicket] = useState(null); // { placa, modelo, tipo, dtEntrada, hrEntrada, operador }
 
   const sugestoes = useMemo(() => {
     const alvo = normalizar(buscaModelo);
@@ -97,15 +98,18 @@ export default function Patio({ perfil }) {
 
   async function registrarEntrada(tipoVeic, nomeModelo) {
     const p = placa.trim().toUpperCase();
+    const dtEntrada = hojeISO();
+    const hrEntrada = agoraHHMM();
     const { error } = await supabase.from('movimentos').insert({
       filial_id: perfil.filial_id, placa: p, modelo: nomeModelo || null,
-      dt_entrada: hojeISO(), hr_entrada: agoraHHMM(),
+      dt_entrada: dtEntrada, hr_entrada: hrEntrada,
       tipo_veic: tipoVeic,
       tipo_mens: detectado?.tipo_mens || 'E',
       convenio_codigo: detectado?.convenio_codigo || null,
       usuario_entrada: perfil.id,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
+    setTicket({ placa: p, modelo: nomeModelo || '', tipo: tipoVeic, dtEntrada, hrEntrada, operador: perfil.nome });
     limparFormEntrada();
     recarregar();
   }
@@ -296,6 +300,26 @@ export default function Patio({ perfil }) {
         </div>
       )}
 
+      {ticket && (
+        <div className="modal-bg" onClick={() => setTicket(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ticket-impressao">
+              <h2>Ticket de entrada</h2>
+              <p className="mono">Placa: <strong>{ticket.placa}</strong></p>
+              <p>Carro: {ticket.modelo || '—'}</p>
+              <p>Tabela: {ticket.tipo}</p>
+              <p className="mono">Entrada: {ticket.dtEntrada.split('-').reverse().join('/')} {fmtHora(Number(ticket.hrEntrada))}</p>
+              <p className="suave">Operador: {ticket.operador}</p>
+            </div>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setTicket(null)}>Fechar</button>
+              <a className="btn-ghost" href={linkWhatsApp(ticket)} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
+              <button className="btn-primary" onClick={() => window.print()}>Imprimir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {saindo && (
         <div className="modal-bg" onClick={() => setSaindo(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -351,6 +375,17 @@ export default function Patio({ perfil }) {
   function removePagto(i) {
     setSaindo((s) => ({ ...s, pagamentos: s.pagamentos.filter((_, j) => j !== i) }));
   }
+}
+
+function linkWhatsApp(t) {
+  const texto = [
+    'Ticket de entrada',
+    `Placa: ${t.placa}`,
+    `Carro: ${t.modelo || '—'}`,
+    `Tabela: ${t.tipo}`,
+    `Entrada: ${t.dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(t.hrEntrada))}`,
+  ].join('\n');
+  return `https://wa.me/?text=${encodeURIComponent(texto)}`;
 }
 
 function rotuloTipo(t) {
