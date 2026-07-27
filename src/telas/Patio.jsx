@@ -460,7 +460,7 @@ export default function Patio({ perfil }) {
             </div>
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setTicket(null)}>Fechar</button>
-              <a className="btn-ghost" href={linkWhatsApp(ticket, celularTicket)} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
+              <a className="btn-ghost" href={linkWhatsApp(ticket, celularTicket, filial)} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
               <button className="btn-primary" onClick={() => imprimirTicket(ticket, filial)}>Imprimir</button>
             </div>
           </div>
@@ -524,8 +524,11 @@ export default function Patio({ perfil }) {
   }
 }
 
-function linkWhatsApp(ticket, celular) {
-  const texto = [ticket.titulo, ...ticket.linhas.map(([r, v]) => `${r}: ${v}`)].join('\n');
+function linkWhatsApp(ticket, celular, filial) {
+  const cabecalho = filial && (filial.nome_fantasia || filial.endereco || filial.cnpj)
+    ? [filial.nome_fantasia, filial.endereco, filial.cnpj ? `CNPJ: ${filial.cnpj}` : null].filter(Boolean).join('\n') + '\n\n'
+    : '';
+  const texto = cabecalho + [ticket.titulo, ...ticket.linhas.map(([r, v]) => `${r}: ${v}`)].join('\n');
   const digitos = (celular || '').replace(/\D/g, '');
   const numero = digitos ? (digitos.startsWith('55') ? digitos : `55${digitos}`) : '';
   return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
