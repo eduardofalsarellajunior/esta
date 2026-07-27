@@ -99,11 +99,20 @@ export default function Patio({ perfil }) {
   }
   useEffect(() => { recarregar(); /* eslint-disable-next-line */ }, []);
 
+  function encontrarNoPatio(p) {
+    return patio.find((m) => m.placa === p);
+  }
+
   // Detecção de mensalista ao digitar a placa.
   async function detectar(pl) {
     const p = pl.trim().toUpperCase();
     setDetectado(null);
     if (p.length < 3) return;
+
+    // Placa já estacionada? Pula direto pra rotina de saída.
+    const jaNoPatio = encontrarNoPatio(p);
+    if (jaNoPatio) { limparFormEntrada(); prepararSaida(jaNoPatio); return; }
+
     const { data: mv } = await supabase.from('mensalista_veiculos').select('mensalista_id').eq('placa', p).maybeSingle();
     if (!mv) return;
     const { data: m } = await supabase.from('mensalistas').select('*').eq('id', mv.mensalista_id).maybeSingle();
@@ -175,6 +184,11 @@ export default function Patio({ perfil }) {
     setErro('');
     const p = placa.trim().toUpperCase();
     if (!p) return;
+
+    // Segurança extra (ex.: Enter sem sair do campo, sem disparar o onBlur).
+    const jaNoPatio = encontrarNoPatio(p);
+    if (jaNoPatio) { limparFormEntrada(); prepararSaida(jaNoPatio); return; }
+
     if (!REGEX_PLACA.test(p)) { setConfirmPlaca(p); return; }
     await prosseguirEntrada();
   }
@@ -378,18 +392,19 @@ export default function Patio({ perfil }) {
         <h2>No pátio ({patio.length})</h2>
         <div className="tabela-scroll">
           <table>
-            <thead><tr><th>Placa</th><th>Tabela</th><th>Tipo</th><th>Entrada</th><th></th></tr></thead>
+            <thead><tr><th>Placa</th><th>Carro</th><th>Tabela</th><th>Tipo</th><th>Entrada</th><th></th></tr></thead>
             <tbody>
               {patio.map((m) => (
                 <tr key={m.id}>
                   <td><span className="placa mono">{m.placa}</span></td>
+                  <td>{m.modelo || '—'}</td>
                   <td>{m.tipo_veic}</td>
                   <td>{rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}</td>
                   <td className="mono">{m.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(m.hr_entrada))}</td>
                   <td style={{ textAlign: 'right' }}><button className="btn-primary" onClick={() => prepararSaida(m)}>Saída</button></td>
                 </tr>
               ))}
-              {patio.length === 0 && <tr><td colSpan={5} className="suave">Pátio vazio.</td></tr>}
+              {patio.length === 0 && <tr><td colSpan={6} className="suave">Pátio vazio.</td></tr>}
             </tbody>
           </table>
         </div>
