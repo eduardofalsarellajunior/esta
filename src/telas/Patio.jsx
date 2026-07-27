@@ -138,7 +138,8 @@ export default function Patio({ perfil }) {
     setDetectado({ nome: m.razao, tipo_mens: m.tipo_mens, convenio_codigo: convCod });
   }
 
-  function onBuscaModeloChange(v) {
+  function onBuscaModeloChange(valorDigitado) {
+    const v = valorDigitado.toUpperCase();
     setBuscaModelo(v);
     setMostrarSugestoes(true);
     setModeloSelecionado((m) => (m && normalizar(v) !== normalizar(m.nome)) ? null : m);
@@ -406,7 +407,7 @@ export default function Patio({ perfil }) {
               </div>
               <div className="campo">
                 <label>Nome do carro (novo)</label>
-                <input value={nomeCarroNovo} onChange={(e) => setNomeCarroNovo(e.target.value)} />
+                <input value={nomeCarroNovo} onChange={(e) => setNomeCarroNovo(e.target.value.toUpperCase())} />
               </div>
             </>
           )}
