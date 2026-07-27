@@ -9,6 +9,20 @@
   --ambar-esc: #b9791a;
   --ok: #3ddc84;
   --erro: #ff6b6b;
+  --lateral-bg: #12141a;
+}
+:root[data-theme="claro"] {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel2: #eef0f3;
+  --linha: #d7dbe1;
+  --texto: #1a1d22;
+  --suave: #5b6472;
+  --ambar: #a8650a;
+  --ambar-esc: #8a5308;
+  --ok: #157a45;
+  --erro: #c62f2f;
+  --lateral-bg: #e9ebef;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--texto); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -19,7 +33,7 @@ a { color: inherit; text-decoration: none; }
 
 /* Layout com navegação lateral */
 .app { display: flex; min-height: 100vh; }
-.lateral { width: 220px; background: #12141a; border-right: 1px solid var(--linha); padding: 16px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0; }
+.lateral { width: 220px; background: var(--lateral-bg); border-right: 1px solid var(--linha); padding: 16px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0; }
 .marca { font-size: 18px; font-weight: 800; letter-spacing: 1px; padding: 0 18px 16px; }
 .nav-grupo { margin-bottom: 14px; }
 .nav-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--suave); padding: 6px 18px; }
@@ -48,7 +62,7 @@ button { cursor: pointer; }
 .aviso-btn { color: var(--erro); }
 a.btn-primary, a.btn-ghost { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 
-.placa { display: inline-block; font-weight: 700; letter-spacing: 2px; background: #0e0f12; border: 2px solid var(--linha); border-radius: 6px; padding: 3px 9px; text-transform: uppercase; }
+.placa { display: inline-block; font-weight: 700; letter-spacing: 2px; background: #0e0f12; color: #e8eaed; border: 2px solid var(--linha); border-radius: 6px; padding: 3px 9px; text-transform: uppercase; }
 .badge-mens { align-self: center; background: rgba(61,220,132,.12); color: var(--ok); border: 1px solid var(--ok); border-radius: 6px; padding: 4px 10px; font-size: 13px; }
 
 .tabela-scroll { overflow-x: auto; }
