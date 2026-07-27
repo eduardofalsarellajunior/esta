@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { hojeISO, fmtBRL, fmtHora } from '../lib/tempo.js';
+import { hojeISO, dataDeISO, fmtBRL, fmtHora } from '../lib/tempo.js';
+import { horas, minuto, minutosParaHHMM } from '../../packages/tarifacao/tarifacao.ts';
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -83,12 +84,19 @@ export default function BI({ perfil }) {
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
 
     const porTipo = {};
-    let faturamento = 0, tabelaCheia = 0, tempoTotal = 0, saidasComTempo = 0;
+    let faturamento = 0, tabelaCheia = 0, minutosTotal = 0, saidasComTempo = 0;
     for (const m of movs) {
       porTipo[m.tipo_mens] = (porTipo[m.tipo_mens] || 0) + 1;
       faturamento += Number(m.valor || 0);
       tabelaCheia += Number(m.valor_proporcional || 0);
-      if (m.hr_saida != null && m.hr_entrada != null) { tempoTotal += Number(m.hr_saida) - Number(m.hr_entrada); saidasComTempo++; }
+      if (m.hr_saida != null && m.hr_entrada != null) {
+        const decorrido = horas({
+          dtEntrada: dataDeISO(m.dt_entrada), entrada: Number(m.hr_entrada),
+          dtSaida: dataDeISO(m.dt_saida), saida: Number(m.hr_saida),
+        });
+        minutosTotal += minuto(decorrido);
+        saidasComTempo++;
+      }
     }
     const porForma = {};
     for (const p of pagtos) {
@@ -97,7 +105,7 @@ export default function BI({ perfil }) {
     }
     setDados({
       totalVeic: movs.length, faturamento, tabelaCheia, descontos: tabelaCheia - faturamento,
-      porTipo, porForma, tempoMedio: saidasComTempo ? tempoTotal / saidasComTempo : 0,
+      porTipo, porForma, tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
     });
   }, [de, ate]);
 

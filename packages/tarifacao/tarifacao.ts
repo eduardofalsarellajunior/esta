@@ -169,7 +169,7 @@ function chave(dia: number, hhmm: HoraComercial): number {
 }
 
 /** Re-encoda minutos totais em HH.MM (parte decimal = minutos). */
-function minutosParaHHMM(min: number): HoraComercial {
+export function minutosParaHHMM(min: number): HoraComercial {
   const hh = Math.trunc(min / 60);
   const mm = min - hh * 60;
   return hh + mm / 100;
