@@ -113,6 +113,19 @@ export default function Patio({ perfil }) {
     const jaNoPatio = encontrarNoPatio(p);
     if (jaNoPatio) { limparFormEntrada(); prepararSaida(jaNoPatio); return; }
 
+    // Já esteve aqui antes? Traz o modelo de volta pro campo Carro.
+    if (!buscaModelo.trim()) {
+      const { data: anterior } = await supabase.from('movimentos')
+        .select('modelo').eq('placa', p).not('dt_saida', 'is', null)
+        .order('dt_saida', { ascending: false }).order('hr_saida', { ascending: false })
+        .limit(1).maybeSingle();
+      if (anterior?.modelo) {
+        const match = modelos.find((m) => normalizar(m.nome) === normalizar(anterior.modelo));
+        if (match) selecionarModelo(match);
+        else setBuscaModelo(anterior.modelo);
+      }
+    }
+
     const { data: mv } = await supabase.from('mensalista_veiculos').select('mensalista_id').eq('placa', p).maybeSingle();
     if (!mv) return;
     const { data: m } = await supabase.from('mensalistas').select('*').eq('id', mv.mensalista_id).maybeSingle();
@@ -294,7 +307,7 @@ export default function Patio({ perfil }) {
         ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
         ['Tempo', resultado.mensalista ? '—' : fmtHora(resultado.tempoDecorrido)],
         ...(convenioCodigo && resultado.valorConvenio > 0
-          ? [['Convênio', convenioCodigo], ['Desconto convênio', `-${fmtBRL(resultado.valorConvenio)}`]]
+          ? [['Convênio', convenioCodigo], ['Valor convênio', `-${fmtBRL(resultado.valorConvenio)}`]]
           : []),
         ['Valor', fmtBRL(resultado.valor)],
         ['Pagamento', formaTexto],
@@ -320,7 +333,7 @@ export default function Patio({ perfil }) {
         ['Carro', mov.modelo || '—'],
         ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
         ...(mov.convenio_codigo && valorConvenio > 0
-          ? [['Convênio', mov.convenio_codigo], ['Desconto convênio', `-${fmtBRL(valorConvenio)}`]]
+          ? [['Convênio', mov.convenio_codigo], ['Valor convênio', `-${fmtBRL(valorConvenio)}`]]
           : []),
         ['Valor', fmtBRL(Number(mov.valor || 0))],
         ['Pagamento', formaTexto],
