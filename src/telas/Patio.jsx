@@ -229,28 +229,39 @@ export default function Patio({ perfil }) {
     await registrarEntrada(tipo, nome);
   }
 
+  function calcularResultadoSaida(mov, convenioCodigo) {
+    if (MENSALISTA.has(mov.tipo_mens)) {
+      // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
+      return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, diarias: 0, mensalista: true,
+        tempoDecorrido: 0, residual: 0 };
+    }
+    const convenio = convenioCodigo ? mapConvenio(convenios[convenioCodigo]) : undefined;
+    return calcularTarifa({
+      tabelas, tipoVeic: mov.tipo_veic, convenio,
+      movimento: { dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() },
+    });
+  }
+
   function prepararSaida(mov) {
     try {
-      let resultado;
-      const ehMensalista = MENSALISTA.has(mov.tipo_mens);
-      if (ehMensalista) {
-        // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
-        resultado = { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, diarias: 0, mensalista: true,
-          tempoDecorrido: 0, residual: 0 };
-      } else {
-        const convenio = mov.convenio_codigo ? mapConvenio(convenios[mov.convenio_codigo]) : undefined;
-        resultado = calcularTarifa({
-          tabelas, tipoVeic: mov.tipo_veic, convenio,
-          movimento: { dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() },
-        });
-      }
+      const convenioCodigo = mov.convenio_codigo || '';
+      const resultado = calcularResultadoSaida(mov, convenioCodigo);
       const formaPadrao = formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
-      setSaindo({ mov, resultado, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
+      setSaindo({ mov, convenioCodigo, resultado, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
+    } catch (e) { setErro(e.message); }
+  }
+
+  function mudarConvenioSaida(codigo) {
+    if (!saindo) return;
+    try {
+      const resultado = calcularResultadoSaida(saindo.mov, codigo);
+      const formaAtual = saindo.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
+      setSaindo({ ...saindo, convenioCodigo: codigo, resultado, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
     } catch (e) { setErro(e.message); }
   }
 
   async function confirmarSaida() {
-    const { mov, resultado, pagamentos } = saindo;
+    const { mov, resultado, pagamentos, convenioCodigo } = saindo;
     const dtSaida = hojeISO();
     const hrSaida = agoraHHMM();
     // Liga ao caixa aberto do operador (se houver), para o fechamento.
@@ -258,6 +269,7 @@ export default function Patio({ perfil }) {
       .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
     const { error } = await supabase.from('movimentos').update({
       dt_saida: dtSaida, hr_saida: hrSaida,
+      convenio_codigo: convenioCodigo || null,
       valor: resultado.valor, valor_proporcional: resultado.valorProporcional,
       valor_convenio: resultado.valorConvenio, pontos_ganhos: resultado.pontos,
       caixa_id: cx?.id ?? null, usuario_saida: perfil.id,
@@ -486,6 +498,17 @@ export default function Patio({ perfil }) {
         <div className="modal-bg" onClick={() => setSaindo(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Saída — <span className="placa mono">{saindo.mov.placa}</span></h2>
+            {!saindo.resultado.mensalista && (
+              <div className="campo" style={{ marginBottom: 10 }}>
+                <label>Convênio (opcional — em branco cobra normal)</label>
+                <select value={saindo.convenioCodigo} onChange={(e) => mudarConvenioSaida(e.target.value)}>
+                  <option value="">— Sem convênio —</option>
+                  {Object.values(convenios)
+                    .filter((c) => c.ativo && (!c.so_supervisor || perfil.papel === 'supervisor'))
+                    .map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.razao}</option>)}
+                </select>
+              </div>
+            )}
             {saindo.resultado.mensalista ? (
               <p className="suave">Mensalista/hóspede — sem cobrança na saída (mensalidade paga à parte).</p>
             ) : (
