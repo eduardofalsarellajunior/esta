@@ -156,11 +156,11 @@ export default function BI({ perfil }) {
             <button className="btn-ghost" onClick={carregar}>Atualizar</button>
             <button className="btn-ghost" disabled={!dados}
               onClick={() => window.open(linkWhatsAppRelatorio(textoRelatorio(dados, de, ate, filial)), '_blank')}>
-              Enviar por WhatsApp
+              WhatsApp
             </button>
             <button className="btn-ghost" disabled={!dados}
               onClick={() => { window.location.href = linkEmailRelatorio(textoRelatorio(dados, de, ate, filial), de, ate); }}>
-              Enviar por Email
+              Email
             </button>
             <button className="btn-primary" disabled={!dados} onClick={() => imprimirRelatorio(dados, de, ate, filial)}>Imprimir</button>
           </div>
