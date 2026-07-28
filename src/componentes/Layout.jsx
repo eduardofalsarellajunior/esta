@@ -13,8 +13,8 @@ const GRUPOS = [
     { to: '/convenios', rotulo: 'Convênios' },
     { to: '/mensalistas', rotulo: 'Mensalistas' },
     { to: '/formas', rotulo: 'Formas de pagamento' },
-    { to: '/vagas', rotulo: 'Vagas' },
     { to: '/modelos', rotulo: 'Modelos' },
+    { to: '/servicos', rotulo: 'Serviços' },
   ]},
   { titulo: 'Financeiro', itens: [
     { to: '/receber', rotulo: 'Contas a receber' },

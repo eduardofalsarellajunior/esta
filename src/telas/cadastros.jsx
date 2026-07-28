@@ -66,3 +66,23 @@ export function Modelos({ perfil }) {
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
     ]} />;
 }
+
+export function Servicos({ perfil }) {
+  const [tabelasOpcoes, setTabelasOpcoes] = useState([]);
+
+  useEffect(() => {
+    supabase.from('tabelas_preco').select('tipo, descricao')
+      .is('vigencia_fim', null).eq('ativo', true).order('tipo')
+      .then(({ data }) => setTabelasOpcoes((data || []).map((t) => ({ valor: t.tipo, rotulo: `${t.tipo} · ${t.descricao}` }))));
+  }, []);
+
+  return <Crud perfil={perfil} titulo="Serviços" tabela="servicos" ordem="codigo"
+    subtitulo="Catálogo de serviços (ex.: lavagem, polimento) e a tabela de preço usada pra cobrar cada um."
+    colunas={[
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+      { campo: 'descricao', rotulo: 'Descrição', obrigatorio: true },
+      { campo: 'tabela_tipo', rotulo: 'Tabela de preço', tipo: 'select', opcoes: tabelasOpcoes, obrigatorio: true,
+        ajuda: 'Só tabelas de preço já cadastradas em Preços.' },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
+    ]} />;
+}
