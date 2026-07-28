@@ -184,27 +184,26 @@ export default function BI({ perfil }) {
   return (
     <>
       <div className="card">
-        <div className="card-cab">
-          <div><h2>Painel / BI</h2><p className="suave">Indicadores em tempo real (atualiza a cada 30s).</p></div>
-          <div className="linha-form">
-            <div className="campo"><label>De</label><input type="date" value={de} onChange={(e) => setDe(e.target.value)} /></div>
-            <div className="campo"><label>Até</label><input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
-            <label className="campo-check"><input type="checkbox" checked={verVeiculos} onChange={(e) => setVerVeiculos(e.target.checked)} /> Ver veículos</label>
-            <button className="btn-ghost" onClick={carregar}>Atualizar</button>
-            <button className="btn-ghost" disabled={!dados}
-              onClick={() => window.open(linkWhatsAppRelatorio(textoRelatorio(dados, de, ate, filial)), '_blank')}>
-              WhatsApp
-            </button>
-            <button className="btn-ghost" disabled={!dados}
-              onClick={() => { window.location.href = linkEmailRelatorio(textoRelatorio(dados, de, ate, filial), de, ate); }}>
-              Email
-            </button>
-            <button className="btn-primary" disabled={!dados}
-              onClick={() => imprimirRelatorio(dados, de, ate, filial, verVeiculos ? veiculos : null)}>
-              Imprimir
-            </button>
-          </div>
+        <h2>Painel / BI</h2>
+        <div className="linha-form" style={{ marginBottom: 10 }}>
+          <div className="campo"><label>De</label><input type="date" value={de} onChange={(e) => setDe(e.target.value)} /></div>
+          <div className="campo"><label>Até</label><input type="date" value={ate} onChange={(e) => setAte(e.target.value)} /></div>
+          <label className="campo-check"><input type="checkbox" checked={verVeiculos} onChange={(e) => setVerVeiculos(e.target.checked)} /> Ver veículos</label>
+          <button className="btn-ghost" onClick={carregar}>Atualizar</button>
+          <button className="btn-ghost" disabled={!dados}
+            onClick={() => window.open(linkWhatsAppRelatorio(textoRelatorio(dados, de, ate, filial)), '_blank')}>
+            WhatsApp
+          </button>
+          <button className="btn-ghost" disabled={!dados}
+            onClick={() => { window.location.href = linkEmailRelatorio(textoRelatorio(dados, de, ate, filial), de, ate); }}>
+            Email
+          </button>
+          <button className="btn-primary" disabled={!dados}
+            onClick={() => imprimirRelatorio(dados, de, ate, filial, verVeiculos ? veiculos : null)}>
+            Imprimir
+          </button>
         </div>
+        <p className="suave">Indicadores em tempo real (atualiza a cada 30s).</p>
         {erro && <div className="aviso">{erro}</div>}
       </div>
 
