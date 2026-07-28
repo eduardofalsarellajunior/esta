@@ -11,6 +11,7 @@ import Mensalistas from './telas/Mensalistas.jsx';
 import { Receber, Pagar, Banco } from './telas/financeiro.jsx';
 import Fiscal from './telas/Fiscal.jsx';
 import Configuracoes from './telas/Configuracoes.jsx';
+import Usuarios from './telas/Usuarios.jsx';
 
 export default function App() {
   const [sessao, setSessao] = useState(null);
@@ -39,6 +40,12 @@ export default function App() {
       <div style={{ marginTop: 12 }}><button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button></div>
     </div></div>
   );
+  if (!perfil.ativo) return (
+    <div className="centro"><div className="card aviso" style={{ maxWidth: 520 }}>
+      Este usuário está <strong>desativado</strong>. Fale com um supervisor para reativar.
+      <div style={{ marginTop: 12 }}><button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button></div>
+    </div></div>
+  );
 
   return (
     <BrowserRouter>
@@ -58,6 +65,7 @@ export default function App() {
           <Route path="banco" element={<Banco perfil={perfil} />} />
           <Route path="fiscal" element={<Fiscal perfil={perfil} />} />
           <Route path="configuracoes" element={<Configuracoes perfil={perfil} />} />
+          <Route path="usuarios" element={<Usuarios perfil={perfil} />} />
         </Route>
       </Routes>
     </BrowserRouter>
