@@ -8,7 +8,8 @@ function escapeHtml(s) {
 }
 
 // Impressão numa janela dedicada (mesmo padrão do ticket de entrada/saída).
-function imprimirRelatorio(dados, de, ate, filial) {
+// `veiculosDetalhe` vem null quando o checkbox "Ver veículos" está desmarcado.
+function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
   const cabecalho = filial && (filial.nome_fantasia || filial.endereco || filial.cnpj) ? `
     ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
     ${filial.endereco ? `<div class="linha-end">${escapeHtml(filial.endereco)}</div>` : ''}
@@ -27,9 +28,24 @@ function imprimirRelatorio(dados, de, ate, filial) {
   const porForma = Object.entries(dados.porForma)
     .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${escapeHtml(fmtBRL(v))}</td></tr>`).join('');
 
+  const veiculosHtml = veiculosDetalhe != null ? `
+      <h2>Veículos (${veiculosDetalhe.length})</h2>
+      <table><thead><tr>
+        <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th><th>Tempo</th><th>Pagto</th><th>Valor</th>
+      </tr></thead><tbody>${veiculosDetalhe.map((v) => `<tr>
+        <td>${escapeHtml(v.placa)}</td>
+        <td>${escapeHtml(v.modelo || '—')}</td>
+        <td>${escapeHtml(v.tipo_veic)}</td>
+        <td>${escapeHtml(v.dt_entrada.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_entrada)))}</td>
+        <td>${escapeHtml(v.dt_saida.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_saida)))}</td>
+        <td>${v.tempo != null ? escapeHtml(fmtHora(v.tempo)) : '—'}</td>
+        <td>${escapeHtml(v.pagamento)}</td>
+        <td>${escapeHtml(fmtBRL(v.valor))}</td>
+      </tr>`).join('') || '<tr><td colspan="8">Nenhum veículo no período.</td></tr>'}</tbody></table>` : '';
+
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório BI</title>
     <style>
-      body { font-family: system-ui, Arial, sans-serif; color: #000; padding: 20px; max-width: 480px; }
+      body { font-family: system-ui, Arial, sans-serif; color: #000; padding: 20px; max-width: 640px; }
       .nome { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
       .linha-end { font-size: 12px; color: #333; margin-bottom: 2px; }
       hr { border: none; border-top: 1px dashed #999; margin: 12px 0; }
@@ -37,7 +53,8 @@ function imprimirRelatorio(dados, de, ate, filial) {
       h2 { font-size: 14px; margin: 16px 0 6px; }
       p { font-size: 13px; margin: 3px 0; }
       table { width: 100%; border-collapse: collapse; font-size: 13px; }
-      td { padding: 4px 0; border-bottom: 1px solid #ddd; }
+      th { text-align: left; padding: 4px 6px 4px 0; border-bottom: 1px solid #999; }
+      td { padding: 4px 6px 4px 0; border-bottom: 1px solid #ddd; }
     </style></head><body>
       ${cabecalho}
       <h1>Painel / BI</h1>
@@ -47,6 +64,7 @@ function imprimirRelatorio(dados, de, ate, filial) {
       <table><tbody>${porTipo || '<tr><td>—</td></tr>'}</tbody></table>
       <h2>Por forma de pagamento</h2>
       <table><tbody>${porForma || '<tr><td>Sem pagamentos no período.</td></tr>'}</tbody></table>
+      ${veiculosHtml}
     </body></html>`;
   const win = window.open('', '_blank', 'width=420,height=650');
   if (!win) { window.alert('Permita pop-ups para imprimir o relatório.'); return; }
@@ -181,7 +199,10 @@ export default function BI({ perfil }) {
               onClick={() => { window.location.href = linkEmailRelatorio(textoRelatorio(dados, de, ate, filial), de, ate); }}>
               Email
             </button>
-            <button className="btn-primary" disabled={!dados} onClick={() => imprimirRelatorio(dados, de, ate, filial)}>Imprimir</button>
+            <button className="btn-primary" disabled={!dados}
+              onClick={() => imprimirRelatorio(dados, de, ate, filial, verVeiculos ? veiculos : null)}>
+              Imprimir
+            </button>
           </div>
         </div>
         {erro && <div className="aviso">{erro}</div>}
