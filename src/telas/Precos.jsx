@@ -19,9 +19,7 @@ export default function Precos({ perfil }) {
     setErro('');
     const payload = {
       filial_id: perfil.filial_id, tipo: t.tipo, descricao: t.descricao,
-      pernoite_ini: Number(t.pernoite_ini || 0),
-      pernoite_fim: Number(t.pernoite_fim || 0), valor_diaria: Number(t.valor_diaria || 0),
-      tolerancia_pct: Number(t.tolerancia_pct || 0), qte_pontos: Number(t.qte_pontos || 0),
+      qte_pontos: Number(t.qte_pontos || 0),
       selecao_manual: !!t.selecao_manual,
     };
     const res = t.id
@@ -45,21 +43,18 @@ export default function Precos({ perfil }) {
       <div className="card">
         <div className="card-cab">
           <div><h2>Tabelas de preço</h2>
-            <p className="suave">Grade por tipo de veículo, com pernoite/diária e tolerância. As mudanças de preço deveriam entrar como nova vigência (histórico).</p></div>
+            <p className="suave">Grade por tipo de veículo. As mudanças de preço deveriam entrar como nova vigência (histórico).</p></div>
           <button className="btn-primary" onClick={() => setEditando({ novo: true })}>+ Nova tabela</button>
         </div>
         {erro && <div className="aviso">{erro}</div>}
         <div className="tabela-scroll">
           <table>
-            <thead><tr><th>Tipo</th><th>Descrição</th><th>Pernoite</th><th>Diária</th><th>Tol.%</th><th>Seleção manual</th><th></th></tr></thead>
+            <thead><tr><th>Tipo</th><th>Descrição</th><th>Seleção manual</th><th></th></tr></thead>
             <tbody>
               {tabelas.map((t) => (
                 <tr key={t.id}>
                   <td className="mono">{t.tipo}</td>
                   <td>{t.descricao}</td>
-                  <td className="mono">{Number(t.pernoite_ini) ? `${fmtHora(Number(t.pernoite_ini))}–${fmtHora(Number(t.pernoite_fim))}` : '—'}</td>
-                  <td>{fmtBRL(Number(t.valor_diaria))}</td>
-                  <td>{Number(t.tolerancia_pct)}</td>
                   <td>{t.selecao_manual ? 'Sim' : 'Não'}</td>
                   <td style={{ textAlign: 'right' }}>
                     <button className="btn-ghost" onClick={() => { setSel(t); setEditando(t); }}>Editar</button>
@@ -86,8 +81,6 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
   const set = (k, v) => setT((o) => ({ ...o, [k]: v }));
   const campos = [
     ['tipo', 'Tipo (código)', 'text'], ['descricao', 'Descrição', 'text'],
-    ['pernoite_ini', 'Início pernoite (HH.MM)', 'number'], ['pernoite_fim', 'Fim pernoite (HH.MM)', 'number'],
-    ['valor_diaria', 'Valor da diária', 'number'], ['tolerancia_pct', 'Tolerância %', 'number'],
     ['qte_pontos', 'Pontos fidelidade', 'number'],
   ];
   return (

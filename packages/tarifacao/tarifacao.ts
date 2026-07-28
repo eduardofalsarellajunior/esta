@@ -2,7 +2,7 @@
  * Motor de tarifação — réplica fiel da lógica do legado Clipper (HESTA).
  *
  * Fontes portados:
- *  - `SISPROC2.PRG`  → FUNCTION HORAS / PERNOITE / MINUTO
+ *  - `SISPROC2.PRG`  → FUNCTION HORAS / MINUTO
  *  - `ESTALAN2.PRG`  → caminho de saída/cobrança (avulso + convênio)
  *
  * Função PURA, sem I/O. Convenção de tempo do legado: "hora comercial" HH.MM,
@@ -34,14 +34,6 @@ export interface Faixa {
 export interface TabelaPreco {
   /** Código da tabela (ex.: "P", "G", "M", "D"). */
   tipo: string;
-  /** Início da janela de pernoite/diária, HH.MM (0 = sem pernoite). */
-  ePernoite: HoraComercial;
-  /** Fim da janela de pernoite/diária, HH.MM. */
-  sPernoite: HoraComercial;
-  /** Valor de cada diária/pernoite. */
-  vPernoite: number;
-  /** Tolerância PERCENTUAL da janela de pernoite (0–100). Ver PERNOITE. */
-  tol: number;
   /** Pontos de fidelidade concedidos (QTEPONTOS). */
   qtePontos?: number;
   /** Faixas de preço (até 45), em ordem crescente de `ate`. */
@@ -102,10 +94,6 @@ export interface EntradaCalculo {
 export interface ResultadoTarifa {
   /** Tempo decorrido total, em HH.MM (função HORAS). */
   tempoDecorrido: HoraComercial;
-  /** Nº de diárias/pernoites contabilizadas. */
-  diarias: number;
-  /** Tempo residual (fora das janelas de pernoite), em HH.MM. */
-  residual: HoraComercial;
   /** Valor de tabela cheio, antes do convênio (VALORPROP). */
   valorProporcional: number;
   /** Desconto/valor de convênio (VALORCONV). */
@@ -121,7 +109,7 @@ export interface ResultadoTarifa {
   /** true se o tempo estourou todas as faixas (o legado pediria valor manual). */
   manual: boolean;
   /** Detalhe dos segmentos, quando a cobrança é em 2 partes (corte de convênio). */
-  segmentos?: Array<{ valor: number; diarias: number; residual: HoraComercial }>;
+  segmentos?: Array<{ valor: number }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,84 +151,11 @@ export function horas(mov: Movimento): HoraComercial {
   return fti + ftf / 100;
 }
 
-/** Chave comparável (dia + HH.MM) para o laço de pernoite. */
-function chave(dia: number, hhmm: HoraComercial): number {
-  return dia * 100_000 + Math.round(hhmm * 100);
-}
-
 /** Re-encoda minutos totais em HH.MM (parte decimal = minutos). */
 export function minutosParaHHMM(min: number): HoraComercial {
   const hh = Math.trunc(min / 60);
   const mm = min - hh * 60;
   return hh + mm / 100;
-}
-
-export interface Pernoite {
-  diarias: number;
-  residual: HoraComercial;
-}
-
-/**
- * Réplica de FUNCTION PERNOITE. Devolve nº de diárias e o tempo residual.
- * `tol` é PERCENTUAL: exige-se ocupar ao menos (janela × (100−tol)/100) para
- * contabilizar uma diária. Confirmado nos dados reais (tabela "P" tem TOL=99).
- */
-export function pernoite(mov: Movimento, tbl: TabelaPreco): Pernoite {
-  const { ePernoite: fpe, sPernoite: fps, tol } = tbl;
-
-  // Sem janela de pernoite definida: só tempo corrido (0 diárias).
-  if (fpe === 0 && fps === 0 && tol === 0) {
-    return { diarias: 0, residual: horas(mov) };
-  }
-
-  const y = ((24 * 60 - minuto(fpe) + minuto(fps)) * (100 - tol)) / 100;
-
-  let de = 0; // dia da entrada relativo
-  const se = diffDias(mov.dtEntrada, mov.dtSaida); // dia da saída relativo
-  let pe = de; // âncora da janela (acompanha `de`)
-  let fentrada = mov.entrada;
-  const sai = mov.saida;
-
-  let horasMin = 0;
-  let diarias = 0;
-
-  // Trava de segurança (estadias absurdas em dados históricos ruins).
-  let guarda = 0;
-  while (guarda++ < 10_000) {
-    const fie = chave(de, fentrada);
-    const fip = chave(pe, fpe);
-    const ffp = chave(pe + 1, fps);
-    const fis = chave(se, sai);
-
-    if (fie < fip) {
-      if (de === se) {
-        horasMin += minuto(sai) - minuto(fentrada);
-        break;
-      }
-      horasMin += minuto(fpe) - minuto(fentrada);
-      fentrada = fpe;
-      continue;
-    }
-    if (fis <= ffp) {
-      const x = 24 * 60 - minuto(fentrada) + minuto(sai);
-      if (x >= y) {
-        diarias += 1;
-      } else {
-        horasMin += x;
-      }
-      break;
-    }
-    diarias += 1;
-    if (de + 1 === se) {
-      horasMin += minuto(sai) - minuto(fps);
-      break;
-    }
-    de += 1;
-    pe = de;
-    fentrada = fps;
-  }
-
-  return { diarias, residual: minutosParaHHMM(horasMin) };
 }
 
 // ---------------------------------------------------------------------------
@@ -302,25 +217,21 @@ export function calcularValorFaixas(
 }
 
 /**
- * Valor proporcional (de tabela, pré-convênio): faixa do tempo residual mais
- * as diárias. Réplica do trecho avulso de ESTALAN2.PRG (linhas 443-472).
+ * Valor proporcional (de tabela, pré-convênio): faixa do tempo decorrido.
+ * Réplica do trecho avulso de ESTALAN2.PRG (linhas 443-472).
  */
 export function calcularProporcional(
   tbl: TabelaPreco,
   mov: Movimento,
-): { valor: number | null; diarias: number; residual: HoraComercial } {
-  const { diarias, residual } = pernoite(mov, tbl);
-  const faixa = calcularValorFaixas(tbl.faixas, residual);
-  if (faixa === null) {
-    return { valor: null, diarias, residual };
-  }
-  return { valor: faixa.valor + diarias * tbl.vPernoite, diarias, residual };
+): { valor: number | null } {
+  const faixa = calcularValorFaixas(tbl.faixas, horas(mov));
+  return { valor: faixa === null ? null : faixa.valor };
 }
 
 /**
  * Cálculo completo da tarifa de saída (avulso + convênio simples).
  *
- * Cobertura atual: proporcional (faixas + pernoite), convênio por tabela
+ * Cobertura atual: proporcional (faixas), convênio por tabela
  * alternativa (TABCONV), por grade própria (TABHORAS/CON), percentual
  * (PERCONV) e valor fixo (VLRCONV), piso em zero, pontos e ajuste por forma
  * de pagamento. NÃO cobre ainda: corte de convênio em 2 segmentos, selos/
@@ -343,8 +254,6 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
   const tempoDecorrido = horas(movimento);
 
   let valorProporcional: number;
-  let diarias: number;
-  let residual: HoraComercial;
   let manual: boolean;
   let segmentos: ResultadoTarifa['segmentos'];
 
@@ -365,25 +274,16 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
       dtSaida: movimento.dtSaida, saida: horaConvenio!,
     });
     // Segmento 2: corte → saída, na tabela original.
-    // [VALIDAR] no legado, a janela de pernoite do seg.2 usa parâmetros da
-    // tabela do convênio; aqui usamos a própria tabela original (mais simples).
     const seg2 = calcularProporcional(tblOrig, {
       dtEntrada: movimento.dtEntrada, entrada: horaConvenio!,
       dtSaida: movimento.dtSaida, saida: movimento.saida,
     });
     valorProporcional = (seg1.valor ?? 0) + (seg2.valor ?? 0);
-    diarias = seg1.diarias + seg2.diarias;
-    residual = seg2.residual;
     manual = seg1.valor === null || seg2.valor === null;
-    segmentos = [
-      { valor: seg1.valor ?? 0, diarias: seg1.diarias, residual: seg1.residual },
-      { valor: seg2.valor ?? 0, diarias: seg2.diarias, residual: seg2.residual },
-    ];
+    segmentos = [{ valor: seg1.valor ?? 0 }, { valor: seg2.valor ?? 0 }];
   } else {
     const prop = calcularProporcional(tbl, movimento);
     valorProporcional = prop.valor ?? 0;
-    diarias = prop.diarias;
-    residual = prop.residual;
     manual = prop.valor === null;
   }
 
@@ -392,7 +292,7 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
   if (convenio) {
     if (convenio.tabHoras) {
       // [VALIDAR] usaValorConvenioDaFaixa: coluna CON como valor de convênio.
-      const fc = selecionaFaixa(tbl.faixas, residual, true);
+      const fc = selecionaFaixa(tbl.faixas, tempoDecorrido, true);
       valorConvenio = fc?.valor ?? 0;
     }
     if (convenio.perConv) {
@@ -422,8 +322,6 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
 
   return {
     tempoDecorrido,
-    diarias,
-    residual,
     valorProporcional: centavos(valorProporcional),
     valorConvenio: centavos(valorConvenio),
     valorSelos: centavos(valorSelos),

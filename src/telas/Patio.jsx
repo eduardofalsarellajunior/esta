@@ -274,8 +274,7 @@ export default function Patio({ perfil }) {
   function calcularResultadoSaida(mov, convenioCodigo) {
     if (MENSALISTA.has(mov.tipo_mens)) {
       // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
-      return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, diarias: 0, mensalista: true,
-        tempoDecorrido: 0, residual: 0 };
+      return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, mensalista: true, tempoDecorrido: 0 };
     }
     const convenio = convenioCodigo ? mapConvenio(convenios[convenioCodigo]) : undefined;
     return calcularTarifa({
@@ -568,7 +567,6 @@ export default function Patio({ perfil }) {
             ) : (
               <p className="mono suave">
                 Tempo: {fmtHora(saindo.resultado.tempoDecorrido)}
-                {saindo.resultado.diarias > 0 && ` · ${saindo.resultado.diarias} diária(s)`}
                 {saindo.resultado.valorConvenio > 0 && ` · conv. -${fmtBRL(saindo.resultado.valorConvenio)}`}
               </p>
             )}

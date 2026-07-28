@@ -1,11 +1,11 @@
 # @esta/tarifacao — Motor de tarifação
 
 Réplica **pura e testada** da lógica de cobrança do legado Clipper (HESTA),
-portada de `SISPROC2.PRG` (funções `HORAS`/`PERNOITE`/`MINUTO`) e `ESTALAN2.PRG`
+portada de `SISPROC2.PRG` (funções `HORAS`/`MINUTO`) e `ESTALAN2.PRG`
 (caminho de saída/cobrança).
 
 ```bash
-npm test          # node --test via tsx (24 casos)
+npm test          # node --test via tsx (23 casos)
 npm run build     # typecheck (tsc --noEmit)
 ```
 
@@ -19,9 +19,11 @@ Horários e durações usam o formato `HH.MM`, onde **a parte decimal são minut
 
 | Regra | Conclusão (lida no fonte) |
 |---|---|
-| **Tolerância** | **Percentual**, não minutos. Em `PERNOITE`: `y = janela_noturna × (100 − TOL)/100`. Só conta diária quando o tempo dentro da janela ≥ `y`. Confirmado: tabela "P" tem `TOL=99`. |
-| **Pernoite** | Cada diária adiciona `VPERNOITE`; o tempo residual (fora da janela) cai nas faixas normais. `PERNOITE` devolve `{diárias, residual}`. |
 | **usaValorConvenioDaFaixa** | Quando `convenio.tabHoras`, usa a coluna `CON` da faixa como valor de convênio (marcado `[VALIDAR]` no código — semântica de "desconto vs. valor final" a confirmar). |
+
+> Pernoite/diária e tolerância (janela noturna) foram **removidos** do motor —
+> não eram usados na operação real. Ver histórico do reconciliação abaixo, que
+> foi feito quando essa lógica ainda existia.
 
 ## Faixas: fixo ou por hora
 
@@ -50,10 +52,10 @@ A grade de convênio (coluna CON, usada quando `convenio.tabHoras=true`)
 continua sendo sempre um valor fixo (`selecionaFaixa`) — não participa dessa
 lógica de fixo/hora.
 
-## Cobertura atual (24 testes)
+## Cobertura atual (23 testes)
 
 Coberto e testado:
-- Tempo decorrido (`HORAS`), seleção de faixa (até 45), pernoite/diária (`PERNOITE`).
+- Tempo decorrido (`HORAS`), seleção de faixa (até 45).
 - Faixas fixo/hora (`calcularValorFaixas`) — 4 testes com o exemplo acima.
 - Convênio: tabela alternativa (`TABCONV`), grade própria (`TABHORAS/CON`),
   percentual (`PERCONV`), valor fixo (`VLRCONV`).
@@ -64,10 +66,14 @@ Coberto e testado:
 - Piso em zero, pontos e ajuste por forma de pagamento.
 
 Pontos marcados `[VALIDAR]` no código (semântica a confirmar, baixo impacto):
-janela de pernoite do 2º segmento; coluna `CON` como desconto vs. valor final;
-ponto exato do ajuste por forma de pagamento.
+coluna `CON` como desconto vs. valor final; ponto exato do ajuste por forma
+de pagamento.
 
 ## Estado da reconciliação contra o histórico (`ESTAMORT`, 2.575 movimentos)
+
+> Feita quando o motor ainda tinha pernoite/diária (removidos depois, por não
+> serem usados na operação real) — os números abaixo (87,4%) são um retrato
+> daquela época, não necessariamente reproduzíveis rodando o motor atual.
 
 ⚠️ **Reconciliação valor-a-valor automática NÃO é possível com os arquivos
 atuais** — e isso é uma limitação de **dados**, não do motor:

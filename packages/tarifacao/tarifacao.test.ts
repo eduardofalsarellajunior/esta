@@ -4,14 +4,12 @@ import {
   minuto,
   diffDias,
   horas,
-  pernoite,
   selecionaFaixa,
   calcularValorFaixas,
   calcularProporcional,
   calcularTarifa,
   type Faixa,
   type TabelaPreco,
-  type Movimento,
 } from './tarifacao.ts';
 
 // Helpers -------------------------------------------------------------------
@@ -22,24 +20,16 @@ const dia = (iso: string): Date => {
   return new Date(y, m - 1, d);
 };
 
-/** Tabela G — AVULSO GRANDE, sem pernoite. */
+/** Tabela G — AVULSO GRANDE. */
 const G: TabelaPreco = {
   tipo: 'G',
-  ePernoite: 0,
-  sPernoite: 0,
-  vPernoite: 0,
-  tol: 0,
   qtePontos: 0,
   faixas: [f(0.3, 7), f(1.05, 13), f(2.05, 17), f(3.05, 21), f(4.05, 25)],
 };
 
-/** Tabela P — AVULSO PEQUENO, com pernoite (18h→5h, diária 50, tol 99%). */
+/** Tabela P — AVULSO PEQUENO. */
 const P: TabelaPreco = {
   tipo: 'P',
-  ePernoite: 18.0,
-  sPernoite: 5.0,
-  vPernoite: 50,
-  tol: 99,
   qtePontos: 10,
   faixas: [f(0.3, 5, 3), f(4.0, 10, 6), f(13.0, 15, 9), f(14.0, 16, 10)],
 };
@@ -103,25 +93,11 @@ test('faixas fixo/hora: 15:20 = R$10 + 11h×R$5 (faixa 3 inteira) + 4h×R$3 (3:1
 test('proporcional G: 2h = R$17', () => {
   const r = calcularProporcional(G, { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 });
   assert.equal(r.valor, 17);
-  assert.equal(r.diarias, 0);
 });
 
-test('proporcional P diurno: residual 2h54 = R$10 (sem diária)', () => {
+test('proporcional P: 2h54 = R$10', () => {
   const r = calcularProporcional(P, { dtEntrada: dia('2023-02-22'), entrada: 15.24, dtSaida: dia('2023-02-22'), saida: 18.18 });
-  assert.equal(r.diarias, 0);
-  assert.equal(r.residual, 2.54);
   assert.equal(r.valor, 10);
-});
-
-// Pernoite ([VALIDAR] resolvido) --------------------------------------------
-test('pernoite P: 20h00 -> dia seguinte 08h00 = 1 diária + residual 3h00', () => {
-  const mov: Movimento = { dtEntrada: dia('2026-01-01'), entrada: 20.0, dtSaida: dia('2026-01-02'), saida: 8.0 };
-  const p = pernoite(mov, P);
-  assert.equal(p.diarias, 1);
-  assert.equal(p.residual, 3.0);
-  const r = calcularProporcional(P, mov);
-  // faixa(3.00) = R$10  +  1 diária × R$50 = R$60
-  assert.equal(r.valor, 60);
 });
 
 // Convênio ------------------------------------------------------------------

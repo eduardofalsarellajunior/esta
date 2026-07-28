@@ -22,10 +22,6 @@ export async function carregarTabelasPreco() {
   for (const t of tabelas) {
     mapa[t.tipo] = {
       tipo: t.tipo,
-      ePernoite: Number(t.pernoite_ini),
-      sPernoite: Number(t.pernoite_fim),
-      vPernoite: Number(t.valor_diaria),
-      tol: Number(t.tolerancia_pct),
       qtePontos: Number(t.qte_pontos),
       faixas: faixas
         .filter((f) => f.tabela_preco_id === t.id)
