@@ -5,7 +5,7 @@ portada de `SISPROC2.PRG` (funções `HORAS`/`MINUTO`) e `ESTALAN2.PRG`
 (caminho de saída/cobrança).
 
 ```bash
-npm test          # node --test via tsx (23 casos)
+npm test          # node --test via tsx (24 casos)
 npm run build     # typecheck (tsc --noEmit)
 ```
 
@@ -52,11 +52,22 @@ A grade de convênio (coluna CON, usada quando `convenio.tabHoras=true`)
 continua sendo sempre um valor fixo (`selecionaFaixa`) — não participa dessa
 lógica de fixo/hora.
 
-## Cobertura atual (23 testes)
+## Serviços: soma de tabelas
+
+Quando `servicosTipos` (lista de códigos de tabela) vem preenchida, o valor
+proporcional vira a **soma** do valor de cada uma dessas tabelas — calculadas
+sobre o mesmo tempo decorrido — em vez do valor da tabela do veículo
+(`tipoVeic`). O resto do pipeline (convênio, selos, vales, piso) segue igual,
+operando sobre esse total somado. Usado quando o operador marca serviços
+(lavagem, polimento etc.) no veículo — cada serviço tem sua própria tabela de
+preço (cadastro "Serviços"), e a saída cobra a soma delas.
+
+## Cobertura atual (24 testes)
 
 Coberto e testado:
 - Tempo decorrido (`HORAS`), seleção de faixa (até 45).
 - Faixas fixo/hora (`calcularValorFaixas`) — 4 testes com o exemplo acima.
+- Serviços: soma de tabelas (`servicosTipos`).
 - Convênio: tabela alternativa (`TABCONV`), grade própria (`TABHORAS/CON`),
   percentual (`PERCONV`), valor fixo (`VLRCONV`).
 - **Convênio em dois segmentos** (hora de corte `whoraconv`) — `ESTALAN2.PRG:473-534`.

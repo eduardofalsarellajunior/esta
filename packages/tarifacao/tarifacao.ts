@@ -73,6 +73,14 @@ export interface EntradaCalculo {
    * na tabela original. Réplica de ESTALAN2.PRG:473-534.
    */
   horaConvenio?: HoraComercial;
+  /**
+   * Códigos de tabela dos serviços marcados no veículo (ex.: lavagem,
+   * polimento). Quando presente e não vazio, o valor proporcional vira a
+   * SOMA do valor de cada uma dessas tabelas (calculadas sobre o mesmo tempo
+   * decorrido) — substitui o valor da tabela do veículo (`tipoVeic`). O
+   * resto do pipeline (convênio, selos, vales, piso) segue igual.
+   */
+  servicosTipos?: string[];
   /** Quantidade de selos usados (dok="V" / conv.selos). */
   selos?: number;
   /** Valor unitário do selo (conv.valorSelo). */
@@ -231,15 +239,14 @@ export function calcularProporcional(
 /**
  * Cálculo completo da tarifa de saída (avulso + convênio simples).
  *
- * Cobertura atual: proporcional (faixas), convênio por tabela
- * alternativa (TABCONV), por grade própria (TABHORAS/CON), percentual
- * (PERCONV) e valor fixo (VLRCONV), piso em zero, pontos e ajuste por forma
- * de pagamento. NÃO cobre ainda: corte de convênio em 2 segmentos, selos/
- * vales, saldo devedor e bônus de fidelidade (ver README).
+ * Cobertura atual: proporcional (faixas) ou soma de tabelas de serviços
+ * (`servicosTipos`), convênio por tabela alternativa (TABCONV), por grade
+ * própria (TABHORAS/CON), percentual (PERCONV) e valor fixo (VLRCONV), piso
+ * em zero, pontos e ajuste por forma de pagamento.
  */
 export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
   const {
-    tabelas, tipoVeic, movimento, convenio, horaConvenio,
+    tabelas, tipoVeic, movimento, convenio, horaConvenio, servicosTipos,
     selos = 0, valorSelo = 0, vales = 0, valorVale = 0,
     dividaAnterior = 0, valorJaPago = 0, bonusFidelidade = 0, percFormaPagto,
   } = input;
@@ -263,7 +270,23 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     horaConvenio != null &&
     horaConvenio !== movimento.saida;
 
-  if (doisSegmentos) {
+  if (servicosTipos && servicosTipos.length > 0) {
+    // Serviços marcados: soma o valor de cada tabela de serviço (mesmo tempo
+    // decorrido), no lugar da tabela do veículo.
+    let soma = 0;
+    let algumManual = false;
+    for (const tipoServico of servicosTipos) {
+      const tblServico = tabelas[tipoServico];
+      if (!tblServico) {
+        throw new Error(`Tabela de preço não encontrada: "${tipoServico}"`);
+      }
+      const r = calcularProporcional(tblServico, movimento);
+      if (r.valor === null) algumManual = true;
+      else soma += r.valor;
+    }
+    valorProporcional = soma;
+    manual = algumManual;
+  } else if (doisSegmentos) {
     const tblOrig = tabelas[tipoVeic];
     if (!tblOrig) {
       throw new Error(`Tabela original não encontrada: "${tipoVeic}"`);

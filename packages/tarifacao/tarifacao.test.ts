@@ -100,6 +100,18 @@ test('proporcional P: 2h54 = R$10', () => {
   assert.equal(r.valor, 10);
 });
 
+// Serviços (soma de tabelas) --------------------------------------------------
+test('servicosTipos: soma G (R$17) + P (R$10) no lugar da tabela do veículo', () => {
+  const r = calcularTarifa({
+    tabelas, tipoVeic: 'G', // ignorado — servicosTipos manda
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 },
+    servicosTipos: ['G', 'P'],
+  });
+  assert.equal(r.valorProporcional, 27);
+  assert.equal(r.valor, 27);
+  assert.equal(r.manual, false);
+});
+
 // Convênio ------------------------------------------------------------------
 test('convênio percentual (50%): prop 17 -> desconto 8,50 -> cobra 8,50', () => {
   const r = calcularTarifa({

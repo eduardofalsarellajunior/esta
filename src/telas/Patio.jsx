@@ -67,6 +67,8 @@ export default function Patio({ perfil }) {
   const [celularTicket, setCelularTicket] = useState('');
   const [filial, setFilial] = useState(null); // { nome_fantasia, endereco, cnpj } — cabeçalho do ticket
   const [saidasRecentes, setSaidasRecentes] = useState([]);
+  const [servicos, setServicos] = useState([]);
+  const [modalServicos, setModalServicos] = useState(null); // { mov, marcados: Set<servico_id> }
 
   const sugestoes = useMemo(() => {
     const alvo = normalizar(buscaModelo);
@@ -79,13 +81,14 @@ export default function Patio({ perfil }) {
 
   async function recarregar() {
     try {
-      const [t, p, cv, fp, md, tm, sr, fl] = await Promise.all([
+      const [t, p, cv, fp, md, tm, sr, fl, sv] = await Promise.all([
         carregarTabelasPreco(), carregarPatio(),
         supabase.from('convenios').select('*'),
         supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo'),
         carregarModelosVeiculo(), carregarTabelasManuais(),
         supabase.from('movimentos').select('*').eq('dt_saida', hojeISO()).order('hr_saida', { ascending: false }).limit(50),
         supabase.from('filiais').select('nome_fantasia, endereco, cnpj').eq('id', perfil.filial_id).maybeSingle(),
+        supabase.from('servicos').select('*').eq('ativo', true).order('codigo'),
       ]);
       setTabelas(t); setPatio(p);
       setConvenios(Object.fromEntries((cv.data || []).map((c) => [c.codigo, c])));
@@ -93,6 +96,7 @@ export default function Patio({ perfil }) {
       setModelos(md); setTabelasManuais(tm);
       setSaidasRecentes(sr.data || []);
       setFilial(fl.data || null);
+      setServicos(sv.data || []);
     } catch (e) { setErro(e.message); }
   }
   useEffect(() => { recarregar(); /* eslint-disable-next-line */ }, []);
@@ -271,7 +275,32 @@ export default function Patio({ perfil }) {
     await registrarEntrada(tipo, nome);
   }
 
-  function calcularResultadoSaida(mov, convenioCodigo) {
+  async function abrirServicosModal(mov) {
+    const { data } = await supabase.from('movimento_servicos').select('servico_id').eq('movimento_id', mov.id);
+    setModalServicos({ mov, marcados: new Set((data || []).map((r) => r.servico_id)) });
+  }
+
+  async function alternarServico(servicoId) {
+    if (!modalServicos) return;
+    const { mov, marcados } = modalServicos;
+    const jaMarcado = marcados.has(servicoId);
+    const acao = jaMarcado
+      ? supabase.from('movimento_servicos').delete().eq('movimento_id', mov.id).eq('servico_id', servicoId)
+      : supabase.from('movimento_servicos').insert({ filial_id: perfil.filial_id, movimento_id: mov.id, servico_id: servicoId });
+    const { error } = await acao;
+    if (error) { setErro(error.message); return; }
+    const novosMarcados = new Set(marcados);
+    if (jaMarcado) novosMarcados.delete(servicoId); else novosMarcados.add(servicoId);
+    setModalServicos({ mov, marcados: novosMarcados });
+  }
+
+  async function buscarServicosDoMovimento(movimentoId) {
+    const { data } = await supabase.from('movimento_servicos').select('servico_id').eq('movimento_id', movimentoId);
+    const ids = new Set((data || []).map((r) => r.servico_id));
+    return servicos.filter((s) => ids.has(s.id));
+  }
+
+  function calcularResultadoSaida(mov, convenioCodigo, servicosTipos) {
     if (MENSALISTA.has(mov.tipo_mens)) {
       // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
       return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, mensalista: true, tempoDecorrido: 0 };
@@ -279,23 +308,26 @@ export default function Patio({ perfil }) {
     const convenio = convenioCodigo ? mapConvenio(convenios[convenioCodigo]) : undefined;
     return calcularTarifa({
       tabelas, tipoVeic: mov.tipo_veic, convenio,
+      servicosTipos: servicosTipos && servicosTipos.length ? servicosTipos : undefined,
       movimento: { dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() },
     });
   }
 
-  function prepararSaida(mov) {
+  async function prepararSaida(mov) {
     try {
+      const servicosSelecionados = await buscarServicosDoMovimento(mov.id);
+      const servicosTipos = servicosSelecionados.map((s) => s.tabela_tipo);
       const convenioCodigo = mov.convenio_codigo || '';
-      const resultado = calcularResultadoSaida(mov, convenioCodigo);
+      const resultado = calcularResultadoSaida(mov, convenioCodigo, servicosTipos);
       const formaPadrao = formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
-      setSaindo({ mov, convenioCodigo, resultado, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
+      setSaindo({ mov, convenioCodigo, servicosTipos, servicosSelecionados, resultado, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
     } catch (e) { setErro(e.message); }
   }
 
   function mudarConvenioSaida(codigo) {
     if (!saindo) return;
     try {
-      const resultado = calcularResultadoSaida(saindo.mov, codigo);
+      const resultado = calcularResultadoSaida(saindo.mov, codigo, saindo.servicosTipos);
       const formaAtual = saindo.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
       setSaindo({ ...saindo, convenioCodigo: codigo, resultado, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
     } catch (e) { setErro(e.message); }
@@ -327,6 +359,7 @@ export default function Patio({ perfil }) {
 
     const formaTexto = resultado.mensalista ? 'Mensalista/hóspede'
       : (pagos.map((p) => formas.find((f) => f.codigo === p.forma)?.descricao || p.forma).join(' + ') || '—');
+    const { servicosSelecionados } = saindo;
     setTicket({
       titulo: 'Ticket de saída',
       linhas: [
@@ -334,6 +367,7 @@ export default function Patio({ perfil }) {
         ['Carro', mov.modelo || '—'],
         ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
         ['Tempo', resultado.mensalista ? '—' : fmtHora(resultado.tempoDecorrido)],
+        ...(servicosSelecionados?.length ? [['Serviços', servicosSelecionados.map((s) => s.descricao).join(', ')]] : []),
         ...(convenioCodigo && resultado.valorConvenio > 0
           ? [['Convênio', convenioCodigo], ['Valor convênio', `-${fmtBRL(resultado.valorConvenio)}`]]
           : []),
@@ -354,12 +388,14 @@ export default function Patio({ perfil }) {
       ? pagtos.map((p) => formas.find((f) => f.codigo === p.forma_pagamento)?.descricao || p.forma_pagamento).join(' + ')
       : (MENSALISTA.has(mov.tipo_mens) ? 'Mensalista/hóspede' : '—');
     const valorConvenio = Number(mov.valor_convenio || 0);
+    const servicosDoMov = await buscarServicosDoMovimento(mov.id);
     setTicket({
       titulo: 'Ticket de saída (reimpressão)',
       linhas: [
         ['Placa', mov.placa],
         ['Carro', mov.modelo || '—'],
         ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
+        ...(servicosDoMov.length ? [['Serviços', servicosDoMov.map((s) => s.descricao).join(', ')]] : []),
         ...(mov.convenio_codigo && valorConvenio > 0
           ? [['Convênio', mov.convenio_codigo], ['Valor convênio', `-${fmtBRL(valorConvenio)}`]]
           : []),
@@ -466,7 +502,10 @@ export default function Patio({ perfil }) {
                   <td>{m.tipo_veic}</td>
                   <td>{rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}</td>
                   <td className="mono">{m.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(m.hr_entrada))}</td>
-                  <td style={{ textAlign: 'right' }}><button className="btn-primary" onClick={() => prepararSaida(m)}>Saída</button></td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="btn-ghost" onClick={() => abrirServicosModal(m)}>Serviço</button>
+                    <button className="btn-primary" onClick={() => prepararSaida(m)}>Saída</button>
+                  </td>
                 </tr>
               ))}
               {patio.length === 0 && <tr><td colSpan={6} className="suave">Pátio vazio.</td></tr>}
@@ -495,6 +534,29 @@ export default function Patio({ perfil }) {
           </table>
         </div>
       </div>
+
+      {modalServicos && (
+        <div className="modal-bg" onClick={() => setModalServicos(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Serviços — <span className="placa mono">{modalServicos.mov.placa}</span></h2>
+            <p className="suave">
+              Marque os serviços feitos neste veículo. Na saída, se houver algum marcado, o valor
+              cobrado vira a soma das tabelas desses serviços, em vez da tabela do veículo.
+            </p>
+            {servicos.length === 0 && <p className="suave">Nenhum serviço cadastrado — cadastre em Cadastros → Serviços.</p>}
+            {servicos.map((s) => (
+              <label className="campo-check" key={s.id} style={{ marginBottom: 8 }}>
+                <input type="checkbox" checked={modalServicos.marcados.has(s.id)}
+                  onChange={() => alternarServico(s.id)} />
+                {s.codigo} · {s.descricao}
+              </label>
+            ))}
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-primary" onClick={() => setModalServicos(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmPlaca && (
         <div className="modal-bg" onClick={corrigirPlaca}>
@@ -568,6 +630,12 @@ export default function Patio({ perfil }) {
               <p className="mono suave">
                 Tempo: {fmtHora(saindo.resultado.tempoDecorrido)}
                 {saindo.resultado.valorConvenio > 0 && ` · conv. -${fmtBRL(saindo.resultado.valorConvenio)}`}
+              </p>
+            )}
+            {saindo.servicosSelecionados?.length > 0 && (
+              <p className="suave">
+                Cobrando por serviço: {saindo.servicosSelecionados.map((s) => s.descricao).join(', ')}
+                {' '}(em vez da tabela do veículo)
               </p>
             )}
             <div className="grande">{fmtBRL(saindo.resultado.valor)}</div>
