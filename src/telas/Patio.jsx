@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais } from '../lib/dados.js';
-import { agoraHHMM, hojeISO, dataDeISO, fmtHora, fmtBRL } from '../lib/tempo.js';
+import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, fmtHora, fmtBRL } from '../lib/tempo.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
+const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -70,6 +71,14 @@ export default function Patio({ perfil }) {
   const [servicos, setServicos] = useState([]);
   const [modalServicos, setModalServicos] = useState(null); // { mov, marcados: Set<servico_id> }
   const [movimentosComServico, setMovimentosComServico] = useState(new Set());
+  const [modalExclusao, setModalExclusao] = useState(null); // { mov, motivo }
+  const [agora, setAgora] = useState(() => Date.now());
+
+  // Tique periódico só pra reavaliar a janela de 5min do botão Excluir (operador).
+  useEffect(() => {
+    const id = setInterval(() => setAgora(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, []);
 
   const sugestoes = useMemo(() => {
     const alvo = normalizar(buscaModelo);
@@ -148,7 +157,7 @@ export default function Patio({ perfil }) {
     let ocupadas = 0;
     if (outrasPlacas.length) {
       const { count } = await supabase.from('movimentos')
-        .select('id', { count: 'exact', head: true }).in('placa', outrasPlacas).is('dt_saida', null);
+        .select('id', { count: 'exact', head: true }).in('placa', outrasPlacas).is('dt_saida', null).is('excluido_em', null);
       ocupadas = count || 0;
     }
     if (ocupadas >= (m.qte_vagas || 1)) {
@@ -311,6 +320,47 @@ export default function Patio({ perfil }) {
     const { data } = await supabase.from('movimento_servicos').select('servico_id').eq('movimento_id', movimentoId);
     const ids = new Set((data || []).map((r) => r.servico_id));
     return servicos.filter((s) => ids.has(s.id));
+  }
+
+  // Operador só exclui nos primeiros 5min da entrada; supervisor sem limite.
+  function podeExcluir(mov) {
+    if (perfil.papel === 'supervisor') return true;
+    const minutos = (agora - dataHoraDe(mov.dt_entrada, Number(mov.hr_entrada)).getTime()) / 60000;
+    return minutos <= EXCLUSAO_JANELA_MIN;
+  }
+
+  function abrirExclusao(mov) {
+    setModalExclusao({ mov, motivo: '' });
+  }
+
+  async function confirmarExclusao() {
+    if (!modalExclusao) return;
+    const { mov, motivo } = modalExclusao;
+    if (!motivo.trim()) { setErro('Informe o motivo da exclusão.'); return; }
+    if (!podeExcluir(mov)) {
+      setErro(`Prazo de ${EXCLUSAO_JANELA_MIN} minutos para excluir expirou — peça a um supervisor.`);
+      setModalExclusao(null);
+      return;
+    }
+    const agoraDt = new Date();
+    const { error } = await supabase.from('movimentos').update({
+      excluido_em: agoraDt.toISOString(), excluido_motivo: motivo.trim(), excluido_por: perfil.id,
+    }).eq('id', mov.id);
+    if (error) { setErro(error.message); return; }
+    const dataExclusao = `${String(agoraDt.getDate()).padStart(2, '0')}/${String(agoraDt.getMonth() + 1).padStart(2, '0')}/${agoraDt.getFullYear()}`;
+    const horaExclusao = `${String(agoraDt.getHours()).padStart(2, '0')}:${String(agoraDt.getMinutes()).padStart(2, '0')}`;
+    imprimirTicket({
+      titulo: 'Exclusão de veículo',
+      linhas: [
+        ['Placa', mov.placa],
+        ['Modelo', mov.modelo || '—'],
+        ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
+        ['Exclusão', `${dataExclusao} ${horaExclusao}`],
+        ['Motivo', motivo.trim()],
+      ],
+    }, filial);
+    setModalExclusao(null);
+    recarregar();
   }
 
   function calcularResultadoSaida(mov, convenioCodigo, servicosTipos) {
@@ -520,6 +570,9 @@ export default function Patio({ perfil }) {
                       className={movimentosComServico.has(m.id) ? 'btn-servico-ativo' : 'btn-ghost'}
                       onClick={() => abrirServicosModal(m)}
                     >Serviço</button>
+                    {podeExcluir(m) && (
+                      <button className="btn-ghost aviso-btn" onClick={() => abrirExclusao(m)}>Excluir</button>
+                    )}
                     <button className="btn-primary" onClick={() => prepararSaida(m)}>Saída</button>
                   </td>
                 </tr>
@@ -569,6 +622,27 @@ export default function Patio({ perfil }) {
             ))}
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-primary" onClick={() => setModalServicos(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalExclusao && (
+        <div className="modal-bg" onClick={() => setModalExclusao(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Excluir veículo — <span className="placa mono">{modalExclusao.mov.placa}</span></h2>
+            <p className="suave">
+              Cancela a entrada deste veículo (some do pátio, sem cobrança). Fica registrado
+              para auditoria com data/hora e o motivo abaixo, e imprime um comprovante.
+            </p>
+            <div className="campo">
+              <label>Motivo da exclusão</label>
+              <textarea rows={3} style={{ width: '100%' }} value={modalExclusao.motivo}
+                onChange={(e) => setModalExclusao({ ...modalExclusao, motivo: e.target.value })} />
+            </div>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setModalExclusao(null)}>Cancelar</button>
+              <button className="btn-primary" onClick={confirmarExclusao}>Confirmar exclusão</button>
             </div>
           </div>
         </div>

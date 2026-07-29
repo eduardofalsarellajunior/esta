@@ -20,6 +20,15 @@ export function dataDeISO(iso) {
   return new Date(y, m - 1, d);
 }
 
+/** Combina data ISO + hora comercial HH.MM num Date real (tempo de parede, não "hora comercial"). */
+export function dataHoraDe(dtISO, hhmm) {
+  const d = dataDeISO(dtISO);
+  const h = Math.trunc(hhmm);
+  const m = Math.round((hhmm - h) * 100);
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
 /** Formata HH.MM como 'HH:MM' para exibição. */
 export function fmtHora(v) {
   const h = Math.trunc(v);

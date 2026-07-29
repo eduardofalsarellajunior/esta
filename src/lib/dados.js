@@ -43,6 +43,7 @@ export async function carregarPatio() {
     .from('movimentos')
     .select('*')
     .is('dt_saida', null)
+    .is('excluido_em', null)
     .order('dt_entrada', { ascending: true })
     .order('hr_entrada', { ascending: true });
   if (error) throw error;
