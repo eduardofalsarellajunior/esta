@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais } from '../lib/dados.js';
-import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, fmtHora, fmtBRL } from '../lib/tempo.js';
+import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL } from '../lib/tempo.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
 
@@ -91,12 +91,16 @@ export default function Patio({ perfil }) {
 
   async function recarregar() {
     try {
+      const hoje = hojeISO();
+      const { inicio: inicioHoje, fim: fimHoje } = limitesDiaLocal(hoje, hoje);
       const [t, p, cv, fp, md, tm, sr, fl, sv] = await Promise.all([
         carregarTabelasPreco(), carregarPatio(),
         supabase.from('convenios').select('*'),
         supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo'),
         carregarModelosVeiculo(), carregarTabelasManuais(),
-        supabase.from('movimentos').select('*').eq('dt_saida', hojeISO()).order('hr_saida', { ascending: false }).limit(50),
+        // Saídas normais de hoje + veículos excluídos (cancelados) hoje — ordenado/limitado depois em JS.
+        supabase.from('movimentos').select('*')
+          .or(`dt_saida.eq.${hoje},and(excluido_em.gte.${inicioHoje},excluido_em.lt.${fimHoje})`),
         supabase.from('filiais').select('nome_fantasia, endereco, cnpj').eq('id', perfil.filial_id).maybeSingle(),
         supabase.from('servicos').select('*').eq('ativo', true).order('codigo'),
       ]);
@@ -104,7 +108,11 @@ export default function Patio({ perfil }) {
       setConvenios(Object.fromEntries((cv.data || []).map((c) => [c.codigo, c])));
       setFormas(fp.data || []);
       setModelos(md); setTabelasManuais(tm);
-      setSaidasRecentes(sr.data || []);
+      const listaSaidas = (sr.data || [])
+        .map((m) => ({ ...m, _quando: m.excluido_em ? new Date(m.excluido_em).getTime() : dataHoraDe(m.dt_saida, Number(m.hr_saida)).getTime() }))
+        .sort((a, b) => b._quando - a._quando)
+        .slice(0, 50);
+      setSaidasRecentes(listaSaidas);
       setFilial(fl.data || null);
       setServicos(sv.data || []);
       const idsPatio = p.map((m) => m.id);
@@ -349,7 +357,7 @@ export default function Patio({ perfil }) {
     if (error) { setErro(error.message); return; }
     const dataExclusao = `${String(agoraDt.getDate()).padStart(2, '0')}/${String(agoraDt.getMonth() + 1).padStart(2, '0')}/${agoraDt.getFullYear()}`;
     const horaExclusao = `${String(agoraDt.getHours()).padStart(2, '0')}:${String(agoraDt.getMinutes()).padStart(2, '0')}`;
-    imprimirTicket({
+    setTicket({
       titulo: 'Exclusão de veículo',
       linhas: [
         ['Placa', mov.placa],
@@ -358,9 +366,27 @@ export default function Patio({ perfil }) {
         ['Exclusão', `${dataExclusao} ${horaExclusao}`],
         ['Motivo', motivo.trim()],
       ],
-    }, filial);
+    });
+    setCelularTicket('');
     setModalExclusao(null);
     recarregar();
+  }
+
+  function reimprimirExclusao(mov) {
+    const dt = new Date(mov.excluido_em);
+    const dataExclusao = `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`;
+    const horaExclusao = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+    setTicket({
+      titulo: 'Exclusão de veículo (reimpressão)',
+      linhas: [
+        ['Placa', mov.placa],
+        ['Modelo', mov.modelo || '—'],
+        ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
+        ['Exclusão', `${dataExclusao} ${horaExclusao}`],
+        ['Motivo', mov.excluido_motivo || '—'],
+      ],
+    });
+    setCelularTicket('');
   }
 
   function calcularResultadoSaida(mov, convenioCodigo, servicosTipos) {
@@ -593,9 +619,15 @@ export default function Patio({ perfil }) {
                 <tr key={m.id}>
                   <td><span className="placa mono">{m.placa}</span></td>
                   <td>{m.modelo || '—'}</td>
-                  <td className="mono">{fmtHora(Number(m.hr_saida))}</td>
-                  <td>{fmtBRL(Number(m.valor || 0))}</td>
-                  <td style={{ textAlign: 'right' }}><button className="btn-ghost" onClick={() => reimprimirSaida(m)}>Reimprimir</button></td>
+                  <td className="mono">
+                    {m.excluido_em
+                      ? new Date(m.excluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                      : fmtHora(Number(m.hr_saida))}
+                  </td>
+                  <td>{m.excluido_em ? <span className="status status-cancelada">Cancelado</span> : fmtBRL(Number(m.valor || 0))}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn-ghost" onClick={() => (m.excluido_em ? reimprimirExclusao(m) : reimprimirSaida(m))}>Reimprimir</button>
+                  </td>
                 </tr>
               ))}
               {saidasRecentes.length === 0 && <tr><td colSpan={5} className="suave">Nenhuma saída hoje.</td></tr>}

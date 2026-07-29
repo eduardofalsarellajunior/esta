@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { hojeISO, dataDeISO, fmtBRL, fmtHora } from '../lib/tempo.js';
+import { hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtBRL, fmtHora } from '../lib/tempo.js';
 import { horas, minuto, minutosParaHHMM } from '../../packages/tarifacao/tarifacao.ts';
 
 function escapeHtml(s) {
@@ -27,21 +27,24 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
   const porForma = Object.entries(dados.porForma)
     .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${escapeHtml(fmtBRL(v))}</td></tr>`).join('');
+  const porTipoCancelado = Object.entries(dados.porTipoCancelado)
+    .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
 
   const veiculosHtml = veiculosDetalhe != null ? `
       <h2>Veículos (${veiculosDetalhe.length})</h2>
       <table><thead><tr>
-        <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th><th>Tempo</th><th>Pagto</th><th>Valor</th>
+        <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th><th>Tempo</th><th>Pagto</th><th>Valor</th><th>Status</th>
       </tr></thead><tbody>${veiculosDetalhe.map((v) => `<tr>
         <td>${escapeHtml(v.placa)}</td>
         <td>${escapeHtml(v.modelo || '—')}</td>
         <td>${escapeHtml(v.tipo_veic)}</td>
         <td>${escapeHtml(v.dt_entrada.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_entrada)))}</td>
-        <td>${escapeHtml(v.dt_saida.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_saida)))}</td>
+        <td>${v.cancelado ? '—' : `${escapeHtml(v.dt_saida.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_saida)))}`}</td>
         <td>${v.tempo != null ? escapeHtml(fmtHora(v.tempo)) : '—'}</td>
         <td>${escapeHtml(v.pagamento)}</td>
-        <td>${escapeHtml(fmtBRL(v.valor))}</td>
-      </tr>`).join('') || '<tr><td colspan="8">Nenhum veículo no período.</td></tr>'}</tbody></table>` : '';
+        <td>${v.cancelado ? '—' : escapeHtml(fmtBRL(v.valor))}</td>
+        <td>${v.cancelado ? '<strong>Cancelado</strong>' : ''}</td>
+      </tr>`).join('') || '<tr><td colspan="9">Nenhum veículo no período.</td></tr>'}</tbody></table>` : '';
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório BI</title>
     <style>
@@ -62,6 +65,8 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
       ${kpis}
       <h2>Por tipo</h2>
       <table><tbody>${porTipo || '<tr><td>—</td></tr>'}</tbody></table>
+      <h2>Cancelados por tipo</h2>
+      <table><tbody>${porTipoCancelado || '<tr><td>Nenhum cancelamento no período.</td></tr>'}</tbody></table>
       <h2>Por forma de pagamento</h2>
       <table><tbody>${porForma || '<tr><td>Sem pagamentos no período.</td></tr>'}</tbody></table>
       ${veiculosHtml}
@@ -92,6 +97,11 @@ function textoRelatorio(dados, de, ate, filial) {
   linhas.push('');
   linhas.push('Por tipo:');
   for (const [k, v] of Object.entries(dados.porTipo)) linhas.push(`  ${rotuloTipo(k)}: ${v}`);
+  linhas.push('');
+  linhas.push('Cancelados por tipo:');
+  const cancelados = Object.entries(dados.porTipoCancelado);
+  if (cancelados.length) for (const [k, v] of cancelados) linhas.push(`  ${rotuloTipo(k)}: ${v}`);
+  else linhas.push('  Nenhum cancelamento no período.');
   linhas.push('');
   linhas.push('Por forma de pagamento:');
   const formas = Object.entries(dados.porForma);
@@ -130,6 +140,10 @@ export default function BI({ perfil }) {
     const { data: movs, error } = await supabase.from('movimentos').select('*')
       .gte('dt_saida', de).lte('dt_saida', ate).not('dt_saida', 'is', null);
     if (error) { setErro(error.message); return; }
+    const { inicio, fim } = limitesDiaLocal(de, ate);
+    const { data: cancelados, error: errCanc } = await supabase.from('movimentos').select('*')
+      .gte('excluido_em', inicio).lt('excluido_em', fim);
+    if (errCanc) { setErro(errCanc.message); return; }
     const ids = movs.map((m) => m.id);
     let pagtos = [];
     if (ids.length) {
@@ -161,12 +175,16 @@ export default function BI({ perfil }) {
       porForma[k] = (porForma[k] || 0) + Number(p.valor || 0);
       (pagtosPorMov[p.movimento_id] ||= []).push(k);
     }
+    const porTipoCancelado = {};
+    for (const m of cancelados || []) {
+      porTipoCancelado[m.tipo_mens] = (porTipoCancelado[m.tipo_mens] || 0) + 1;
+    }
     setDados({
       totalVeic: movs.length, faturamento, tabelaCheia, descontos: tabelaCheia - faturamento,
-      porTipo, porForma, tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
+      porTipo, porForma, porTipoCancelado, tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
     });
 
-    const detalhe = movs.map((m) => ({
+    const detalheNormal = movs.map((m) => ({
       id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: m.tipo_veic,
       dt_entrada: m.dt_entrada, hr_entrada: m.hr_entrada, dt_saida: m.dt_saida, hr_saida: m.hr_saida,
       valor: Number(m.valor || 0),
@@ -175,7 +193,17 @@ export default function BI({ perfil }) {
         dtSaida: dataDeISO(m.dt_saida), saida: Number(m.hr_saida),
       }) : null,
       pagamento: pagtosPorMov[m.id]?.join(' + ') || (MENSALISTA.has(m.tipo_mens) ? 'Mensalista/hóspede' : '—'),
-    })).sort((a, b) => (a.dt_saida !== b.dt_saida ? b.dt_saida.localeCompare(a.dt_saida) : Number(b.hr_saida) - Number(a.hr_saida)));
+      cancelado: false,
+      _quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)).getTime(),
+    }));
+    const detalheCancelados = (cancelados || []).map((m) => ({
+      id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: m.tipo_veic,
+      dt_entrada: m.dt_entrada, hr_entrada: m.hr_entrada, dt_saida: null, hr_saida: null,
+      valor: 0, tempo: null, pagamento: '—',
+      cancelado: true,
+      _quando: new Date(m.excluido_em).getTime(),
+    }));
+    const detalhe = [...detalheNormal, ...detalheCancelados].sort((a, b) => b._quando - a._quando);
     setVeiculos(detalhe);
   }, [de, ate]);
 
@@ -226,6 +254,16 @@ export default function BI({ perfil }) {
           </div>
 
           <div className="card">
+            <h2>Cancelados por tipo</h2>
+            <table><tbody>
+              {Object.entries(dados.porTipoCancelado).map(([k, v]) => (
+                <tr key={k}><td>{rotuloTipo(k)}</td><td style={{ textAlign: 'right' }}>{v}</td></tr>
+              ))}
+              {Object.keys(dados.porTipoCancelado).length === 0 && <tr><td className="suave">Nenhum cancelamento no período.</td></tr>}
+            </tbody></table>
+          </div>
+
+          <div className="card">
             <h2>Por forma de pagamento</h2>
             <table><tbody>
               {Object.entries(dados.porForma).map(([k, v]) => (
@@ -242,7 +280,7 @@ export default function BI({ perfil }) {
                 <table>
                   <thead><tr>
                     <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th>
-                    <th>Tempo</th><th>Pagamento</th><th>Valor</th>
+                    <th>Tempo</th><th>Pagamento</th><th>Valor</th><th>Status</th>
                   </tr></thead>
                   <tbody>
                     {veiculos.map((v) => (
@@ -251,13 +289,14 @@ export default function BI({ perfil }) {
                         <td>{v.modelo || '—'}</td>
                         <td className="mono">{v.tipo_veic}</td>
                         <td className="mono">{v.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(v.hr_entrada))}</td>
-                        <td className="mono">{v.dt_saida.split('-').reverse().join('/')} {fmtHora(Number(v.hr_saida))}</td>
+                        <td className="mono">{v.cancelado ? '—' : `${v.dt_saida.split('-').reverse().join('/')} ${fmtHora(Number(v.hr_saida))}`}</td>
                         <td className="mono">{v.tempo != null ? fmtHora(v.tempo) : '—'}</td>
                         <td>{v.pagamento}</td>
-                        <td>{fmtBRL(v.valor)}</td>
+                        <td>{v.cancelado ? '—' : fmtBRL(v.valor)}</td>
+                        <td>{v.cancelado && <span className="status status-cancelada">Cancelado</span>}</td>
                       </tr>
                     ))}
-                    {veiculos.length === 0 && <tr><td colSpan={8} className="suave">Nenhum veículo no período.</td></tr>}
+                    {veiculos.length === 0 && <tr><td colSpan={9} className="suave">Nenhum veículo no período.</td></tr>}
                   </tbody>
                 </table>
               </div>

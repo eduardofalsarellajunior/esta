@@ -29,6 +29,14 @@ export function dataHoraDe(dtISO, hhmm) {
   return d;
 }
 
+/** Limites [início, fim) em ISO/UTC de um intervalo de dias locais 'YYYY-MM-DD' — pra comparar com timestamptz (ex.: movimentos.excluido_em). */
+export function limitesDiaLocal(deISO, ateISO) {
+  const inicio = dataDeISO(deISO);
+  const fim = dataDeISO(ateISO);
+  fim.setDate(fim.getDate() + 1);
+  return { inicio: inicio.toISOString(), fim: fim.toISOString() };
+}
+
 /** Formata HH.MM como 'HH:MM' para exibição. */
 export function fmtHora(v) {
   const h = Math.trunc(v);
