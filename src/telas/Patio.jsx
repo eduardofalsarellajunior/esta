@@ -566,13 +566,13 @@ export default function Patio({ perfil }) {
                   <td>{rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}</td>
                   <td className="mono">{m.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(m.hr_entrada))}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {podeExcluir(m) && (
+                      <button className="btn-ghost aviso-btn" onClick={() => abrirExclusao(m)}>Excluir</button>
+                    )}
                     <button
                       className={movimentosComServico.has(m.id) ? 'btn-servico-ativo' : 'btn-ghost'}
                       onClick={() => abrirServicosModal(m)}
                     >Serviço</button>
-                    {podeExcluir(m) && (
-                      <button className="btn-ghost aviso-btn" onClick={() => abrirExclusao(m)}>Excluir</button>
-                    )}
                     <button className="btn-primary" onClick={() => prepararSaida(m)}>Saída</button>
                   </td>
                 </tr>
