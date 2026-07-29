@@ -17,11 +17,6 @@ const GRUPOS = [
     { to: '/modelos', rotulo: 'Modelos' },
     { to: '/servicos', rotulo: 'Serviços' },
   ]},
-  { titulo: 'Financeiro', itens: [
-    { to: '/receber', rotulo: 'Contas a receber' },
-    { to: '/pagar', rotulo: 'Contas a pagar' },
-    { to: '/banco', rotulo: 'Banco / caixa' },
-  ]},
   { titulo: 'Fiscal', itens: [
     { to: '/fiscal', rotulo: 'NFS-e / RPS' },
   ]},
