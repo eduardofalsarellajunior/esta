@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
+import { ROTAS_OPERADOR } from '../lib/acesso.js';
 
 const GRUPOS = [
   { titulo: 'Operação', itens: [
@@ -32,11 +33,22 @@ const GRUPOS = [
 
 export default function Layout({ perfil }) {
   const [menuAberto, setMenuAberto] = useState(false);
+  const location = useLocation();
+  const supervisor = perfil.papel === 'supervisor';
+
+  if (!supervisor && !ROTAS_OPERADOR.includes(location.pathname)) {
+    return <Navigate to="/" replace />;
+  }
+
+  const grupos = supervisor ? GRUPOS : GRUPOS
+    .map((g) => ({ ...g, itens: g.itens.filter((i) => ROTAS_OPERADOR.includes(i.to)) }))
+    .filter((g) => g.itens.length > 0);
+
   return (
     <div className="app">
       <aside className={'lateral' + (menuAberto ? ' aberto' : '')}>
         <div className="marca">esta <span className="ambar">·PDV</span></div>
-        {GRUPOS.map((g) => (
+        {grupos.map((g) => (
           <div key={g.titulo} className="nav-grupo">
             <div className="nav-titulo">{g.titulo}</div>
             {g.itens.map((i) => (
