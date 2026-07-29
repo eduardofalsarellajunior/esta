@@ -59,6 +59,8 @@ button { cursor: pointer; }
 .btn-primary:hover { background: var(--ambar-esc); }
 .btn-ghost { background: transparent; }
 .btn-ghost:hover { background: var(--panel2); }
+.btn-servico-ativo { color: var(--ok); border-color: var(--ok); background: rgba(61,220,132,.1); font-weight: 700; }
+.btn-servico-ativo:hover { background: rgba(61,220,132,.18); }
 .aviso-btn { color: var(--erro); }
 a.btn-primary, a.btn-ghost { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 

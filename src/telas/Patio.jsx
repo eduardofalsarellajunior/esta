@@ -69,6 +69,7 @@ export default function Patio({ perfil }) {
   const [saidasRecentes, setSaidasRecentes] = useState([]);
   const [servicos, setServicos] = useState([]);
   const [modalServicos, setModalServicos] = useState(null); // { mov, marcados: Set<servico_id> }
+  const [movimentosComServico, setMovimentosComServico] = useState(new Set());
 
   const sugestoes = useMemo(() => {
     const alvo = normalizar(buscaModelo);
@@ -97,6 +98,13 @@ export default function Patio({ perfil }) {
       setSaidasRecentes(sr.data || []);
       setFilial(fl.data || null);
       setServicos(sv.data || []);
+      const idsPatio = p.map((m) => m.id);
+      if (idsPatio.length > 0) {
+        const { data: ms } = await supabase.from('movimento_servicos').select('movimento_id').in('movimento_id', idsPatio);
+        setMovimentosComServico(new Set((ms || []).map((r) => r.movimento_id)));
+      } else {
+        setMovimentosComServico(new Set());
+      }
     } catch (e) { setErro(e.message); }
   }
   useEffect(() => { recarregar(); /* eslint-disable-next-line */ }, []);
@@ -292,6 +300,11 @@ export default function Patio({ perfil }) {
     const novosMarcados = new Set(marcados);
     if (jaMarcado) novosMarcados.delete(servicoId); else novosMarcados.add(servicoId);
     setModalServicos({ mov, marcados: novosMarcados });
+    setMovimentosComServico((prev) => {
+      const proximo = new Set(prev);
+      if (novosMarcados.size > 0) proximo.add(mov.id); else proximo.delete(mov.id);
+      return proximo;
+    });
   }
 
   async function buscarServicosDoMovimento(movimentoId) {
@@ -503,7 +516,10 @@ export default function Patio({ perfil }) {
                   <td>{rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}</td>
                   <td className="mono">{m.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(m.hr_entrada))}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button className="btn-ghost" onClick={() => abrirServicosModal(m)}>Serviço</button>
+                    <button
+                      className={movimentosComServico.has(m.id) ? 'btn-servico-ativo' : 'btn-ghost'}
+                      onClick={() => abrirServicosModal(m)}
+                    >Serviço</button>
                     <button className="btn-primary" onClick={() => prepararSaida(m)}>Saída</button>
                   </td>
                 </tr>
