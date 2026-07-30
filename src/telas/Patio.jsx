@@ -4,44 +4,10 @@ import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTa
 import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL } from '../lib/tempo.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
+import { TicketModal } from '../componentes/Ticket.jsx';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
 const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-// Impressão numa janela dedicada (não no modal): evita a duplicação de página que
-// ocorre ao imprimir conteúdo dentro de um overlay position:fixed.
-function imprimirTicket(ticket, filial) {
-  const cabecalho = filial && (filial.nome_fantasia || filial.endereco || filial.cnpj) ? `
-    ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
-    ${filial.endereco ? `<div class="linha-end">${escapeHtml(filial.endereco)}</div>` : ''}
-    ${filial.cnpj ? `<div class="linha-end">CNPJ: ${escapeHtml(filial.cnpj)}</div>` : ''}
-    <hr>` : '';
-  const corpo = ticket.linhas.map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(ticket.titulo)}</title>
-    <style>
-      body { font-family: system-ui, Arial, sans-serif; color: #000; padding: 16px; max-width: 320px; }
-      .nome { font-size: 16px; font-weight: 800; margin-bottom: 2px; }
-      .linha-end { font-size: 11px; color: #333; margin-bottom: 2px; }
-      hr { border: none; border-top: 1px dashed #999; margin: 10px 0; }
-      h2 { font-size: 14px; margin: 0 0 8px; }
-      p { font-size: 13px; margin: 4px 0; }
-    </style></head><body>
-      ${cabecalho}
-      <h2>${escapeHtml(ticket.titulo)}</h2>
-      ${corpo}
-    </body></html>`;
-  const win = window.open('', '_blank', 'width=380,height=600');
-  if (!win) { window.alert('Permita pop-ups para imprimir o ticket.'); return; }
-  win.document.write(html);
-  win.document.close();
-  win.onafterprint = () => win.close();
-  win.focus();
-  win.print();
-}
 
 export default function Patio({ perfil }) {
   const [tabelas, setTabelas] = useState({});
@@ -710,25 +676,8 @@ export default function Patio({ perfil }) {
       )}
 
       {ticket && (
-        <div className="modal-bg" onClick={() => setTicket(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="ticket-impressao">
-              <h2>{ticket.titulo}</h2>
-              {ticket.linhas.map(([rotulo, valor]) => (
-                <p className="mono" key={rotulo}>{rotulo}: <strong>{valor}</strong></p>
-              ))}
-            </div>
-            <div className="campo" style={{ marginTop: 10 }}>
-              <label>Celular para WhatsApp (opcional)</label>
-              <input value={celularTicket} onChange={(e) => setCelularTicket(e.target.value)} placeholder="(19) 99999-9999" />
-            </div>
-            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-              <button className="btn-ghost" onClick={() => setTicket(null)}>Fechar</button>
-              <a className="btn-ghost" href={linkWhatsApp(ticket, celularTicket, filial)} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
-              <button className="btn-primary" onClick={() => imprimirTicket(ticket, filial)}>Imprimir</button>
-            </div>
-          </div>
-        </div>
+        <TicketModal ticket={ticket} filial={filial} celular={celularTicket}
+          onCelular={setCelularTicket} onFechar={() => setTicket(null)} />
       )}
 
       {saindo && (
@@ -802,16 +751,6 @@ export default function Patio({ perfil }) {
   function removePagto(i) {
     setSaindo((s) => ({ ...s, pagamentos: s.pagamentos.filter((_, j) => j !== i) }));
   }
-}
-
-function linkWhatsApp(ticket, celular, filial) {
-  const cabecalho = filial && (filial.nome_fantasia || filial.endereco || filial.cnpj)
-    ? [filial.nome_fantasia, filial.endereco, filial.cnpj ? `CNPJ: ${filial.cnpj}` : null].filter(Boolean).join('\n') + '\n\n'
-    : '';
-  const texto = cabecalho + [ticket.titulo, ...ticket.linhas.map(([r, v]) => `${r}: ${v}`)].join('\n');
-  const digitos = (celular || '').replace(/\D/g, '');
-  const numero = digitos ? (digitos.startsWith('55') ? digitos : `55${digitos}`) : '';
-  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 }
 
 function rotuloTipo(t) {

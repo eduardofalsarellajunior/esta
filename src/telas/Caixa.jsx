@@ -18,22 +18,30 @@ export default function Caixa({ perfil }) {
     setCaixa(c);
     if (!c) { setResumo(null); return; }
 
-    const [{ data: movs }, { data: sangrias }, { data: formas }] = await Promise.all([
+    const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }] = await Promise.all([
       supabase.from('movimentos').select('id,valor').eq('caixa_id', c.id).not('dt_saida', 'is', null),
       supabase.from('sangrias').select('valor').eq('caixa_id', c.id),
       supabase.from('formas_pagamento').select('codigo,eh_dinheiro'),
+      // Mensalidades recebidas neste turno (Mensalistas → Receber).
+      supabase.from('mensalista_pagamentos').select('valor_pago,forma_pagamento').eq('caixa_id', c.id),
     ]);
     const dinheiroCods = new Set((formas || []).filter((f) => f.eh_dinheiro).map((f) => f.codigo));
-    let dinheiro = 0, total = 0;
+    let dinheiroSaidas = 0, total = 0;
     const ids = (movs || []).map((m) => m.id);
     total = (movs || []).reduce((s, m) => s + Number(m.valor || 0), 0);
     if (ids.length) {
       const { data: pg } = await supabase.from('movimento_pagamentos').select('*').in('movimento_id', ids);
-      dinheiro = (pg || []).filter((p) => dinheiroCods.has(p.forma_pagamento)).reduce((s, p) => s + Number(p.valor || 0), 0);
+      dinheiroSaidas = (pg || []).filter((p) => dinheiroCods.has(p.forma_pagamento)).reduce((s, p) => s + Number(p.valor || 0), 0);
     }
+    const mensalidades = (mensPagtos || []).reduce((s, p) => s + Number(p.valor_pago || 0), 0);
+    const dinheiroMensalidades = (mensPagtos || [])
+      .filter((p) => dinheiroCods.has(p.forma_pagamento))
+      .reduce((s, p) => s + Number(p.valor_pago || 0), 0);
+    const dinheiro = dinheiroSaidas + dinheiroMensalidades;
     const totalSangria = (sangrias || []).reduce((s, x) => s + Number(x.valor || 0), 0);
     setResumo({
       qtd: (movs || []).length, total, dinheiro, sangrias: totalSangria,
+      qtdMensalidades: (mensPagtos || []).length, mensalidades,
       esperadoCaixa: Number(c.valor_abertura) + dinheiro - totalSangria,
     });
   }, [perfil.id]);
@@ -87,12 +95,17 @@ export default function Caixa({ perfil }) {
         {resumo && (
           <div className="kpis">
             <Kpi rotulo="Saídas no turno" valor={resumo.qtd} />
-            <Kpi rotulo="Faturado" valor={fmtBRL(resumo.total)} />
+            <Kpi rotulo="Faturado (saídas)" valor={fmtBRL(resumo.total)} />
+            <Kpi rotulo={`Mensalidades (${resumo.qtdMensalidades})`} valor={fmtBRL(resumo.mensalidades)} />
+            <Kpi rotulo="Total do turno" valor={fmtBRL(resumo.total + resumo.mensalidades)} />
             <Kpi rotulo="Em dinheiro" valor={fmtBRL(resumo.dinheiro)} />
             <Kpi rotulo="Sangrias" valor={fmtBRL(resumo.sangrias)} />
             <Kpi rotulo="Esperado no caixa" valor={fmtBRL(resumo.esperadoCaixa)} destaque />
           </div>
         )}
+        <p className="suave">
+          "Em dinheiro" e "Esperado no caixa" já incluem as mensalidades recebidas neste turno.
+        </p>
       </div>
 
       <div className="card" style={{ maxWidth: 460 }}>

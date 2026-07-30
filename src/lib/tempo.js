@@ -29,6 +29,24 @@ export function dataHoraDe(dtISO, hhmm) {
   return d;
 }
 
+/** Formata data ISO 'YYYY-MM-DD' como 'DD/MM/AAAA'. */
+export function fmtDataBR(iso) {
+  return iso ? String(iso).split('-').reverse().join('/') : '—';
+}
+
+/**
+ * Mesmo dia do mês seguinte, em ISO. Se o dia não existir no mês de destino
+ * (ex.: 31/01 -> fevereiro), cai no último dia daquele mês.
+ */
+export function somarUmMes(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  const ultimoDiaDestino = new Date(y, m + 1, 0).getDate(); // m+1 = mês seguinte (1-based -> 0-based +1)
+  const alvo = new Date(y, m, Math.min(d, ultimoDiaDestino));
+  const mm = String(alvo.getMonth() + 1).padStart(2, '0');
+  const dd = String(alvo.getDate()).padStart(2, '0');
+  return `${alvo.getFullYear()}-${mm}-${dd}`;
+}
+
 /** Limites [início, fim) em ISO/UTC de um intervalo de dias locais 'YYYY-MM-DD' — pra comparar com timestamptz (ex.: movimentos.excluido_em). */
 export function limitesDiaLocal(deISO, ateISO) {
   const inicio = dataDeISO(deISO);

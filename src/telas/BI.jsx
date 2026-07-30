@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtBRL, fmtHora } from '../lib/tempo.js';
+import { hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtBRL, fmtHora, fmtDataBR } from '../lib/tempo.js';
 import { horas, minuto, minutosParaHHMM } from '../../packages/tarifacao/tarifacao.ts';
 
 function escapeHtml(s) {
@@ -21,6 +21,8 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     ['Faturamento', fmtBRL(dados.faturamento)],
     ['Descontos (conv.)', fmtBRL(dados.descontos)],
     ['Tempo médio', fmtHora(dados.tempoMedio)],
+    ['Mensalidades recebidas', `${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`],
+    ['Total recebido (saídas + mensalidades)', fmtBRL(dados.faturamento + dados.mensalidadesTotal)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
   const porTipo = Object.entries(dados.porTipo)
@@ -29,6 +31,20 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${escapeHtml(fmtBRL(v))}</td></tr>`).join('');
   const porTipoCancelado = Object.entries(dados.porTipoCancelado)
     .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
+
+  const mensalidadesHtml = `
+      <h2>Mensalidades recebidas (${dados.mensalidades.length})</h2>
+      <table><thead><tr>
+        <th>Pagamento</th><th>Mensalista</th><th>Forma</th><th>Próximo</th><th>Valor</th>
+      </tr></thead><tbody>${dados.mensalidades.map((p) => `<tr>
+        <td>${escapeHtml(fmtDataBR(p.dt_pagamento))}</td>
+        <td>${escapeHtml(p.mensalista)}</td>
+        <td>${escapeHtml(p.forma)}</td>
+        <td>${escapeHtml(fmtDataBR(p.proximo_pagamento))}</td>
+        <td style="text-align:right">${escapeHtml(fmtBRL(p.valor))}</td>
+      </tr>`).join('') || '<tr><td colspan="5">Nenhuma mensalidade recebida no período.</td></tr>'}</tbody>
+      ${dados.mensalidades.length ? `<tfoot><tr><td colspan="4"><strong>Total</strong></td><td style="text-align:right"><strong>${escapeHtml(fmtBRL(dados.mensalidadesTotal))}</strong></td></tr></tfoot>` : ''}
+      </table>`;
 
   const veiculosHtml = veiculosDetalhe != null ? `
       <h2>Veículos (${veiculosDetalhe.length})</h2>
@@ -69,6 +85,7 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
       <table><tbody>${porTipoCancelado || '<tr><td>Nenhum cancelamento no período.</td></tr>'}</tbody></table>
       <h2>Por forma de pagamento</h2>
       <table><tbody>${porForma || '<tr><td>Sem pagamentos no período.</td></tr>'}</tbody></table>
+      ${mensalidadesHtml}
       ${veiculosHtml}
     </body></html>`;
   const win = window.open('', '_blank', 'width=420,height=650');
@@ -107,6 +124,14 @@ function textoRelatorio(dados, de, ate, filial) {
   const formas = Object.entries(dados.porForma);
   if (formas.length) for (const [k, v] of formas) linhas.push(`  ${k}: ${fmtBRL(v)}`);
   else linhas.push('  Sem pagamentos no período.');
+  linhas.push('');
+  linhas.push(`Mensalidades recebidas: ${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`);
+  for (const p of dados.mensalidades) {
+    linhas.push(`  ${fmtDataBR(p.dt_pagamento)} — ${p.mensalista}: ${fmtBRL(p.valor)} (${p.forma}) · próx. ${fmtDataBR(p.proximo_pagamento)}`);
+  }
+  if (!dados.mensalidades.length) linhas.push('  Nenhuma mensalidade recebida no período.');
+  linhas.push('');
+  linhas.push(`Total recebido (saídas + mensalidades): ${fmtBRL(dados.faturamento + dados.mensalidadesTotal)}`);
   return linhas.join('\n');
 }
 
@@ -153,6 +178,13 @@ export default function BI({ perfil }) {
     const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao');
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
 
+    // Recebimentos de mensalidade no período (evento gravado no cadastro do mensalista).
+    const { data: mensPagtos, error: errMens } = await supabase.from('mensalista_pagamentos')
+      .select('*, mensalistas(razao)')
+      .gte('dt_pagamento', de).lte('dt_pagamento', ate)
+      .order('dt_pagamento', { ascending: false });
+    if (errMens) { setErro(errMens.message); return; }
+
     const porTipo = {};
     let faturamento = 0, tabelaCheia = 0, minutosTotal = 0, saidasComTempo = 0;
     for (const m of movs) {
@@ -179,9 +211,19 @@ export default function BI({ perfil }) {
     for (const m of cancelados || []) {
       porTipoCancelado[m.tipo_mens] = (porTipoCancelado[m.tipo_mens] || 0) + 1;
     }
+    const mensalidades = (mensPagtos || []).map((p) => ({
+      id: p.id, dt_pagamento: p.dt_pagamento, proximo_pagamento: p.proximo_pagamento,
+      mensalista: p.mensalistas?.razao || '—', valor: Number(p.valor_pago || 0),
+      forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+    }));
+    const mensalidadesTotal = mensalidades.reduce((s, p) => s + p.valor, 0);
+    const mensalidadesPorForma = {};
+    for (const p of mensalidades) mensalidadesPorForma[p.forma] = (mensalidadesPorForma[p.forma] || 0) + p.valor;
+
     setDados({
       totalVeic: movs.length, faturamento, tabelaCheia, descontos: tabelaCheia - faturamento,
       porTipo, porForma, porTipoCancelado, tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
+      mensalidades, mensalidadesTotal, mensalidadesPorForma,
     });
 
     const detalheNormal = movs.map((m) => ({
@@ -242,6 +284,8 @@ export default function BI({ perfil }) {
             <Kpi rotulo="Faturamento" valor={fmtBRL(dados.faturamento)} destaque />
             <Kpi rotulo="Descontos (conv.)" valor={fmtBRL(dados.descontos)} />
             <Kpi rotulo="Tempo médio" valor={fmtHora(dados.tempoMedio)} />
+            <Kpi rotulo="Mensalidades" valor={fmtBRL(dados.mensalidadesTotal)} />
+            <Kpi rotulo="Total recebido" valor={fmtBRL(dados.faturamento + dados.mensalidadesTotal)} />
           </div>
 
           <div className="card">
@@ -271,6 +315,41 @@ export default function BI({ perfil }) {
               ))}
               {Object.keys(dados.porForma).length === 0 && <tr><td className="suave">Sem pagamentos no período.</td></tr>}
             </tbody></table>
+          </div>
+
+          <div className="card">
+            <h2>Mensalidades recebidas ({dados.mensalidades.length})</h2>
+            <p className="suave">Recebimentos lançados no cadastro do mensalista (botão Receber).</p>
+            <div className="tabela-scroll">
+              <table>
+                <thead><tr><th>Pagamento</th><th>Mensalista</th><th>Forma</th><th>Próximo pagamento</th><th>Valor</th></tr></thead>
+                <tbody>
+                  {dados.mensalidades.map((p) => (
+                    <tr key={p.id}>
+                      <td className="mono">{fmtDataBR(p.dt_pagamento)}</td>
+                      <td>{p.mensalista}</td>
+                      <td>{p.forma}</td>
+                      <td className="mono">{fmtDataBR(p.proximo_pagamento)}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtBRL(p.valor)}</td>
+                    </tr>
+                  ))}
+                  {dados.mensalidades.length === 0 && <tr><td colSpan={5} className="suave">Nenhuma mensalidade recebida no período.</td></tr>}
+                </tbody>
+                {dados.mensalidades.length > 0 && (
+                  <tfoot><tr>
+                    <td colSpan={4}><strong>Total</strong></td>
+                    <td style={{ textAlign: 'right' }}><strong>{fmtBRL(dados.mensalidadesTotal)}</strong></td>
+                  </tr></tfoot>
+                )}
+              </table>
+            </div>
+            {Object.keys(dados.mensalidadesPorForma).length > 0 && (
+              <table style={{ marginTop: 10 }}><tbody>
+                {Object.entries(dados.mensalidadesPorForma).map(([k, v]) => (
+                  <tr key={k}><td>{k}</td><td style={{ textAlign: 'right' }}>{fmtBRL(v)}</td></tr>
+                ))}
+              </tbody></table>
+            )}
           </div>
 
           {verVeiculos && (
