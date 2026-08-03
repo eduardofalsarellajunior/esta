@@ -27,7 +27,7 @@ as mesmas variáveis em *Settings → Environment Variables*.
 | **3 — Caixa + BI** | Abertura/sangria/fechamento por operador; painel de KPIs em tempo real | ✅ funcional (após 0003) |
 | **5 — Financeiro** | A receber (ponte mensalidade→título), a pagar, banco/lançamentos | ✅ funcional (após 0004) |
 | **4 — Fiscal** | Geração de RPS/NFS-e (Padrão Nacional) + XML; numeração por série | ⚠️ geração ok (após 0005); **assinatura + transmissão externas** |
-| **6 — Integrações** | Pix/cartão, app do cliente, LPR, cancela | ⛔ dependem de terceiros (abaixo) |
+| **6 — Integrações** | Pix/cartão, app do cliente, LPR, cancela | ⚠️ LPR por foto (Plate Recognizer) funcional; resto depende de terceiros (abaixo) |
 
 ## Fase 6 — pontos de integração (dependem de você)
 
@@ -51,12 +51,25 @@ ligar quando o recurso existir.
   aberta — precisa de credencial. Sugerido: Supabase Auth (OTP por SMS/e-mail) +
   RLS específica para o cliente ver só os próprios dados.
 
-### LPR — leitura de placa (precisa de câmera + agente local)
-- **Falta:** câmera na cabine + o **agente local** rodando o reconhecimento
-  (OpenALPR/Plate Recognizer ou modelo próprio).
-- **Contrato:** o agente detecta a placa e faz `POST` para o PDV (ou grava direto
-  via Supabase) preenchendo o campo placa da entrada. O PDV já aceita a placa
-  digitada; a LPR só substitui a digitação.
+### LPR — leitura de placa por foto ✅ funcional (falta só o secret)
+- **Como funciona:** botão de câmera (📷) na Entrada/Saída do Pátio e no cadastro
+  de veículo do mensalista. Foto (câmera ao vivo ou arquivo) → Edge Function
+  `supabase/functions/ler-placa` → API do **Plate Recognizer** (Snapshot Cloud,
+  a chave fica só no servidor) → o operador escolhe/confirma a placa lida antes
+  de qualquer gravação (a leitura nunca preenche/decide por conta própria).
+- **Falta pra ativar:** criar conta em platerecognizer.com, gerar o token
+  (Snapshot Cloud → API Token) e rodar:
+  ```
+  npx supabase login
+  npx supabase link --project-ref <ref-do-projeto>
+  npx supabase functions deploy ler-placa
+  npx supabase secrets set PLATE_RECOGNIZER_TOKEN=xxxxxxxxxxxxxxxx
+  ```
+  Plano gratuito: ~2.500 leituras/mês, 1 leitura/segundo (dá pra começar sem custo).
+- **Pendência futura (câmera fixa + agente local):** o fluxo acima é "operador
+  tira foto"; câmera fixa detectando sozinha na cancela ainda depende do agente
+  local (Opção B) — mesmo contrato de sempre: agente detecta e faz `POST` pro PDV
+  (ou grava direto via Supabase) preenchendo a placa da entrada.
 
 ### Cancela / hardware (precisa do agente local + equipamento)
 - **Falta:** o **agente local na cabine** (serial/USB) — o navegador não controla

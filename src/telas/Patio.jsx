@@ -5,6 +5,7 @@ import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fm
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
 import { TicketModal } from '../componentes/Ticket.jsx';
+import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
 const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
@@ -494,6 +495,7 @@ export default function Patio({ perfil }) {
               onBlur={(e) => detectar(e.target.value)}
               placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 140 }} />
           </div>
+          <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); detectar(p); }} />
           <div className="campo campo-busca" style={{ minWidth: 220 }}>
             <label>Carro</label>
             <input value={buscaModelo}

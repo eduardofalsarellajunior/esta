@@ -4,6 +4,7 @@ import { carregarModelosVeiculo } from '../lib/dados.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { hojeISO, somarUmMes, fmtDataBR, fmtBRL } from '../lib/tempo.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
+import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 
 // Mensalistas/hóspedes + os veículos de cada um (1:N) e a quantidade de vagas
 // contratadas simultâneas. Se mais veículos do que isso estiverem no pátio ao
@@ -483,6 +484,7 @@ function Veiculos({ perfil, mensalista }) {
             value={placa} onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); }}
             placeholder="ABC1D23" required />
         </div>
+        <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); }} />
         <div className="campo campo-busca" style={{ minWidth: 200 }}>
           <label>Modelo</label>
           <input value={buscaModelo}
