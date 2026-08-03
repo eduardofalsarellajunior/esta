@@ -502,16 +502,16 @@ export default function Patio({ perfil }) {
             <input className="mono" value={placa}
               onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); }}
               onBlur={(e) => detectar(e.target.value)}
-              placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 140 }} />
+              placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 220, fontSize: 18 }} />
           </div>
           <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); detectar(p); }} />
-          <div className="campo campo-busca" style={{ minWidth: 220 }}>
+          <div className="campo campo-busca" style={{ minWidth: 340 }}>
             <label>Carro</label>
             <input value={buscaModelo}
               onChange={(e) => onBuscaModeloChange(e.target.value)}
               onFocus={() => setMostrarSugestoes(true)}
               onBlur={() => setTimeout(() => setMostrarSugestoes(false), 150)}
-              placeholder="Digite o modelo do carro…" style={{ width: '100%' }} />
+              placeholder="Digite o modelo do carro…" style={{ width: '100%', fontSize: 18 }} />
             {mostrarSugestoes && sugestoes.length > 0 && (
               <ul className="sugestoes-lista">
                 {sugestoes.map((m) => (
