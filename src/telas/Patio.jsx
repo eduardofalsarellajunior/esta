@@ -6,6 +6,8 @@ import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
 import { TicketModal } from '../componentes/Ticket.jsx';
 import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
+import CardAcoes from '../componentes/CardAcoes.jsx';
+import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
 const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
@@ -41,6 +43,13 @@ export default function Patio({ perfil }) {
   const [movimentosComServico, setMovimentosComServico] = useState(new Set());
   const [modalExclusao, setModalExclusao] = useState(null); // { mov, motivo }
   const [agora, setAgora] = useState(() => Date.now());
+  const [abrirRecebimento, setAbrirRecebimento] = useState(false); // fluxo de "Receber mensalidade" (menu ⋮)
+  const [caixaAberto, setCaixaAberto] = useState(null);
+
+  useEffect(() => {
+    supabase.from('caixas').select('id').eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle()
+      .then(({ data }) => setCaixaAberto(data));
+  }, [perfil.id]);
 
   // Tique periódico só pra reavaliar a janela de 5min do botão Excluir (operador).
   useEffect(() => {
@@ -495,7 +504,10 @@ export default function Patio({ perfil }) {
       {erro && <div className="card aviso">{erro}</div>}
 
       <div className="card">
-        <h2>Entrada de veículo</h2>
+        <div className="card-cab">
+          <h2>Entrada de veículo</h2>
+          <CardAcoes acoes={[{ label: 'Receber mensalidade', onClick: () => setAbrirRecebimento(true) }]} />
+        </div>
         <form className="linha-form" onSubmit={darEntrada}>
           <div className="campo">
             <label>Placa</label>
@@ -694,6 +706,12 @@ export default function Patio({ perfil }) {
       {ticket && (
         <TicketModal ticket={ticket} filial={filial} celular={celularTicket}
           onCelular={setCelularTicket} onFechar={() => setTicket(null)} />
+      )}
+
+      {abrirRecebimento && (
+        <ReceberMensalidadeFluxo perfil={perfil} formas={formas} caixaAberto={caixaAberto}
+          onConcluido={(t, celularSugerido) => { setTicket(t); setCelularTicket(celularSugerido); setAbrirRecebimento(false); }}
+          onFechar={() => setAbrirRecebimento(false)} />
       )}
 
       {saindo && (
