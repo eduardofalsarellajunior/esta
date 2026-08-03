@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais } from '../lib/dados.js';
-import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL } from '../lib/tempo.js';
+import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL, dentroDoVencimento } from '../lib/tempo.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
 import { TicketModal } from '../componentes/Ticket.jsx';
@@ -18,6 +18,7 @@ export default function Patio({ perfil }) {
   const [placa, setPlaca] = useState('');
   const [detectado, setDetectado] = useState(null); // {mensalista, convenio_codigo, tipo_mens}
   const [vagaEsgotada, setVagaEsgotada] = useState(null); // nome do mensalista, se as vagas dele já estão ocupadas
+  const [mensalistaVencido, setMensalistaVencido] = useState(null); // nome do mensalista, se venceu (entra como avulso)
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
 
@@ -102,6 +103,7 @@ export default function Patio({ perfil }) {
     const p = pl.trim().toUpperCase();
     setDetectado(null);
     setVagaEsgotada(null);
+    setMensalistaVencido(null);
     if (p.length < 3) return;
 
     // Placa já estacionada? Pula direto pra rotina de saída.
@@ -125,6 +127,13 @@ export default function Patio({ perfil }) {
     if (!mv) return;
     const { data: m } = await supabase.from('mensalistas').select('*').eq('id', mv.mensalista_id).maybeSingle();
     if (!m || !m.ativo) return;
+
+    // Fora do vencimento + tolerância? Entra como avulso (tabela normal, sem convênio).
+    if (!dentroDoVencimento(m.proximo_pagamento, m.tolerancia_dias)) {
+      setMensalistaVencido(m.razao);
+      if (mv.tipo_veic) await registrarEntrada(mv.tipo_veic, mv.modelo, 'E', null);
+      return;
+    }
 
     // Vagas contratadas já ocupadas por OUTROS veículos dele? Entra como avulso.
     const { data: veiculosDele } = await supabase.from('mensalista_veiculos').select('placa').eq('mensalista_id', m.id);
@@ -177,7 +186,7 @@ export default function Patio({ perfil }) {
   }, [buscaModelo]);
 
   function limparFormEntrada() {
-    setPlaca(''); setDetectado(null); setVagaEsgotada(null);
+    setPlaca(''); setDetectado(null); setVagaEsgotada(null); setMensalistaVencido(null);
     setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
   }
@@ -491,11 +500,11 @@ export default function Patio({ perfil }) {
           <div className="campo">
             <label>Placa</label>
             <input className="mono" value={placa}
-              onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); }}
+              onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); }}
               onBlur={(e) => detectar(e.target.value)}
               placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 140 }} />
           </div>
-          <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); detectar(p); }} />
+          <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); detectar(p); }} />
           <div className="campo campo-busca" style={{ minWidth: 220 }}>
             <label>Carro</label>
             <input value={buscaModelo}
@@ -541,6 +550,11 @@ export default function Patio({ perfil }) {
           {vagaEsgotada && (
             <span className="badge-mens" style={{ color: 'var(--ambar)', borderColor: 'var(--ambar)', background: 'rgba(245,166,35,.12)' }}>
               Vaga(s) de {vagaEsgotada} já ocupada(s) — entrando como avulso
+            </span>
+          )}
+          {mensalistaVencido && (
+            <span className="badge-mens" style={{ color: 'var(--ambar)', borderColor: 'var(--ambar)', background: 'rgba(245,166,35,.12)' }}>
+              Mensalidade de {mensalistaVencido} vencida — entrando como avulso
             </span>
           )}
         </form>
