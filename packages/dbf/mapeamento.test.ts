@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sugerirMapeamento, converterLinha, paraBool, paraNumero, paraTexto, DESTINOS } from './mapeamento.ts';
+import { sugerirMapeamento, converterLinha, paraBool, paraNumero, paraTexto, paraData, DESTINOS } from './mapeamento.ts';
 
 test('sugerirMapeamento: acha o campo do dbf por palpite, case-insensitive', () => {
   const colunas = DESTINOS.modelos_veiculo.colunas;
@@ -37,6 +37,22 @@ test('paraTexto: trim e vazio -> null', () => {
   assert.equal(paraTexto('  Fulano  '), 'Fulano');
   assert.equal(paraTexto('   '), null);
   assert.equal(paraTexto(null), null);
+});
+
+test('paraData: só aceita ISO já pronto (como o lerDbf devolve pra campo tipo D) — resto vira null, não grava data inválida', () => {
+  assert.equal(paraData('2026-08-10'), '2026-08-10');
+  assert.equal(paraData(10), null); // ex.: mapeou por engano um campo numérico (dia isolado, sem mês/ano)
+  assert.equal(paraData('10'), null);
+  assert.equal(paraData(null), null);
+});
+
+test('converterLinha: valor da mensalidade e próximo pagamento (campos antes fora do mapeamento)', () => {
+  const colunas = DESTINOS.mensalistas.colunas;
+  const mapeamento = sugerirMapeamento(colunas, ['NOMECAR', 'RAZAO', 'VALOR', 'DIA']);
+  // DIA aqui simula um campo tipo D do dbf, já normalizado pelo lerDbf pra ISO.
+  const linha = converterLinha({ NOMECAR: '12', RAZAO: 'Fulano', VALOR: 250.5, DIA: '2026-08-10' }, colunas, mapeamento);
+  assert.equal(linha.valor_mensalidade, 250.5);
+  assert.equal(linha.proximo_pagamento, '2026-08-10');
 });
 
 test('converterLinha: aplica mapeamento, tipos e valor padrão (coluna NOT NULL sem valor no dbf)', () => {

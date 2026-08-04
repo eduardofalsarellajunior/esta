@@ -2,7 +2,7 @@
 // de veículo. Puro (sem Supabase) — a gravação fica em src/lib/importacaoDbf.js.
 import type { RegistroDbf, ValorDbf } from './dbf.ts';
 
-export type TipoColuna = 'texto' | 'number' | 'bool';
+export type TipoColuna = 'texto' | 'number' | 'bool' | 'data';
 export type ColunaDestino = {
   campo: string;
   rotulo: string;
@@ -32,11 +32,14 @@ export const DESTINOS: Record<string, Destino> = {
       { campo: 'celular', rotulo: 'Celular', palpites: ['CELULAR'] },
       { campo: 'email', rotulo: 'E-mail', palpites: ['EMAIL'] },
       { campo: 'endereco', rotulo: 'Endereço', palpites: ['ENDERECO'] },
+      { campo: 'numero', rotulo: 'Número', palpites: ['NUMERO', 'NUM'] },
       { campo: 'bairro', rotulo: 'Bairro', palpites: ['BAIRRO'] },
       { campo: 'cidade', rotulo: 'Cidade', palpites: ['CIDADE'] },
       { campo: 'uf', rotulo: 'UF', palpites: ['UF', 'ESTADO'] },
       { campo: 'cep', rotulo: 'CEP', palpites: ['CEP'] },
       { campo: 'box', rotulo: 'Box', palpites: ['BOX'] },
+      { campo: 'valor_mensalidade', rotulo: 'Valor da mensalidade', tipo: 'number', palpites: ['VALOR', 'VLRMES', 'VLRMES01'], padrao: 0 },
+      { campo: 'proximo_pagamento', rotulo: 'Data do próximo pagamento', tipo: 'data', palpites: ['DIA', 'PROXVENC', 'DTVENC', 'DATAVENC', 'VENCIMENTO'] },
       { campo: 'dia_venc', rotulo: 'Dia vencimento', tipo: 'number', palpites: ['DIAVENC'] },
       { campo: 'tolerancia_dias', rotulo: 'Tolerância (dias)', tipo: 'number', palpites: ['TOLERANCIA'], padrao: 0 },
       { campo: 'multa_pct', rotulo: 'Multa %', tipo: 'number', palpites: ['MULTA'], padrao: 0 },
@@ -94,6 +97,20 @@ export function paraNumero(v: ValorDbf): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+const REGEX_DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Só aceita uma data ISO 'YYYY-MM-DD' já pronta — é o formato que `lerDbf`
+ * devolve pra campos do tipo `D` (Date) do próprio .dbf. Se o campo mapeado
+ * não for um campo de data de verdade (ex.: um número de dia isolado, sem
+ * mês/ano), fica em branco em vez de gravar uma data inválida — aparece
+ * vazio na prévia, sinal de que o mapeamento dessa coluna está errado.
+ */
+export function paraData(v: ValorDbf): string | null {
+  if (typeof v !== 'string') return null;
+  return REGEX_DATA_ISO.test(v) ? v : null;
+}
+
 export function paraBool(v: ValorDbf): boolean | null {
   if (typeof v === 'boolean') return v;
   if (v === null || v === undefined) return null;
@@ -115,6 +132,7 @@ export function converterLinha(
     const bruto = campoDbf ? registro[campoDbf] : null;
     const convertido = col.tipo === 'number' ? paraNumero(bruto)
       : col.tipo === 'bool' ? paraBool(bruto)
+      : col.tipo === 'data' ? paraData(bruto)
       : paraTexto(bruto);
     linha[col.campo] = convertido ?? col.padrao ?? null;
   }

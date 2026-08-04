@@ -46,6 +46,8 @@ export default function Mensalistas({ perfil }) {
       filial_id: perfil.filial_id, codigo: m.codigo, razao: m.razao,
       tipo_mens: m.tipo_mens || 'I', telefone: m.telefone || null, celular: m.celular || null,
       email: m.email || null, box: m.box || null,
+      endereco: m.endereco || null, numero: m.numero || null, bairro: m.bairro || null,
+      cidade: m.cidade || null, uf: m.uf || null, cep: m.cep || null,
       dia_venc: m.dia_venc ? Number(m.dia_venc) : null,
       tolerancia_dias: Number(m.tolerancia_dias || 0), qte_vagas: Number(m.qte_vagas || 1),
       valor_mensalidade: Number(m.valor_mensalidade || 0),
@@ -234,6 +236,35 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
           <div className="campo" style={{ marginBottom: 10 }}>
             <label>E-mail</label>
             <input value={m.email || ''} onChange={(e) => set('email', e.target.value)} />
+          </div>
+          <div className="linha-form" style={{ marginBottom: 10 }}>
+            <div className="campo" style={{ flex: 2 }}>
+              <label>Endereço</label>
+              <input value={m.endereco || ''} onChange={(e) => set('endereco', e.target.value)} />
+            </div>
+            <div className="campo" style={{ width: 90 }}>
+              <label>Número</label>
+              <input value={m.numero || ''} onChange={(e) => set('numero', e.target.value)} />
+            </div>
+          </div>
+          <div className="linha-form" style={{ marginBottom: 10 }}>
+            <div className="campo" style={{ flex: 2 }}>
+              <label>Bairro</label>
+              <input value={m.bairro || ''} onChange={(e) => set('bairro', e.target.value)} />
+            </div>
+            <div className="campo" style={{ flex: 2 }}>
+              <label>Cidade</label>
+              <input value={m.cidade || ''} onChange={(e) => set('cidade', e.target.value)} />
+            </div>
+            <div className="campo" style={{ width: 70 }}>
+              <label>UF</label>
+              <input className="mono" style={{ textTransform: 'uppercase' }} maxLength={2}
+                value={m.uf || ''} onChange={(e) => set('uf', e.target.value.toUpperCase())} />
+            </div>
+            <div className="campo" style={{ width: 110 }}>
+              <label>CEP</label>
+              <input value={m.cep || ''} onChange={(e) => set('cep', e.target.value)} />
+            </div>
           </div>
           <div className="campo" style={{ marginBottom: 10 }}>
             <label>Box</label>
