@@ -28,6 +28,9 @@ export default function Configuracoes({ perfil }) {
     const { error } = await supabase.from('filiais').update({
       nome_fantasia: filial.nome_fantasia || null,
       endereco: filial.endereco || null,
+      numero: filial.numero || null,
+      bairro: filial.bairro || null,
+      cep: filial.cep || null,
       cnpj: filial.cnpj || null,
       inscricao_mun: filial.inscricao_mun || null,
       cod_ibge: filial.cod_ibge || null,
@@ -67,10 +70,29 @@ export default function Configuracoes({ perfil }) {
                 <input value={filial.nome_fantasia || ''} disabled={!podeEditar}
                   onChange={(e) => setFilial({ ...filial, nome_fantasia: e.target.value })} />
               </div>
-              <div className="campo" style={{ marginBottom: 10, maxWidth: 420 }}>
-                <label>Endereço</label>
-                <input value={filial.endereco || ''} disabled={!podeEditar}
-                  onChange={(e) => setFilial({ ...filial, endereco: e.target.value })} />
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ flex: 2 }}>
+                  <label>Endereço</label>
+                  <input value={filial.endereco || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, endereco: e.target.value })} />
+                </div>
+                <div className="campo" style={{ width: 90 }}>
+                  <label>Número</label>
+                  <input value={filial.numero || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, numero: e.target.value })} />
+                </div>
+              </div>
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ flex: 2 }}>
+                  <label>Bairro</label>
+                  <input value={filial.bairro || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, bairro: e.target.value })} />
+                </div>
+                <div className="campo" style={{ width: 130 }}>
+                  <label>CEP</label>
+                  <input value={filial.cep || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, cep: e.target.value })} />
+                </div>
               </div>
               <div className="campo" style={{ marginBottom: 10, maxWidth: 420 }}>
                 <label>CNPJ</label>
@@ -133,6 +155,22 @@ export default function Configuracoes({ perfil }) {
                   <option value="producao">Produção (nota de verdade)</option>
                 </select>
                 <span className="suave" style={{ fontSize: 11 }}>Só mude pra Produção depois de validar em Homologação.</span>
+              </div>
+            </div>
+            <div className="linha-form" style={{ marginBottom: 10 }}>
+              <div className="campo" style={{ maxWidth: 300 }}>
+                <label>Regime tributário (Simples Nacional)</label>
+                <select value={filial.config?.nfse?.opSimpNac || ''} disabled={!podeEditar}
+                  onChange={(e) => setNfse('opSimpNac', e.target.value)}>
+                  <option value="">— confirme com o contador —</option>
+                  <option value="1">Não optante</option>
+                  <option value="2">Optante — Microempresa municipal/ME/EPP</option>
+                  <option value="3">Optante — Outros</option>
+                </select>
+                <span className="suave" style={{ fontSize: 11 }}>
+                  Exigido pelo governo no DPS. Confirme com o contador antes de enviar — errar
+                  isso classifica errado o regime tributário da empresa.
+                </span>
               </div>
             </div>
             {podeEditar
