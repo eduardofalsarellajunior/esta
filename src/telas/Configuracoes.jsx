@@ -29,8 +29,15 @@ export default function Configuracoes({ perfil }) {
       nome_fantasia: filial.nome_fantasia || null,
       endereco: filial.endereco || null,
       cnpj: filial.cnpj || null,
+      inscricao_mun: filial.inscricao_mun || null,
+      cod_ibge: filial.cod_ibge || null,
+      config: filial.config || {},
     }).eq('id', filial.id);
     if (error) setErro(error.message); else setSalvo(true);
+  }
+
+  function setNfse(campo, valor) {
+    setFilial((f) => ({ ...f, config: { ...f.config, nfse: { ...(f.config?.nfse || {}), [campo]: valor } } }));
   }
 
   return (
@@ -75,6 +82,63 @@ export default function Configuracoes({ perfil }) {
                 : <p className="suave">Só supervisores podem editar.</p>}
             </form>
           </>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Fiscal (NFS-e)</h2>
+        <p className="suave">
+          Necessários pra gerar e enviar o DPS/NFS-e (Sistema Nacional NFS-e). Sem eles
+          o documento é rejeitado mesmo assinado corretamente.
+        </p>
+        {!filial ? 'Carregando…' : (
+          <form onSubmit={salvar}>
+            <div className="linha-form" style={{ marginBottom: 10 }}>
+              <div className="campo" style={{ maxWidth: 220 }}>
+                <label>Inscrição municipal</label>
+                <input value={filial.inscricao_mun || ''} disabled={!podeEditar}
+                  onChange={(e) => setFilial({ ...filial, inscricao_mun: e.target.value })} />
+              </div>
+              <div className="campo" style={{ maxWidth: 160 }}>
+                <label>Código do município (IBGE)</label>
+                <input value={filial.cod_ibge || ''} disabled={!podeEditar}
+                  onChange={(e) => setFilial({ ...filial, cod_ibge: e.target.value })} />
+              </div>
+              <div className="campo" style={{ maxWidth: 120 }}>
+                <label>Série do DPS</label>
+                <input value={filial.config?.nfse?.serie || ''} disabled={!podeEditar}
+                  onChange={(e) => setNfse('serie', e.target.value)} />
+              </div>
+            </div>
+            <div className="linha-form" style={{ marginBottom: 10 }}>
+              <div className="campo" style={{ maxWidth: 220 }}>
+                <label>Código de tributação nacional</label>
+                <input value={filial.config?.nfse?.codTribNacional || ''} disabled={!podeEditar}
+                  maxLength={6} onChange={(e) => setNfse('codTribNacional', e.target.value)} />
+                <span className="suave" style={{ fontSize: 11 }}>
+                  6 dígitos, lista da LC 116/2003 — confirme com o contador ou veja o que o
+                  sistema antigo (DSF) já usava. Não é o CNAE.
+                </span>
+              </div>
+              <div className="campo" style={{ maxWidth: 120 }}>
+                <label>% ISS</label>
+                <input type="number" step="0.0001" min="0" value={filial.config?.nfse?.perc_iss ?? ''} disabled={!podeEditar}
+                  onChange={(e) => setNfse('perc_iss', e.target.value)} />
+              </div>
+              <div className="campo" style={{ maxWidth: 200 }}>
+                <label>Ambiente de envio</label>
+                <select value={filial.config?.nfse?.ambiente || 'homologacao'} disabled={!podeEditar}
+                  onChange={(e) => setNfse('ambiente', e.target.value)}>
+                  <option value="homologacao">Homologação (teste)</option>
+                  <option value="producao">Produção (nota de verdade)</option>
+                </select>
+                <span className="suave" style={{ fontSize: 11 }}>Só mude pra Produção depois de validar em Homologação.</span>
+              </div>
+            </div>
+            {podeEditar
+              ? <button className="btn-primary" type="submit">Salvar</button>
+              : <p className="suave">Só supervisores podem editar.</p>}
+          </form>
         )}
       </div>
     </>

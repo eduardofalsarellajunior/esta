@@ -26,8 +26,41 @@ as mesmas variáveis em *Settings → Environment Variables*.
 | **2 — PDV** | Login, Pátio (entrada com detecção de mensalista/convênio, saída com cálculo real + split de pagamento + fidelidade), CRUDs (preços/faixas, convênios, mensalistas, formas, vagas, modelos) | ✅ funcional |
 | **3 — Caixa + BI** | Abertura/sangria/fechamento por operador; painel de KPIs em tempo real | ✅ funcional (após 0003) |
 | **5 — Financeiro** | A receber (ponte mensalidade→título), a pagar, banco/lançamentos | ✅ funcional (após 0004) |
-| **4 — Fiscal** | Geração de RPS/NFS-e (Padrão Nacional) + XML; numeração por série | ⚠️ geração ok (após 0005); **assinatura + transmissão externas** |
+| **4 — Fiscal** | Geração, assinatura (XMLDSig) e envio (mTLS) do DPS pro Sistema Nacional NFS-e | ⚠️ pronto; falta configurar o certificado (abaixo) |
 | **6 — Integrações** | Pix/cartão, app do cliente, LPR, cancela | ⚠️ LPR por foto (Plate Recognizer) funcional; resto depende de terceiros (abaixo) |
+
+### NFS-e — DPS assinado e enviado pro governo (falta só o certificado)
+- **Como funciona:** a tela **Fiscal** gera o DPS (`src/lib/fiscal.js`) e o
+  botão **Enviar** chama `api/gerar-nfse.js` — uma Vercel Function (Node.js,
+  não Deno/Supabase) porque a autenticação com o governo é **mTLS**
+  (certificado na própria conexão HTTPS) e o documento precisa de
+  **assinatura digital XMLDSig** — nada disso roda no navegador. O
+  certificado fica só em variável de ambiente do Vercel, nunca no código nem
+  no banco. Resposta é síncrona: a NFS-e já volta autorizada, ou o motivo da
+  rejeição (aparece no botão "Retorno" da nota).
+- **Falta pra ativar (nesta ordem):**
+  1. **Configurações → Fiscal**: preencher Inscrição municipal, Código do
+     município (IBGE), Série, Código de tributação nacional (6 dígitos —
+     confirme com o contador, não é o CNAE) e % ISS. Deixar "Ambiente de
+     envio" em **Homologação** até validar.
+  2. Gerar o certificado em base64 (PowerShell, no seu computador — troque o
+     caminho):
+     ```powershell
+     [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\caminho\seu_certificado.pfx")) | Set-Clipboard
+     ```
+  3. No painel da Vercel → *Project Settings → Environment Variables*,
+     criar `NFSE_CERTIFICADO_PFX_B64` (cole o que foi copiado) e
+     `NFSE_CERTIFICADO_SENHA` (a senha do certificado, digitada direto lá —
+     nunca cole senha/certificado no chat). Redeploy pra valer.
+  4. Testar: gerar um RPS na tela Fiscal, clicar **Enviar**, confirmar que
+     autoriza em Homologação. Só depois trocar "Ambiente de envio" pra
+     **Produção** (volta em Configurações → Fiscal).
+- **Pendência conhecida:** a documentação pública da integração (ADN) é
+  fragmentada — o XML e a assinatura foram validados localmente (assinatura
+  XMLDSig conferida byte a byte com certificado de teste), mas o formato
+  exato de alguns campos do DPS só se confirma testando contra a homologação
+  de verdade. Se a ADN rejeitar algo, o retorno completo aparece na tela —
+  me manda que eu ajusto.
 
 ## Fase 6 — pontos de integração (dependem de você)
 

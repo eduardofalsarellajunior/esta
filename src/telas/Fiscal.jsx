@@ -9,6 +9,8 @@ export default function Fiscal({ perfil }) {
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [xml, setXml] = useState(null);
+  const [retorno, setRetorno] = useState(null);
+  const [enviando, setEnviando] = useState(null); // id da nota em envio
   const [de, setDe] = useState(hojeISO());
   const [ate, setAte] = useState(hojeISO());
 
@@ -51,8 +53,31 @@ export default function Fiscal({ perfil }) {
       if (e2) { setErro(e2.message); break; }
       n++;
     }
-    setMsg(`${n} RPS gerado(s). Assinatura e transmissão são etapas externas (certificado).`);
+    setMsg(`${n} RPS gerado(s). Use "Enviar" pra assinar e transmitir pro governo.`);
     carregar();
+  }
+
+  // Assinatura (XMLDSig) + envio (mTLS) rodam em api/gerar-nfse.js (Node, no
+  // Vercel) — precisam do certificado, que nunca fica no navegador.
+  async function enviar(notaId) {
+    setErro(''); setMsg(''); setEnviando(notaId);
+    try {
+      const { data: sessao } = await supabase.auth.getSession();
+      const resp = await fetch('/api/gerar-nfse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessao.session?.access_token}` },
+        body: JSON.stringify({ notaId }),
+      });
+      const dados = await resp.json();
+      if (!resp.ok) { setErro(dados.erro || `Falha ao enviar (${resp.status}).`); return; }
+      if (dados.ok) setMsg(`NFS-e autorizada — chave de acesso ${dados.chaveAcesso || '—'} (ambiente: ${dados.ambiente}).`);
+      else setErro(`Rejeitada pelo governo (ambiente: ${dados.ambiente}) — veja o retorno na linha da nota.`);
+    } catch (e) {
+      setErro(`Falha ao contatar o serviço de envio: ${e.message}`);
+    } finally {
+      setEnviando(null);
+      carregar();
+    }
   }
 
   return (
@@ -61,7 +86,7 @@ export default function Fiscal({ perfil }) {
         <div className="card-cab">
           <div>
             <h2>NFS-e / RPS — Padrão Nacional</h2>
-            <p className="suave">Gera o RPS dos movimentos cobrados. A assinatura digital e o envio ao município exigem certificado (integração externa).</p>
+            <p className="suave">Gera o DPS dos movimentos cobrados. "Enviar" assina e transmite pro Sistema Nacional NFS-e.</p>
           </div>
           <div className="linha-form">
             <div className="campo"><label>De</label><input type="date" value={de} onChange={(e) => setDe(e.target.value)} /></div>
@@ -77,17 +102,26 @@ export default function Fiscal({ perfil }) {
         <h2>Documentos ({notas.length})</h2>
         <div className="tabela-scroll">
           <table>
-            <thead><tr><th>RPS</th><th>Série</th><th>Competência</th><th>Valor</th><th>ISS</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>RPS</th><th>Série</th><th>Competência</th><th>Valor</th><th>ISS</th><th>Status</th><th>Chave/NFS-e</th><th></th></tr></thead>
             <tbody>
               {notas.map((n) => (
                 <tr key={n.id}>
                   <td className="mono">{n.numero_rps}</td><td>{n.serie}</td><td>{n.competencia}</td>
                   <td>{fmtBRL(Number(n.valor))}</td><td>{fmtBRL(Number(n.valor_iss))}</td>
                   <td><span className={'status status-' + n.status}>{n.status}</span></td>
-                  <td style={{ textAlign: 'right' }}><button className="btn-ghost" onClick={() => setXml(n.xml)}>XML</button></td>
+                  <td className="mono" style={{ fontSize: 11 }}>{n.numero_nfse || '—'}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="btn-ghost" onClick={() => setXml(n.xml)}>XML</button>
+                    {n.retorno && <button className="btn-ghost" onClick={() => setRetorno(n.retorno)}>Retorno</button>}
+                    {(n.status === 'gerada' || n.status === 'erro') && (
+                      <button className="btn-primary" disabled={enviando === n.id} onClick={() => enviar(n.id)}>
+                        {enviando === n.id ? 'Enviando…' : (n.status === 'erro' ? 'Reenviar' : 'Enviar')}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
-              {notas.length === 0 && <tr><td colSpan={7} className="suave">Nenhum documento.</td></tr>}
+              {notas.length === 0 && <tr><td colSpan={8} className="suave">Nenhum documento.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -100,6 +134,18 @@ export default function Fiscal({ perfil }) {
             <pre className="mono" style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{xml}</pre>
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={() => setXml(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {retorno && (
+        <div className="modal-bg" onClick={() => setRetorno(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 640, maxHeight: '80vh', overflow: 'auto' }}>
+            <h2>Retorno da ADN</h2>
+            <pre className="mono" style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{retorno}</pre>
+            <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn-ghost" onClick={() => setRetorno(null)}>Fechar</button>
             </div>
           </div>
         </div>
