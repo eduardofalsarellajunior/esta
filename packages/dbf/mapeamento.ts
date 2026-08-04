@@ -24,7 +24,7 @@ export const DESTINOS: Record<string, Destino> = {
     rotulo: 'Mensalistas',
     tabela: 'mensalistas',
     colunas: [
-      { campo: 'codigo', rotulo: 'Código', obrigatorio: true, palpites: ['NOMECAR', 'CODIGO'] },
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true, palpites: ['VEICULO', 'NOMECAR', 'CODIGO'] },
       { campo: 'razao', rotulo: 'Nome', obrigatorio: true, palpites: ['RAZAO', 'NOME'] },
       { campo: 'tipo_mens', rotulo: 'Tipo (I/P/H)', palpites: ['TIPOMENS'], padrao: 'I' },
       { campo: 'cpf_cnpj', rotulo: 'CPF/CNPJ', palpites: ['CPF', 'CGC', 'CNPJ'] },
@@ -55,9 +55,10 @@ export const DESTINOS: Record<string, Destino> = {
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
     ],
     placas: [
-      { campo: 'placa1', rotulo: 'Placa 1', palpites: ['VEICULO'] },
-      { campo: 'placa2', rotulo: 'Placa 2', palpites: ['VEICULO1'] },
-      { campo: 'placa3', rotulo: 'Placa 3', palpites: ['VEICULO2'] },
+      // "VEICULO" (sem sufixo) é o código do mensalista (mapeado acima), não uma placa.
+      { campo: 'placa1', rotulo: 'Placa 1', palpites: ['PLACA', 'PLACA1'] },
+      { campo: 'placa2', rotulo: 'Placa 2', palpites: ['VEICULO1', 'PLACA2'] },
+      { campo: 'placa3', rotulo: 'Placa 3', palpites: ['VEICULO2', 'PLACA3'] },
     ],
   },
   modelos_veiculo: {
