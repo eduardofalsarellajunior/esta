@@ -13,15 +13,16 @@ function pad(v, len) {
 
 /**
  * Id do `infDPS` (45 caracteres: "DPS" + município IBGE(7) + tipo de
- * inscrição federal(1, "1"=CNPJ) + CNPJ(14) + série(5) + número(15)) — é o
- * que a assinatura XMLDSig referencia, por isso precisa estar certo.
+ * inscrição federal (1 dígito — "1"=CPF, "2"=CNPJ; invertido do padrão
+ * NFe, que usa 1=CNPJ) + CNPJ(14) + série(5) + número(15)) — é o que a
+ * assinatura XMLDSig referencia, por isso precisa estar certo.
  */
 export function idInfDps({ filial, nota }) {
   const municipio = pad(filial.cod_ibge, 7);
   const cnpj = pad(filial.cnpj, 14);
   const serie = pad(nota.serie, 5);
   const numero = pad(nota.numero_rps, 15);
-  return `DPS${municipio}1${cnpj}${serie}${numero}`;
+  return `DPS${municipio}2${cnpj}${serie}${numero}`;
 }
 
 // Data/hora local de Brasília em ISO com offset explícito. O Brasil não usa
