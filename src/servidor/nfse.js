@@ -7,23 +7,33 @@ import { SignedXml } from 'xml-crypto';
 import { gzipSync } from 'node:zlib';
 import https from 'node:https';
 
-/** Extrai a chave privada (PEM) e o certificado (PEM) de um .pfx (PKCS#12). */
+/**
+ * Extrai a chave privada (PEM) e o certificado (PEM) de um .pfx (PKCS#12).
+ * Certificados A1 de verdade costumam trazer a cadeia inteira (o certificado
+ * do titular + o(s) certificado(s) da AC emissora) dentro do mesmo .pfx — por
+ * isso não basta pegar "o certificado que apareceu no arquivo": tem que ser
+ * o que corresponde à chave privada extraída (mesmo módulo RSA).
+ */
 export function extrairChaveECertificado(pfxBuffer, senha) {
   const asn1 = forge.asn1.fromDer(forge.util.createBuffer(pfxBuffer.toString('binary')));
   const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, senha);
 
   let chave = null;
-  let certificado = null;
+  const certificados = [];
   for (const safeContents of p12.safeContents) {
     for (const safeBag of safeContents.safeBags) {
       if (safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag || safeBag.type === forge.pki.oids.keyBag) {
         chave = safeBag.key;
       } else if (safeBag.type === forge.pki.oids.certBag) {
-        certificado = safeBag.cert;
+        certificados.push(safeBag.cert);
       }
     }
   }
-  if (!chave || !certificado) throw new Error('Não achei chave privada e certificado no .pfx (senha errada ou arquivo inválido).');
+  if (!chave || certificados.length === 0) throw new Error('Não achei chave privada e certificado no .pfx (senha errada ou arquivo inválido).');
+
+  const certificado = certificados.length === 1
+    ? certificados[0]
+    : certificados.find((c) => c.publicKey.n.equals(chave.n)) || certificados[0];
 
   return {
     chavePem: forge.pki.privateKeyToPem(chave),
