@@ -80,9 +80,7 @@ export function gzipBase64(texto) {
 // uma escolha por filial em vez de uma constante fixa.
 const URL_POR_AMBIENTE = {
   homologacao: 'https://preprod-nfse.ima.sp.gov.br/notafiscal-adn-ws/api/adn/dps',
-  // TODO: confirmar a URL de produção do webservice de Campinas/IMA antes de
-  // trocar o ambiente pra produção — ainda não temos essa URL.
-  producao: 'https://sefin.nfse.gov.br/SefinNacional/nfse',
+  producao: 'https://novanfse.campinas.sp.gov.br/notafiscal-adn-ws/api/adn/dps',
 };
 
 /**
