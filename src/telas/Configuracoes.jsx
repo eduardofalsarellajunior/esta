@@ -30,6 +30,7 @@ export default function Configuracoes({ perfil }) {
       endereco: filial.endereco || null,
       numero: filial.numero || null,
       bairro: filial.bairro || null,
+      uf: filial.uf || null,
       cep: filial.cep || null,
       cnpj: filial.cnpj || null,
       inscricao_mun: filial.inscricao_mun || null,
@@ -87,6 +88,12 @@ export default function Configuracoes({ perfil }) {
                   <label>Bairro</label>
                   <input value={filial.bairro || ''} disabled={!podeEditar}
                     onChange={(e) => setFilial({ ...filial, bairro: e.target.value })} />
+                </div>
+                <div className="campo" style={{ width: 70 }}>
+                  <label>UF</label>
+                  <input className="mono" style={{ textTransform: 'uppercase' }} maxLength={2}
+                    value={filial.uf || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, uf: e.target.value.toUpperCase() })} />
                 </div>
                 <div className="campo" style={{ width: 130 }}>
                   <label>CEP</label>

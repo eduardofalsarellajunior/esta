@@ -59,6 +59,7 @@ export function gerarXmlDPS({ nota, filial }) {
     '      <end>',
     '        <endNac>',
     `          <cMun>${esc(municipio)}</cMun>`,
+    `          <UF>${esc(filial.uf || '')}</UF>`,
     `          <CEP>${esc(pad(filial.cep, 8))}</CEP>`,
     '        </endNac>',
     `        <xLgr>${esc(filial.endereco || '')}</xLgr>`,
