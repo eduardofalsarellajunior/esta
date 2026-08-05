@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { ROTAS_OPERADOR } from '../lib/acesso.js';
@@ -29,8 +29,14 @@ const GRUPOS = [
 
 export default function Layout({ perfil }) {
   const [menuAberto, setMenuAberto] = useState(false);
+  const [nomeFilial, setNomeFilial] = useState('');
   const location = useLocation();
   const supervisor = perfil.papel === 'supervisor';
+
+  useEffect(() => {
+    supabase.from('filiais').select('nome_fantasia').maybeSingle()
+      .then(({ data }) => setNomeFilial(data?.nome_fantasia || ''));
+  }, []);
 
   if (!supervisor && !ROTAS_OPERADOR.includes(location.pathname)) {
     return <Navigate to="/" replace />;
@@ -64,6 +70,7 @@ export default function Layout({ perfil }) {
             <button className="menu-toggle btn-ghost" onClick={() => setMenuAberto((v) => !v)} aria-label="Menu">☰</button>
             <span className="filial-nome">{perfil.nome} · {perfil.papel}</span>
           </div>
+          {nomeFilial && <span className="topo-filial-central">{nomeFilial}</span>}
           <button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button>
         </header>
         <div className="container">
