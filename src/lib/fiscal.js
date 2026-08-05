@@ -93,9 +93,11 @@ export function gerarXmlDPS({ nota, filial }) {
     '        <tribMun>',
     '          <tribISSQN>1</tribISSQN>', // 1 = operação tributável (sem exportação/imunidade/exigibilidade suspensa)
     '          <tpRetISSQN>1</tpRetISSQN>', // 1 = não retido (o próprio prestador recolhe)
+    // tribMun termina em pAliq — nem vBC nem vISSQN pertencem aqui (ambos
+    // rejeitados). A ADN provavelmente calcula o ISS a partir da base ×
+    // alíquota; se precisar declarar o valor, deve estar noutro lugar do
+    // esquema (fora de tribMun) — a confirmar no próximo teste.
     `          <pAliq>${Number(nota.aliquota_iss || cfg.perc_iss || 0).toFixed(2)}</pAliq>`,
-    `          <vBC>${Number(nota.valor || 0).toFixed(2)}</vBC>`,
-    `          <vISSQN>${Number(nota.valor_iss || 0).toFixed(2)}</vISSQN>`,
     '        </tribMun>',
     '      </trib>',
     '    </valores>',
