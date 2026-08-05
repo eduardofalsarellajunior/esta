@@ -46,20 +46,22 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
 
 /**
  * Assina o elemento `infDPS` (identificado pelo atributo Id) com XMLDSig:
- * assinatura enveloped, canonicalização C14N padrão, RSA-SHA256/SHA256 (o
- * Sistema Nacional NFS-e é recente — SHA-1 já não é aceito pelo ICP-Brasil
- * pra assinaturas novas). A assinatura é anexada como último filho de `DPS`.
+ * assinatura enveloped, canonicalização C14N padrão, RSA-SHA1/SHA1 — é o que
+ * a documentação do padrão de assinatura das notas fiscais brasileiras
+ * descreve (junto com EndCertOnly, ver extrairChaveECertificado). Testei
+ * RSA-SHA256 antes por suposição; voltando ao documentado. A assinatura é
+ * anexada como último filho de `DPS`.
  */
 export function assinarXmlDps(xml, { chavePem, certPem }) {
   const sig = new SignedXml({
     privateKey: chavePem,
     publicCert: certPem,
-    signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
     canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
   });
   sig.addReference({
     xpath: "//*[local-name(.)='infDPS']",
-    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
