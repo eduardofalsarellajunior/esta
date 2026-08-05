@@ -70,7 +70,10 @@ export function gerarXmlDPS({ nota, filial }) {
     '      </regTrib>',
     '    </prest>',
     '    <toma>',
-    `      <${tagDoc}>${esc(doc)}</${tagDoc}>`,
+    // Sem CPF/CNPJ (cliente avulso sem documento capturado — comum em
+    // estacionamento): não manda a tag vazia, o esquema rejeita ('' não
+    // casa com o padrão de CPF/CNPJ).
+    ...(doc ? [`      <${tagDoc}>${esc(doc)}</${tagDoc}>`] : []),
     `      <xNome>${esc(tomador.nome || 'CONSUMIDOR')}</xNome>`,
     '    </toma>',
     '    <serv>',
