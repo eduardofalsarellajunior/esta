@@ -99,6 +99,10 @@ export function gerarXmlDPS({ nota, filial }) {
     // esquema (fora de tribMun) — a confirmar no próximo teste.
     `          <pAliq>${Number(nota.aliquota_iss || cfg.perc_iss || 0).toFixed(2)}</pAliq>`,
     '        </tribMun>',
+    '        <tribFed/>', // sem retenção federal — mas o bloco precisa existir mesmo vazio
+    '        <totTrib>',
+    '          <pTotTrib>0.00</pTotTrib>', // aproximado da Lei da Transparência — a confirmar
+    '        </totTrib>',
     '      </trib>',
     '    </valores>',
     '  </infDPS>',
