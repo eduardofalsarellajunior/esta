@@ -34,15 +34,13 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
   const certificado = certificados.length === 1
     ? certificados[0]
     : certificados.find((c) => c.publicKey.n.equals(chave.n)) || certificados[0];
-  // Resto da cadeia (AC emissora etc.) — alguns validadores (ex.: webservice
-  // de Campinas/IMA) exigem a cadeia completa no KeyInfo, não só o
-  // certificado do titular. O xml-crypto aceita várias certificados PEM
-  // concatenados em `publicCert` e extrai todos.
-  const cadeia = [certificado, ...certificados.filter((c) => c !== certificado)];
+  // O padrão de assinatura das notas fiscais brasileiras é "EndCertOnly":
+  // só o certificado do titular vai na assinatura, nunca a cadeia da AC
+  // (tentei incluir a cadeia inteira antes, mas o padrão exige o contrário).
 
   return {
     chavePem: forge.pki.privateKeyToPem(chave),
-    certPem: cadeia.map((c) => forge.pki.certificateToPem(c)).join('\n'),
+    certPem: forge.pki.certificateToPem(certificado),
   };
 }
 
