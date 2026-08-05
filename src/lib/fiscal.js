@@ -54,7 +54,7 @@ export function gerarXmlDPS({ nota, filial }) {
     `    <cLocEmi>${esc(municipio)}</cLocEmi>`,
     '    <prest>',
     `      <CNPJ>${esc((filial.cnpj || '').replace(/\D/g, ''))}</CNPJ>`,
-    `      <IM>${esc(filial.inscricao_mun || '')}</IM>`,
+    `      <IM>${esc((filial.inscricao_mun || '').replace(/\D/g, ''))}</IM>`,
     `      <xNome>${esc(filial.razao_social)}</xNome>`,
     '      <end>',
     '        <endNac>',
