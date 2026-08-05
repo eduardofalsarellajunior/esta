@@ -65,12 +65,12 @@ export default function Layout({ perfil }) {
       </aside>
       {menuAberto && <div className="menu-fundo" onClick={() => setMenuAberto(false)} />}
       <main className="conteudo">
+        {nomeFilial && <div className="topo-filial">{nomeFilial}</div>}
         <header className="topo">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button className="menu-toggle btn-ghost" onClick={() => setMenuAberto((v) => !v)} aria-label="Menu">☰</button>
             <span className="filial-nome">{perfil.nome} · {perfil.papel}</span>
           </div>
-          {nomeFilial && <span className="topo-filial-central">{nomeFilial}</span>}
           <button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button>
         </header>
         <div className="container">
