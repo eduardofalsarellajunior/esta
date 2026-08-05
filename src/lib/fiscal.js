@@ -83,6 +83,7 @@ export function gerarXmlDPS({ nota, filial }) {
     '      </locPrest>',
     '      <cServ>',
     `        <cTribNac>${esc(cfg.codTribNacional || '')}</cTribNac>`,
+    ...(cfg.codTribMunicipal ? [`        <cTribMun>${esc(cfg.codTribMunicipal)}</cTribMun>`] : []),
     `        <xDescServ>${esc(nota.descricao || 'Estacionamento de veículo')}</xDescServ>`,
     '      </cServ>',
     '    </serv>',

@@ -142,6 +142,14 @@ export default function Configuracoes({ perfil }) {
                   sistema antigo (DSF) já usava. Não é o CNAE.
                 </span>
               </div>
+              <div className="campo" style={{ maxWidth: 160 }}>
+                <label>Código de tributação municipal</label>
+                <input value={filial.config?.nfse?.codTribMunicipal || ''} disabled={!podeEditar}
+                  maxLength={3} onChange={(e) => setNfse('codTribMunicipal', e.target.value)} />
+                <span className="suave" style={{ fontSize: 11 }}>
+                  3 dígitos, exigido por Campinas além do código nacional — confirme com o contador.
+                </span>
+              </div>
               <div className="campo" style={{ maxWidth: 120 }}>
                 <label>% ISS</label>
                 <input type="number" step="0.0001" min="0" value={filial.config?.nfse?.perc_iss ?? ''} disabled={!podeEditar}
