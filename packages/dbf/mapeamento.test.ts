@@ -17,6 +17,18 @@ test('sugerirMapeamento: sem campo correspondente -> null (não trava, fica pra 
   assert.equal(mapa.nome, null);
 });
 
+test('sugerirMapeamento + converterLinha: formas de pagamento (ESTAPGTO)', () => {
+  const colunas = DESTINOS.formas_pagamento.colunas;
+  const mapa = sugerirMapeamento(colunas, ['CODIGO', 'DESCRICAO', 'PERCPGTO', 'RPSSEMPRE']);
+  const linha = converterLinha({ CODIGO: 'D', DESCRICAO: 'DINHEIRO', PERCPGTO: 0, RPSSEMPRE: 'S' }, colunas, mapa);
+  assert.equal(linha.codigo, 'D');
+  assert.equal(linha.descricao, 'DINHEIRO');
+  assert.equal(linha.rps_sempre, true);
+  // eh_dinheiro sem campo correspondente no dbf -> cai no padrão (false), não trava a importação
+  assert.equal(linha.eh_dinheiro, false);
+  assert.equal(linha.ativo, true);
+});
+
 test('paraBool: aceita S/N, T/F, boolean já pronto e ignora o resto', () => {
   assert.equal(paraBool('S'), true);
   assert.equal(paraBool('n'), false);

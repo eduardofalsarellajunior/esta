@@ -72,6 +72,19 @@ export const DESTINOS: Record<string, Destino> = {
     ],
     placas: [],
   },
+  formas_pagamento: {
+    rotulo: 'Formas de pagamento',
+    tabela: 'formas_pagamento',
+    colunas: [
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true, palpites: ['CODIGO'] },
+      { campo: 'descricao', rotulo: 'Descrição', obrigatorio: true, palpites: ['DESCRICAO', 'DESC', 'NOME'] },
+      { campo: 'perc_ajuste', rotulo: 'Ajuste % (acréscimo/desconto)', tipo: 'number', palpites: ['PERCPGTO'], padrao: 0 },
+      { campo: 'eh_dinheiro', rotulo: 'É dinheiro físico', tipo: 'bool', palpites: ['DINHEIRO'], padrao: false },
+      { campo: 'rps_sempre', rotulo: 'Sempre gera RPS/NFS-e', tipo: 'bool', palpites: ['RPSSEMPRE'], padrao: false },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
+    ],
+    placas: [],
+  },
 };
 
 /** Mapeamento automático: pra cada coluna de destino, acha o primeiro campo do dbf cujo nome bate com um dos palpites (case-insensitive). */
