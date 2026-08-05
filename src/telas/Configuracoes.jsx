@@ -145,9 +145,9 @@ export default function Configuracoes({ perfil }) {
               <div className="campo" style={{ maxWidth: 160 }}>
                 <label>Código de tributação municipal</label>
                 <input value={filial.config?.nfse?.codTribMunicipal || ''} disabled={!podeEditar}
-                  maxLength={3} onChange={(e) => setNfse('codTribMunicipal', e.target.value)} />
+                  maxLength={4} onChange={(e) => setNfse('codTribMunicipal', e.target.value)} />
                 <span className="suave" style={{ fontSize: 11 }}>
-                  3 dígitos, exigido por Campinas além do código nacional — confirme com o contador.
+                  4 dígitos, exigido por Campinas além do código nacional — confirme com o contador.
                 </span>
               </div>
               <div className="campo" style={{ maxWidth: 120 }}>
