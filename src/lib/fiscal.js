@@ -91,9 +91,10 @@ export function gerarXmlDPS({ nota, filial }) {
     '      </vServPrest>',
     '      <trib>',
     '        <tribMun>',
-    '          <tribISSQN>1</tribISSQN>', // 1 = operação tributável (caso normal, sem exportação/imunidade/exigibilidade suspensa)
-    `          <pAliqAplic>${Number(nota.aliquota_iss || cfg.perc_iss || 0).toFixed(4)}</pAliqAplic>`,
-    `          <vISS>${Number(nota.valor_iss || 0).toFixed(2)}</vISS>`,
+    '          <tribISSQN>1</tribISSQN>', // 1 = operação tributável (sem exportação/imunidade/exigibilidade suspensa)
+    '          <tpRetISSQN>1</tpRetISSQN>', // 1 = não retido (o próprio prestador recolhe)
+    `          <pAliq>${Number(nota.aliquota_iss || cfg.perc_iss || 0).toFixed(4)}</pAliq>`,
+    `          <vISSQN>${Number(nota.valor_iss || 0).toFixed(2)}</vISSQN>`,
     '        </tribMun>',
     '      </trib>',
     '    </valores>',
