@@ -70,10 +70,10 @@ export function gerarXmlDPS({ nota, filial }) {
     '      </regTrib>',
     '    </prest>',
     '    <toma>',
-    // Sem CPF/CNPJ (cliente avulso sem documento capturado — comum em
-    // estacionamento): não manda a tag vazia, o esquema rejeita ('' não
-    // casa com o padrão de CPF/CNPJ).
-    ...(doc ? [`      <${tagDoc}>${esc(doc)}</${tagDoc}>`] : []),
+    // Identificação é uma escolha obrigatória: CNPJ | CPF | NIF | cNaoNIF.
+    // Sem documento (cliente avulso, comum em estacionamento) usa cNaoNIF=2
+    // ("não exigibilidade do NIF") em vez de mandar CPF/CNPJ vazio.
+    ...(doc ? [`      <${tagDoc}>${esc(doc)}</${tagDoc}>`] : ['      <cNaoNIF>2</cNaoNIF>']),
     `      <xNome>${esc(tomador.nome || 'CONSUMIDOR')}</xNome>`,
     '    </toma>',
     '    <serv>',
