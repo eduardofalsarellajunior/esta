@@ -73,8 +73,15 @@ export function gzipBase64(texto) {
   return gzipSync(Buffer.from(texto, 'utf-8')).toString('base64');
 }
 
+// Campinas ainda não usa o endpoint nacional compartilhado (sefin.nfse.gov.br)
+// — mantém webservice próprio (hospedado pela IMA), seguindo o mesmo padrão
+// nacional de API (é o que o erro E0039 sinalizava). Se um dia atender outra
+// filial/município que já esteja no endpoint nacional, isso precisa virar
+// uma escolha por filial em vez de uma constante fixa.
 const URL_POR_AMBIENTE = {
-  homologacao: 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse',
+  homologacao: 'https://preprod-nfse.ima.sp.gov.br/notafiscal-adn-ws/api/adn/dps',
+  // TODO: confirmar a URL de produção do webservice de Campinas/IMA antes de
+  // trocar o ambiente pra produção — ainda não temos essa URL.
   producao: 'https://sefin.nfse.gov.br/SefinNacional/nfse',
 };
 
