@@ -34,10 +34,15 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
   const certificado = certificados.length === 1
     ? certificados[0]
     : certificados.find((c) => c.publicKey.n.equals(chave.n)) || certificados[0];
+  // Resto da cadeia (AC emissora etc.) — alguns validadores (ex.: webservice
+  // de Campinas/IMA) exigem a cadeia completa no KeyInfo, não só o
+  // certificado do titular. O xml-crypto aceita várias certificados PEM
+  // concatenados em `publicCert` e extrai todos.
+  const cadeia = [certificado, ...certificados.filter((c) => c !== certificado)];
 
   return {
     chavePem: forge.pki.privateKeyToPem(chave),
-    certPem: forge.pki.certificateToPem(certificado),
+    certPem: cadeia.map((c) => forge.pki.certificateToPem(c)).join('\n'),
   };
 }
 
