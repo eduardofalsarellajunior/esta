@@ -101,7 +101,9 @@ export function gerarXmlDPS({ nota, filial }) {
     '        </tribMun>',
     '        <tribFed/>', // sem retenção federal — mas o bloco precisa existir mesmo vazio
     '        <totTrib>',
-    '          <pTotTrib>0.00</pTotTrib>', // aproximado da Lei da Transparência — a confirmar
+    '          <pTotTrib>',
+    '            <pTotTribFed>0.00</pTotTribFed>', // aproximado da Lei da Transparência — a confirmar
+    '          </pTotTrib>',
     '        </totTrib>',
     '      </trib>',
     '    </valores>',
