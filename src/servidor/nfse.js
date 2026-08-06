@@ -50,10 +50,10 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
  * RSA-SHA1/SHA1 — é o que a documentação do padrão de assinatura das notas
  * fiscais brasileiras descreve (junto com EndCertOnly, ver
  * extrairChaveECertificado). Testei RSA-SHA256 antes por suposição; voltando
- * ao documentado. A assinatura é anexada como último filho do elemento
- * assinado. Genérico o bastante pra assinar `infDPS` (Padrão Nacional) ou,
- * em duas chamadas encadeadas, `InfDeclaracaoPrestacaoServico` e depois
- * `LoteRps` (ABRASF — ver `assinarLoteAbrasf`).
+ * ao documentado. A assinatura é inserida como irmã, logo depois do elemento
+ * assinado (então "último filho" do pai dele). Genérico o bastante pra
+ * assinar `infDPS` (Padrão Nacional) ou `LoteRps` (ABRASF — ver
+ * `assinarLoteAbrasf`).
  */
 function assinarElementoPorLocalName(xml, { localName, chavePem, certPem }) {
   const xpath = `//*[local-name(.)='${localName}']`;
@@ -80,18 +80,16 @@ export function assinarXmlDps(xml, { chavePem, certPem }) {
 }
 
 /**
- * ABRASF exige assinatura em dois passos (manual de integração 2.03, §3.2.3):
- * primeiro o RPS isoladamente (`InfDeclaracaoPrestacaoServico`), depois o
- * lote inteiro já com o RPS assinado dentro (`LoteRps`) — cada assinatura
- * cobre um escopo maior que a anterior. Se a IMA rejeitar por causa da
- * assinatura dupla (thread do grupo wsnfsecampinas sugere que só o lote
- * precisaria), é so parar de assinar o RPS isoladamente — ajuste pequeno e
- * reversível, mesmo padrão já usado pro Padrão Nacional (ver comentários de
- * `extrairChaveECertificado`).
+ * O manual ABRASF 2.03 genérico (§3.2.3) descreve assinatura em dois passos
+ * (RPS isolado, depois o lote) — mas a IMA rejeitou isso em teste real
+ * ("Arquivo enviado com erro na assinatura"), e a thread do grupo
+ * wsnfsecampinas é específica sobre Campinas: pra envio em lote
+ * (`RecepcionarLoteRps`), assina-se só `LoteRps` — não
+ * `InfDeclaracaoPrestacaoServico` isoladamente (isso seria só pro envio de
+ * RPS único, método `GerarNfse`, que este app não usa).
  */
 export function assinarLoteAbrasf(xmlLote, { chavePem, certPem }) {
-  const comRpsAssinado = assinarElementoPorLocalName(xmlLote, { localName: 'InfDeclaracaoPrestacaoServico', chavePem, certPem });
-  return assinarElementoPorLocalName(comRpsAssinado, { localName: 'LoteRps', chavePem, certPem });
+  return assinarElementoPorLocalName(xmlLote, { localName: 'LoteRps', chavePem, certPem });
 }
 
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */
