@@ -7,3 +7,5 @@ dist/
 
 # Seeds com dados pessoais (PII) — nunca versionar
 supabase/seed/local/
+.vercel
+.env*

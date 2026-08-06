@@ -144,10 +144,19 @@ seed/local/seed_cadastros.sql  mensalistas + clientes (PII, à parte)
 **Estado:** `0001`/`0002` e o seed de referência **aplicados**. `0003`–`0005`:
 confirmar se já foram aplicados na nuvem (necessários para Caixa/Financeiro/Fiscal).
 
-### Regras do fluxo Supabase (MANUAL)
-- O Code **escreve** SQL/migrations e **explica em português**; **não executa**.
-  O Eduardo roda no SQL Editor. Cuidado redobrado com scripts destrutivos e com o
-  motor de tarifação (afeta cobrança real).
+### Regras do fluxo Supabase
+- **Desde 2026-08-05:** o Eduardo optou por dar ao Code **acesso direto (leitura e
+  escrita)** à base, via MCP oficial da Supabase (`@supabase/mcp-server-supabase`),
+  configurado por máquina com um Personal Access Token (não vem pelo git — precisa
+  ser registrado de novo em cada máquina nova, ver instruções de conexão dadas na
+  sessão em que essa decisão foi tomada).
+- **Se o MCP não estiver conectado nesta sessão** (ex.: máquina nova, token não
+  configurado ainda): volta ao fluxo manual — o Code escreve SQL/migrations e
+  explica em português; o Eduardo roda no SQL Editor.
+- **Mesmo com acesso direto**, cuidado redobrado com scripts destrutivos e com o
+  motor de tarifação (afeta cobrança real): confirmar com o Eduardo antes de rodar
+  qualquer coisa destrutiva ou alteração em produção, mesmo tendo a capacidade
+  técnica de executar direto.
 - Para criar um usuário do app: criar em *Authentication* e inserir em `perfis`
   (`id` do usuário, `filial_id` da filial, `papel` = `supervisor`/`operador`).
 
@@ -215,3 +224,8 @@ acerto exato em P/2023 mesmo-dia). O motor está correto; o resto é explicável
   Environment Variables da Vercel). Confirmar antes de push, salvo autorização explícita.
 - **Antes de concluir:** garantir `npm run build` (Vite) e `npm test` (motor) verdes.
 - **Windows/CRLF:** o git avisa sobre normalização LF→CRLF — inofensivo.
+- **GitHub/Vercel:** o Code pode ter `gh` CLI e `vercel` CLI autenticados localmente
+  (configuração por máquina, não vem pelo git) para consultar PRs/issues/Actions e
+  deploys/logs diretamente. Push pra `main` continua exigindo confirmação antes,
+  mesmo com CLI conectada — ver regra de Supabase (§5) para o mesmo princípio
+  aplicado ao banco.
