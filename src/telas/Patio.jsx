@@ -8,6 +8,7 @@ import { TicketModal } from '../componentes/Ticket.jsx';
 import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
 import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
+import { gerarXmlDPS, proximoNumeroRps } from '../lib/fiscal.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
 const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
@@ -42,6 +43,7 @@ export default function Patio({ perfil }) {
   const [modalServicos, setModalServicos] = useState(null); // { mov, marcados: Set<servico_id> }
   const [movimentosComServico, setMovimentosComServico] = useState(new Set());
   const [modalExclusao, setModalExclusao] = useState(null); // { mov, motivo }
+  const [modalDps, setModalDps] = useState(null); // { documento, nome }
   const [agora, setAgora] = useState(() => Date.now());
   const [abrirRecebimento, setAbrirRecebimento] = useState(false); // fluxo de "Receber mensalidade" (menu ⋮)
   const [caixaAberto, setCaixaAberto] = useState(null);
@@ -407,7 +409,31 @@ export default function Patio({ perfil }) {
     } catch (e) { setErro(e.message); }
   }
 
-  async function confirmarSaida() {
+  // Busca a filial completa (o `filial` do state só tem os campos do
+  // cabeçalho do ticket) e grava o DPS ligado a este movimento.
+  async function criarNotaFiscal(mov, competencia, resultado, tomador) {
+    const { data: filialCompleta, error: errFilial } = await supabase.from('filiais').select('*').eq('id', perfil.filial_id).maybeSingle();
+    if (errFilial || !filialCompleta) { setErro(errFilial?.message || 'Filial não encontrada para gerar o DPS.'); return; }
+    const cfg = filialCompleta.config?.nfse || {};
+    const serie = cfg.serie || '1';
+    const numero = await proximoNumeroRps(supabase, perfil.filial_id, serie);
+    const nota = {
+      filial_id: perfil.filial_id, movimento_id: mov.id, numero_rps: numero, serie,
+      competencia, descricao: 'Estacionamento de veículo',
+      valor: Number(resultado.valor), aliquota_iss: Number(cfg.perc_iss || 0),
+      valor_iss: Number((Number(resultado.valor) * Number(cfg.perc_iss || 0) / 100).toFixed(2)),
+      tomador, status: 'gerada',
+    };
+    nota.xml = gerarXmlDPS({ nota, filial: filialCompleta });
+    const { error } = await supabase.from('notas_fiscais').insert(nota);
+    if (error) setErro(error.message);
+  }
+
+  function abrirModalDps() {
+    setModalDps({ documento: '', nome: '' });
+  }
+
+  async function confirmarSaida(tomadorDps) {
     const { mov, resultado, pagamentos, convenioCodigo } = saindo;
     const dtSaida = hojeISO();
     const hrSaida = agoraHHMM();
@@ -430,6 +456,9 @@ export default function Patio({ perfil }) {
 
     // Fidelidade (best-effort).
     if (!resultado.mensalista) await atualizarFidelidade(mov.placa, resultado.pontos);
+
+    if (tomadorDps) await criarNotaFiscal(mov, dtSaida, resultado, tomadorDps);
+    setModalDps(null);
 
     const formaTexto = resultado.mensalista ? 'Mensalista/hóspede'
       : (pagos.map((p) => formas.find((f) => f.codigo === p.forma)?.descricao || p.forma).join(' + ') || '—');
@@ -717,7 +746,12 @@ export default function Patio({ perfil }) {
       {saindo && (
         <div className="modal-bg" onClick={() => setSaindo(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Saída — <span className="placa mono">{saindo.mov.placa}</span></h2>
+            <div className="card-cab">
+              <h2>Saída — <span className="placa mono">{saindo.mov.placa}</span></h2>
+              {!saindo.resultado.mensalista && saindo.resultado.valor > 0 && (
+                <CardAcoes acoes={[{ label: 'Gerar DPS', onClick: abrirModalDps }]} />
+              )}
+            </div>
             {!saindo.resultado.mensalista && (
               <div className="campo" style={{ marginBottom: 10 }}>
                 <label>Convênio (opcional — em branco cobra normal)</label>
@@ -768,7 +802,43 @@ export default function Patio({ perfil }) {
             {saindo.resultado.manual && <p className="aviso">Tempo fora das faixas — confira o valor.</p>}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={() => setSaindo(null)}>Cancelar</button>
-              <button className="btn-primary" onClick={confirmarSaida}>Confirmar saída</button>
+              <button className="btn-primary" onClick={() => confirmarSaida()}>Confirmar saída</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalDps && (
+        <div className="modal-bg" onClick={() => setModalDps(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Gerar DPS — <span className="placa mono">{saindo?.mov.placa}</span></h2>
+            <p className="suave">
+              Informe o CPF ou CNPJ do tomador do serviço. Deixe em branco para emitir
+              sem identificação (usa não exigibilidade do NIF).
+            </p>
+            <div className="campo">
+              <label>CPF/CNPJ (opcional)</label>
+              <input className="mono" value={modalDps.documento}
+                onChange={(e) => setModalDps({ ...modalDps, documento: e.target.value })}
+                placeholder="Deixe em branco para não identificar" />
+              {modalDps.documento.replace(/\D/g, '').length > 0 && (
+                <span className="suave" style={{ fontSize: 11 }}>
+                  {modalDps.documento.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'} detectado
+                </span>
+              )}
+            </div>
+            <div className="campo">
+              <label>Nome / Razão social (opcional)</label>
+              <input value={modalDps.nome}
+                onChange={(e) => setModalDps({ ...modalDps, nome: e.target.value })}
+                placeholder="Em branco vira &quot;CONSUMIDOR&quot; no documento" />
+            </div>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setModalDps(null)}>Cancelar</button>
+              <button className="btn-primary"
+                onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome })}>
+                Confirmar saída e gerar DPS
+              </button>
             </div>
           </div>
         </div>

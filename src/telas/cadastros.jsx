@@ -40,7 +40,7 @@ export function Formas({ perfil }) {
       { campo: 'descricao', rotulo: 'Descrição', obrigatorio: true },
       { campo: 'perc_ajuste', rotulo: '% ajuste', tipo: 'number' },
       { campo: 'eh_dinheiro', rotulo: 'É dinheiro', tipo: 'bool' },
-      { campo: 'rps_sempre', rotulo: 'RPS sempre', tipo: 'bool', naTabela: false },
+      { campo: 'rps_sempre', rotulo: 'RPS/DPS sempre', tipo: 'bool', naTabela: false },
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
     ]} />;
 }

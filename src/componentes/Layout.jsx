@@ -19,7 +19,7 @@ const GRUPOS = [
     { to: '/importar', rotulo: 'Importar do legado (.dbf)' },
   ]},
   { titulo: 'Fiscal', itens: [
-    { to: '/fiscal', rotulo: 'NFS-e / RPS' },
+    { to: '/fiscal', rotulo: 'NFS-e / RPS/DPS' },
   ]},
   { titulo: 'Configurações', itens: [
     { to: '/configuracoes', rotulo: 'Dados do estacionamento' },
