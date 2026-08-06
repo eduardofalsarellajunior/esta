@@ -35,12 +35,19 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
     ? certificados[0]
     : certificados.find((c) => c.publicKey.n.equals(chave.n)) || certificados[0];
   // O padrão de assinatura das notas fiscais brasileiras é "EndCertOnly":
-  // só o certificado do titular vai na assinatura, nunca a cadeia da AC
-  // (tentei incluir a cadeia inteira antes, mas o padrão exige o contrário).
+  // só o certificado do titular vai na assinatura, nunca a cadeia da AC —
+  // confirmado pro Padrão Nacional (`certPem`, usado por assinarXmlDps).
+  // Pro ABRASF a IMA segue rejeitando com "erro na assinatura" mesmo com
+  // isso certo estruturalmente (algoritmos, Id, URI); `certPemCadeia`
+  // (titular + AC) existe pra testar a hipótese oposta nesse caso
+  // específico — ver assinarLoteAbrasf/assinarConsultaAbrasf.
+  const outrosCertificados = certificados.filter((c) => c !== certificado);
+  const certPemCadeia = [certificado, ...outrosCertificados].map((c) => forge.pki.certificateToPem(c)).join('\n');
 
   return {
     chavePem: forge.pki.privateKeyToPem(chave),
     certPem: forge.pki.certificateToPem(certificado),
+    certPemCadeia,
   };
 }
 
@@ -93,9 +100,14 @@ export function assinarXmlDps(xml, { chavePem, certPem }) {
  * (`RecepcionarLoteRps`), assina-se só `LoteRps` — não
  * `InfDeclaracaoPrestacaoServico` isoladamente (isso seria só pro envio de
  * RPS único, método `GerarNfse`, que este app não usa).
+ *
+ * Usa `certPemCadeia` (titular + AC), não `certPem` sozinho — testando a
+ * hipótese de que o validador ABRASF da IMA quer a cadeia completa no
+ * KeyInfo, ao contrário do Padrão Nacional (EndCertOnly). Ver
+ * extrairChaveECertificado.
  */
-export function assinarLoteAbrasf(xmlLote, { chavePem, certPem }) {
-  return assinarElementoPorLocalName(xmlLote, { localName: 'LoteRps', chavePem, certPem });
+export function assinarLoteAbrasf(xmlLote, { chavePem, certPemCadeia }) {
+  return assinarElementoPorLocalName(xmlLote, { localName: 'LoteRps', chavePem, certPem: certPemCadeia });
 }
 
 /**
@@ -107,11 +119,12 @@ export function assinarLoteAbrasf(xmlLote, { chavePem, certPem }) {
  * namespace" — o que já é como `gerarXmlAbrasfConsulta` monta o XML
  * (`xmlns=""` no `ConsultarLoteRpsEnvio`).
  */
-export function assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem }) {
+export function assinarConsultaAbrasf(xmlConsulta, { chavePem, certPemCadeia }) {
   // action: 'append' — ConsultarLoteRpsEnvio é a raiz do documento, a
   // assinatura tem que ser filha dela, não irmã depois (ver comentário de
-  // assinarElementoPorLocalName).
-  return assinarElementoPorLocalName(xmlConsulta, { localName: 'ConsultarLoteRpsEnvio', chavePem, certPem, action: 'append' });
+  // assinarElementoPorLocalName). certPemCadeia: mesma hipótese de
+  // assinarLoteAbrasf (cadeia completa, não EndCertOnly).
+  return assinarElementoPorLocalName(xmlConsulta, { localName: 'ConsultarLoteRpsEnvio', chavePem, certPem: certPemCadeia, action: 'append' });
 }
 
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */
