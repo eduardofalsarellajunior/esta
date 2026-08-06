@@ -9,7 +9,7 @@
 //   NFSE_CERTIFICADO_SENHA                       (senha do .pfx)
 import { createClient } from '@supabase/supabase-js';
 import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta } from '../src/lib/fiscal.js';
-import { extrairChaveECertificado, assinarXmlDps, enviarDps, assinarLoteAbrasf, enviarAbrasf } from '../src/servidor/nfse.js';
+import { extrairChaveECertificado, assinarXmlDps, enviarDps, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -64,6 +64,20 @@ export default async function handler(req, res) {
       // erro) só sai depois, via ConsultarLoteRps (api/consultar-nfse.js).
       const xml = gerarXmlAbrasfLoteRps({ nota, filial });
       const xmlAssinado = assinarLoteAbrasf(xml, { chavePem, certPem });
+
+      // Diagnóstico: confere a própria assinatura antes de gastar uma
+      // chamada real pra IMA — se isso falhar, o bug é daqui (não do
+      // validador deles). Ver comentário de autoverificarAssinatura.
+      const autoverificacao = autoverificarAssinatura(xmlAssinado);
+      if (!autoverificacao.valido) {
+        await supabase.from('notas_fiscais').update({
+          status: 'erro', xml: xmlAssinado,
+          retorno: `Autoverificação da assinatura falhou (bug local, não chegou a mandar pra prefeitura): ${autoverificacao.erro || 'checkSignature retornou false'}`,
+        }).eq('id', nota.id);
+        res.status(200).json({ ok: false, status: 'erro', erro: 'Autoverificação da assinatura falhou — veja o retorno.', ambiente });
+        return;
+      }
+
       const resposta = await enviarAbrasf({ metodo: 'RecepcionarLoteRps', xmlNegocio: xmlAssinado, ambiente, pfxBuffer, senha });
       const parsed = parseAbrasfEnvioResposta(resposta.corpo);
 

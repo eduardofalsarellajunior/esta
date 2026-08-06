@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.10",
+    "@xmldom/xmldom": "^0.8.10",
     "node-forge": "^1.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.4",
-    "xml-crypto": "^6.1.2"
+    "xml-crypto": "^6.1.2",
+    "xpath": "^0.0.33"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

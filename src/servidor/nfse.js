@@ -4,6 +4,8 @@
 // O certificado (.pfx) e a senha vêm de variável de ambiente, nunca do app.
 import forge from 'node-forge';
 import { SignedXml } from 'xml-crypto';
+import { DOMParser } from '@xmldom/xmldom';
+import xpath from 'xpath';
 import { gzipSync } from 'node:zlib';
 import https from 'node:https';
 
@@ -102,6 +104,36 @@ export function assinarXmlDps(xml, { chavePem, certPem }) {
  */
 export function assinarLoteAbrasf(xmlLote, { chavePem, certPem }) {
   return assinarElementoPorLocalName(xmlLote, { localName: 'LoteRps', chavePem, certPem });
+}
+
+/**
+ * Confere a própria assinatura de um XML já assinado — igual um verificador
+ * de terceiros faria: reextrai o certificado do KeyInfo (não usa
+ * `chavePem`/`certPem` do app), recalcula o digest de cada Reference e
+ * confere a SignatureValue. Serve pra descobrir se um "erro na assinatura"
+ * que o governo devolve é um bug real daqui (a autoverificação também
+ * falharia) ou algo específico do validador deles (a autoverificação passa
+ * mesmo assim).
+ */
+export function autoverificarAssinatura(xmlAssinado) {
+  try {
+    const doc = new DOMParser().parseFromString(xmlAssinado);
+    // checkSignature não acha o <Signature> sozinho a partir só da string —
+    // precisa localizar o nó primeiro (loadSignature) antes de conferir.
+    const signatureNode = xpath.select1("//*[local-name(.)='Signature']", doc);
+    if (!signatureNode) return { valido: false, erro: 'Nenhum <Signature> encontrado no XML.' };
+    // getCertFromKeyInfo precisa ser habilitado explicitamente (não é o
+    // padrão da lib, por segurança) pra extrair o certificado embutido no
+    // KeyInfo em vez de exigir um publicCert já conhecido de antemão — é
+    // assim que um verificador de terceiros faria, sem conhecer o
+    // certificado previamente.
+    const sig = new SignedXml({ getCertFromKeyInfo: SignedXml.getCertFromKeyInfo });
+    sig.loadSignature(signatureNode);
+    const valido = sig.checkSignature(xmlAssinado);
+    return { valido };
+  } catch (e) {
+    return { valido: false, erro: String(e?.message || e) };
+  }
 }
 
 // ConsultarLoteRps NÃO é assinado — o manual (§4.5.6) define
