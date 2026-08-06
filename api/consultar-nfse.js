@@ -4,7 +4,7 @@
 // (mTLS) do envio; ver api/gerar-nfse.js.
 import { createClient } from '@supabase/supabase-js';
 import { gerarXmlAbrasfConsulta, parseAbrasfConsultaResposta } from '../src/lib/fiscal.js';
-import { extrairChaveECertificado, enviarAbrasf } from '../src/servidor/nfse.js';
+import { extrairChaveECertificado, enviarAbrasf, assinarConsultaAbrasf } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -41,11 +41,15 @@ export default async function handler(req, res) {
 
   try {
     const pfxBuffer = Buffer.from(pfxB64, 'base64');
-    // A consulta não precisa de assinatura XMLDSig (o exemplo real do
-    // Eduardo não tem `<Signature>`) — só mTLS com o certificado mesmo.
-    extrairChaveECertificado(pfxBuffer, senha); // valida cedo se a senha/pfx estão certos
+    const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
+    // A consulta também precisa vir assinada (confirmado testando de
+    // verdade — sem assinatura a IMA rejeita com "Arquivo enviado com erro
+    // na assinatura"), mesmo o exemplo do Eduardo e o schema (minOccurs=0)
+    // sugerindo que seria opcional. Ver comentário de `assinarConsultaAbrasf`.
     const xmlConsulta = gerarXmlAbrasfConsulta({ filial, protocolo: nota.lote });
-    const resposta = await enviarAbrasf({ metodo: 'ConsultarLoteRps', xmlNegocio: xmlConsulta, ambiente, pfxBuffer, senha });
+    const xmlAssinado = assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem });
+    const resposta = await enviarAbrasf({ metodo: 'ConsultarLoteRps', xmlNegocio: xmlAssinado, ambiente, pfxBuffer, senha });
+    const ehFalhaTransporte = resposta.status < 200 || resposta.status >= 300 || resposta.corpo.includes('<soap:Fault>');
     const parsed = parseAbrasfConsultaResposta(resposta.corpo);
 
     if (parsed.situacao === 4 && parsed.numeroNfse) {
@@ -53,7 +57,12 @@ export default async function handler(req, res) {
         status: 'autorizada', numero_nfse: parsed.numeroNfse, retorno: resposta.corpo,
       }).eq('id', nota.id);
       res.status(200).json({ ok: true, status: 'autorizada', numeroNfse: parsed.numeroNfse, codigoVerificacao: parsed.codigoVerificacao, ambiente });
-    } else if (parsed.situacao === 3) {
+    } else if (parsed.situacao === 3 || ehFalhaTransporte) {
+      // situacao 3 = processado com erro; ehFalhaTransporte = a própria
+      // consulta falhou (soap:Fault) — os dois são erro real, não "ainda
+      // processando" (bug corrigido: antes um soap:Fault na consulta caía
+      // no "else" de baixo e ficava mostrando "ainda processando" pro
+      // operador, escondendo o erro de verdade).
       await supabase.from('notas_fiscais').update({ status: 'erro', retorno: resposta.corpo }).eq('id', nota.id);
       res.status(200).json({ ok: false, status: 'erro', retorno: resposta.corpo, mensagens: parsed.mensagens, ambiente });
     } else {

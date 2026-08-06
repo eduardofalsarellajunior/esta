@@ -92,6 +92,19 @@ export function assinarLoteAbrasf(xmlLote, { chavePem, certPem }) {
   return assinarElementoPorLocalName(xmlLote, { localName: 'LoteRps', chavePem, certPem });
 }
 
+/**
+ * A consulta (`ConsultarLoteRps`) também precisa vir assinada — confirmado
+ * testando de verdade: o envio (`RecepcionarLoteRps`) já ia com sucesso
+ * (protocolo recebido), mas a consulta sem assinatura voltava "Arquivo
+ * enviado com erro na assinatura". A thread do grupo wsnfsecampinas já
+ * avisava disso, com uma diferença: "pra Consulta, não se deve incluir o
+ * namespace" — o que já é como `gerarXmlAbrasfConsulta` monta o XML
+ * (`xmlns=""` no `ConsultarLoteRpsEnvio`).
+ */
+export function assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem }) {
+  return assinarElementoPorLocalName(xmlConsulta, { localName: 'ConsultarLoteRpsEnvio', chavePem, certPem });
+}
+
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */
 export function gzipBase64(texto) {
   return gzipSync(Buffer.from(texto, 'utf-8')).toString('base64');
