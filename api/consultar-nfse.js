@@ -57,14 +57,20 @@ export default async function handler(req, res) {
         status: 'autorizada', numero_nfse: parsed.numeroNfse, retorno: resposta.corpo,
       }).eq('id', nota.id);
       res.status(200).json({ ok: true, status: 'autorizada', numeroNfse: parsed.numeroNfse, codigoVerificacao: parsed.codigoVerificacao, ambiente });
-    } else if (parsed.situacao === 3 || ehFalhaTransporte) {
-      // situacao 3 = processado com erro; ehFalhaTransporte = a própria
-      // consulta falhou (soap:Fault) — os dois são erro real, não "ainda
-      // processando" (bug corrigido: antes um soap:Fault na consulta caía
-      // no "else" de baixo e ficava mostrando "ainda processando" pro
-      // operador, escondendo o erro de verdade).
+    } else if (parsed.situacao === 3) {
+      // Rejeição de verdade do governo (o lote foi processado e recusado) —
+      // aí sim vira "erro" definitivo, com o retorno gravado.
       await supabase.from('notas_fiscais').update({ status: 'erro', retorno: resposta.corpo }).eq('id', nota.id);
       res.status(200).json({ ok: false, status: 'erro', retorno: resposta.corpo, mensagens: parsed.mensagens, ambiente });
+    } else if (ehFalhaTransporte) {
+      // Falha só na PRÓPRIA chamada de consulta (soap:Fault) — não é um
+      // veredito do governo sobre o lote, então NÃO muda o status da nota
+      // (ficaria "erro", trocando o botão "Consultar" por "Reenviar" — o
+      // operador reenviaria o mesmo RPS de novo por engano, achando que
+      // ainda estava consultando). Fica "enviada", só mostra o erro pra
+      // tentar consultar de novo depois.
+      await supabase.from('notas_fiscais').update({ retorno: resposta.corpo }).eq('id', nota.id);
+      res.status(200).json({ ok: false, status: 'falha_consulta', erro: 'A prefeitura recusou a consulta (veja o retorno) — tente de novo daqui a pouco.', retorno: resposta.corpo, ambiente });
     } else {
       // 1 (não recebido) ou 2 (não processado) — ainda processando, tenta de novo depois.
       await supabase.from('notas_fiscais').update({ retorno: resposta.corpo }).eq('id', nota.id);
