@@ -56,6 +56,7 @@ export default function Fiscal() {
       if (!resp.ok) { setErro(dados.erro || `Falha ao consultar (${resp.status}).`); return; }
       if (dados.status === 'autorizada') setMsg(`NFS-e autorizada — número ${dados.numeroNfse} (ambiente: ${dados.ambiente}).`);
       else if (dados.status === 'erro') setErro(`Rejeitada pelo governo (ambiente: ${dados.ambiente}) — veja o retorno na linha da nota.`);
+      else if (dados.status === 'falha_consulta') setErro(`Falha ao consultar: ${dados.erro}`);
       else setMsg('Ainda em processamento na prefeitura — tente consultar de novo em instantes.');
     } catch (e) {
       setErro(`Falha ao contatar o serviço de consulta: ${e.message}`);

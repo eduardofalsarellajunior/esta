@@ -71,7 +71,13 @@ export default async function handler(req, res) {
       res.status(200).json({ ok: true, status: 'enviada', situacao: parsed.situacao, ambiente });
     }
   } catch (e) {
+    // Exceção local (rede, assinatura, etc.) — diferente de "ainda
+    // processando" (situação 1/2) ou "rejeitada" (situação 3). Antes isso
+    // caía silenciosamente no "ainda processando" do front, escondendo o
+    // erro real e sem nem gravar no banco (por isso o retorno ficava com o
+    // conteúdo antigo do envio).
     const mensagem = String(e?.message || e);
-    res.status(200).json({ ok: false, status: 'enviada', erro: mensagem, ambiente });
+    await supabase.from('notas_fiscais').update({ retorno: `Falha ao consultar: ${mensagem}` }).eq('id', nota.id);
+    res.status(200).json({ ok: false, status: 'falha_consulta', erro: mensagem, ambiente });
   }
 }
