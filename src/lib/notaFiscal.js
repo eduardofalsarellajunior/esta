@@ -14,7 +14,7 @@ export async function criarNotaFiscal(supabase, { filialId, movimentoId = null, 
 
   const cfg = filial.config?.nfse || {};
   const padrao = cfg.padrao || 'padrao_nacional_campinas';
-  const serie = padrao === 'abrasf' ? (cfg.abrasf?.serie || '99') : (cfg.serie || '1');
+  const serie = padrao === 'abrasf' ? (cfg.abrasf?.serie || '1') : (cfg.serie || '1');
   const percIss = padrao === 'abrasf' ? Number(cfg.abrasf?.percIss ?? cfg.perc_iss ?? 0) : Number(cfg.perc_iss || 0);
   const numero = await proximoNumeroRps(supabase, filialId, serie);
 

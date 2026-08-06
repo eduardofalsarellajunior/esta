@@ -239,8 +239,9 @@ export function gerarXmlAbrasfConsulta({ filial, protocolo }) {
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     // xmlns="" pelo mesmo motivo do EnviarLoteRpsEnvio — ver comentário lá.
-    // Id (pro XMLDSig referenciar) — a consulta também precisa vir assinada.
-    `<ConsultarLoteRpsEnvio xmlns="" Id="${esc('CONSULTA_' + protocolo)}">`,
+    // Sem Id/assinatura — a consulta não é assinada (ver comentário em
+    // api/consultar-nfse.js).
+    '<ConsultarLoteRpsEnvio xmlns="">',
     `<Prestador><CpfCnpj><Cnpj>${esc(cnpjPrestador)}</Cnpj></CpfCnpj><InscricaoMunicipal>${esc(im)}</InscricaoMunicipal></Prestador>`,
     `<Protocolo>${esc(protocolo)}</Protocolo>`,
     '</ConsultarLoteRpsEnvio>',

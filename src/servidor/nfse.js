@@ -104,22 +104,11 @@ export function assinarLoteAbrasf(xmlLote, { chavePem, certPem }) {
   return assinarElementoPorLocalName(xmlLote, { localName: 'LoteRps', chavePem, certPem });
 }
 
-/**
- * A consulta (`ConsultarLoteRps`) também precisa vir assinada — confirmado
- * testando de verdade: o envio (`RecepcionarLoteRps`) já ia com sucesso
- * (protocolo recebido), mas a consulta sem assinatura voltava "Arquivo
- * enviado com erro na assinatura". A thread do grupo wsnfsecampinas já
- * avisava disso, com uma diferença: "pra Consulta, não se deve incluir o
- * namespace" — o que já é como `gerarXmlAbrasfConsulta` monta o XML
- * (`xmlns=""` no `ConsultarLoteRpsEnvio`).
- */
-export function assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem }) {
-  // action: 'append' — ConsultarLoteRpsEnvio é a raiz do documento, a
-  // assinatura tem que ser filha dela, não irmã depois (ver comentário de
-  // assinarElementoPorLocalName). EndCertOnly (certPem), não a cadeia — ver
-  // assinarLoteAbrasf.
-  return assinarElementoPorLocalName(xmlConsulta, { localName: 'ConsultarLoteRpsEnvio', chavePem, certPem, action: 'append' });
-}
+// ConsultarLoteRps NÃO é assinado — o manual (§4.5.6) define
+// ConsultarLoteRpsEnvio só com Prestador+Protocolo, sem Signature, e bate
+// com o exemplo real do Eduardo. Cheguei a assinar (o WSDL da IMA declarava
+// um Signature opcional ali) mas não resolveu o "erro na assinatura" que
+// aparece ao consultar — revertido; ver api/consultar-nfse.js.
 
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */
 export function gzipBase64(texto) {

@@ -4,7 +4,7 @@
 // (mTLS) do envio; ver api/gerar-nfse.js.
 import { createClient } from '@supabase/supabase-js';
 import { gerarXmlAbrasfConsulta, parseAbrasfConsultaResposta } from '../src/lib/fiscal.js';
-import { extrairChaveECertificado, enviarAbrasf, assinarConsultaAbrasf } from '../src/servidor/nfse.js';
+import { enviarAbrasf } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -41,14 +41,13 @@ export default async function handler(req, res) {
 
   try {
     const pfxBuffer = Buffer.from(pfxB64, 'base64');
-    const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
-    // A consulta também precisa vir assinada (confirmado testando de
-    // verdade — sem assinatura a IMA rejeita com "Arquivo enviado com erro
-    // na assinatura"), mesmo o exemplo do Eduardo e o schema (minOccurs=0)
-    // sugerindo que seria opcional. Ver comentário de `assinarConsultaAbrasf`.
+    // Sem assinatura: o manual (§4.5.6, ConsultarLoteRpsEnvio) só define
+    // Prestador+Protocolo, sem campo de Signature — bate com o exemplo real
+    // do Eduardo, que também não assina a consulta. Cheguei a assinar numa
+    // tentativa anterior (o WSDL da IMA declarava um Signature opcional
+    // ali), mas não resolveu o "erro na assinatura" — revertido.
     const xmlConsulta = gerarXmlAbrasfConsulta({ filial, protocolo: nota.lote });
-    const xmlAssinado = assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem });
-    const resposta = await enviarAbrasf({ metodo: 'ConsultarLoteRps', xmlNegocio: xmlAssinado, ambiente, pfxBuffer, senha });
+    const resposta = await enviarAbrasf({ metodo: 'ConsultarLoteRps', xmlNegocio: xmlConsulta, ambiente, pfxBuffer, senha });
     const ehFalhaTransporte = resposta.status < 200 || resposta.status >= 300 || resposta.corpo.includes('<soap:Fault>');
     const parsed = parseAbrasfConsultaResposta(resposta.corpo);
 
