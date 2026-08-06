@@ -57,13 +57,13 @@ export default async function handler(req, res) {
 
   try {
     const pfxBuffer = Buffer.from(pfxB64, 'base64');
-    const { chavePem, certPem, certPemCadeia } = extrairChaveECertificado(pfxBuffer, senha);
+    const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
 
     if (padrao === 'abrasf') {
       // Assíncrono: este envio só entrega o protocolo do lote. A nota (ou o
       // erro) só sai depois, via ConsultarLoteRps (api/consultar-nfse.js).
       const xml = gerarXmlAbrasfLoteRps({ nota, filial });
-      const xmlAssinado = assinarLoteAbrasf(xml, { chavePem, certPemCadeia });
+      const xmlAssinado = assinarLoteAbrasf(xml, { chavePem, certPem });
       const resposta = await enviarAbrasf({ metodo: 'RecepcionarLoteRps', xmlNegocio: xmlAssinado, ambiente, pfxBuffer, senha });
       const parsed = parseAbrasfEnvioResposta(resposta.corpo);
 

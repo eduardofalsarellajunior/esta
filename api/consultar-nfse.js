@@ -41,13 +41,13 @@ export default async function handler(req, res) {
 
   try {
     const pfxBuffer = Buffer.from(pfxB64, 'base64');
-    const { chavePem, certPemCadeia } = extrairChaveECertificado(pfxBuffer, senha);
+    const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
     // A consulta também precisa vir assinada (confirmado testando de
     // verdade — sem assinatura a IMA rejeita com "Arquivo enviado com erro
     // na assinatura"), mesmo o exemplo do Eduardo e o schema (minOccurs=0)
     // sugerindo que seria opcional. Ver comentário de `assinarConsultaAbrasf`.
     const xmlConsulta = gerarXmlAbrasfConsulta({ filial, protocolo: nota.lote });
-    const xmlAssinado = assinarConsultaAbrasf(xmlConsulta, { chavePem, certPemCadeia });
+    const xmlAssinado = assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem });
     const resposta = await enviarAbrasf({ metodo: 'ConsultarLoteRps', xmlNegocio: xmlAssinado, ambiente, pfxBuffer, senha });
     const ehFalhaTransporte = resposta.status < 200 || resposta.status >= 300 || resposta.corpo.includes('<soap:Fault>');
     const parsed = parseAbrasfConsultaResposta(resposta.corpo);
