@@ -8,8 +8,8 @@
 //   NFSE_CERTIFICADO_PFX_B64                     (o .pfx inteiro, em base64)
 //   NFSE_CERTIFICADO_SENHA                       (senha do .pfx)
 import { createClient } from '@supabase/supabase-js';
-import { gerarXmlDPS } from '../src/lib/fiscal.js';
-import { extrairChaveECertificado, assinarXmlDps, enviarDps } from '../src/servidor/nfse.js';
+import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta } from '../src/lib/fiscal.js';
+import { extrairChaveECertificado, assinarXmlDps, enviarDps, assinarLoteAbrasf, enviarAbrasf } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -45,10 +45,39 @@ export default async function handler(req, res) {
   if (errFilial || !filial) { res.status(500).json({ erro: errFilial?.message || 'Filial não encontrada.' }); return; }
 
   const ambiente = filial.config?.nfse?.ambiente === 'producao' ? 'producao' : 'homologacao';
+  const padrao = filial.config?.nfse?.padrao || 'padrao_nacional_campinas';
+
+  // Padrão Nacional (ADN compartilhado) ainda não tem endpoint confirmado
+  // pra Campinas (ver Configurações → Fiscal) — Padrão Nacional Campinas e
+  // ABRASF já estão implementados.
+  if (padrao === 'padrao_nacional') {
+    res.status(501).json({ erro: 'Envio por Padrão Nacional (ADN compartilhado) ainda não está implementado no esta — troque pra "Padrão Nacional Campinas" ou "ABRASF" em Configurações → Fiscal.' });
+    return;
+  }
 
   try {
     const pfxBuffer = Buffer.from(pfxB64, 'base64');
     const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
+
+    if (padrao === 'abrasf') {
+      // Assíncrono: este envio só entrega o protocolo do lote. A nota (ou o
+      // erro) só sai depois, via ConsultarLoteRps (api/consultar-nfse.js).
+      const xml = gerarXmlAbrasfLoteRps({ nota, filial });
+      const xmlAssinado = assinarLoteAbrasf(xml, { chavePem, certPem });
+      const resposta = await enviarAbrasf({ metodo: 'RecepcionarLoteRps', xmlNegocio: xmlAssinado, ambiente, pfxBuffer, senha });
+      const parsed = parseAbrasfEnvioResposta(resposta.corpo);
+
+      if (resposta.status >= 200 && resposta.status < 300 && parsed.protocolo) {
+        await supabase.from('notas_fiscais').update({
+          status: 'enviada', xml: xmlAssinado, lote: parsed.protocolo, retorno: resposta.corpo,
+        }).eq('id', nota.id);
+        res.status(200).json({ ok: true, status: 'enviada', protocolo: parsed.protocolo, ambiente });
+      } else {
+        await supabase.from('notas_fiscais').update({ status: 'erro', xml: xmlAssinado, retorno: resposta.corpo }).eq('id', nota.id);
+        res.status(200).json({ ok: false, status: 'erro', retorno: resposta.corpo, ambiente });
+      }
+      return;
+    }
 
     // Gera de novo (não reaproveita nota.xml) pra sempre refletir a config
     // fiscal atual e um dhEmi fresco, mesmo que a nota já tivesse um XML antigo.

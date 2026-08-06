@@ -130,3 +130,153 @@ export async function proximoNumeroRps(supabase, filialId, serie) {
   await supabase.from('fiscal_sequencias').update({ proximo: n + 1 }).eq('filial_id', filialId).eq('serie', serie);
   return n;
 }
+
+// ---------------------------------------------------------------------------
+// ABRASF 2.03 (Campinas) — é o que está de fato em produção na prefeitura
+// hoje (o Padrão Nacional acima ainda não entrou em operação lá). Formato
+// abaixo foi construído a partir de XMLs reais gerados pelo sistema legado
+// (não do schema genérico ABRASF) — reproduz exatamente o que a prefeitura já
+// aceita: sem namespace nas tags de negócio, CNAE de 9 dígitos próprio de
+// Campinas (não é o CNAE do IBGE), CodigoTributacaoMunicipio omitido.
+
+/**
+ * "1234,56" — moeda com vírgula decimal, usado só no texto da Discriminação.
+ * Trunca (não arredonda) — confirmado comparando com XMLs reais: 80×18.07% =
+ * 14,456 vira "14,45" (não "14,46" que toFixed daria).
+ */
+function moedaVirgula(v) {
+  return (Math.floor(Number(v || 0) * 100) / 100).toFixed(2).replace('.', ',');
+}
+
+/** Texto padrão da Lei 12.741/2012 (Discriminação), no formato que a prefeitura já recebe. */
+function discriminacaoAbrasf(descricao, valorServicos, percTributos) {
+  const valorTributos = Number(valorServicos || 0) * Number(percTributos || 0) / 100;
+  return `${descricao},OBS.:Valor aproximado dos tributos R$ ${moedaVirgula(valorTributos)}(${Number(percTributos || 0).toFixed(2)}%)-Fonte IBTI Lei 12741/2012`;
+}
+
+/**
+ * Monta o XML de negócio do `EnviarLoteRpsEnvio` (1 RPS por lote — é o que os
+ * exemplos reais sempre usam). Ainda não assinado; a assinatura (dupla: RPS e
+ * depois lote) é feita em `src/servidor/nfse.js`, que só roda no servidor.
+ * `nota.tomador` sem `cpf_cnpj`/endereço vira o mesmo "tomador vazio" que a
+ * prefeitura já aceita pra cliente avulso (ao contrário do DPS, que usa
+ * `cNaoNIF`, o ABRASF aqui manda o grupo `<Tomador>` com campos em branco).
+ */
+export function gerarXmlAbrasfLoteRps({ nota, filial }) {
+  const cfg = filial.config?.nfse?.abrasf || {};
+  const municipio = pad(filial.cod_ibge, 7);
+  const cnpjPrestador = (filial.cnpj || '').replace(/\D/g, '');
+  const im = (filial.inscricao_mun || '').replace(/\D/g, '');
+  const numero = nota.numero_rps;
+  const serie = nota.serie || cfg.serie || '99';
+  const tomador = nota.tomador || {};
+  const docTomador = (tomador.cpf_cnpj || '').replace(/\D/g, '');
+  const tagTomador = docTomador.length > 11 ? 'Cnpj' : 'Cpf';
+  const valorServicos = Number(nota.valor || 0);
+  // Prefere o que já veio calculado em `nota` (mesma fonte que grava em
+  // notas_fiscais, pra XML e banco nunca divergirem); cfg é só fallback.
+  const percIss = Number(nota.aliquota_iss ?? cfg.percIss ?? filial.config?.nfse?.perc_iss ?? 0);
+  const valorIss = Number(nota.valor_iss ?? (valorServicos * percIss / 100).toFixed(2));
+  const percTrib = Number(cfg.percTributosLei12741 || 0);
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<EnviarLoteRpsEnvio><LoteRps Id="${esc('LOTE_' + numero)}" versao="2.03">`,
+    `<NumeroLote>${numero}</NumeroLote>`,
+    `<CpfCnpj><Cnpj>${esc(cnpjPrestador)}</Cnpj></CpfCnpj>`,
+    `<InscricaoMunicipal>${esc(im)}</InscricaoMunicipal>`,
+    '<QuantidadeRps>1</QuantidadeRps>',
+    '<ListaRps><Rps>',
+    `<InfDeclaracaoPrestacaoServico Id="${esc('RPS' + numero)}">`,
+    '<Rps>',
+    `<IdentificacaoRps><Numero>${numero}</Numero><Serie>${esc(serie)}</Serie><Tipo>1</Tipo></IdentificacaoRps>`,
+    `<DataEmissao>${esc(nota.competencia)}</DataEmissao>`,
+    '<Status>1</Status>',
+    '</Rps>',
+    `<Competencia>${esc(nota.competencia)}</Competencia>`,
+    '<Servico>',
+    `<Valores><ValorServicos>${valorServicos.toFixed(2)}</ValorServicos><ValorIss>${valorIss.toFixed(2)}</ValorIss><Aliquota>${percIss.toFixed(2)}</Aliquota></Valores>`,
+    `<IssRetido>${esc(cfg.issRetido || '2')}</IssRetido>`,
+    `<ItemListaServico>${esc(cfg.itemListaServico || '11.01')}</ItemListaServico>`,
+    `<CodigoCnae>${esc(cfg.codigoCnae || '')}</CodigoCnae>`,
+    `<Discriminacao>${esc(discriminacaoAbrasf(nota.descricao, valorServicos, percTrib))}</Discriminacao>`,
+    `<CodigoMunicipio>${esc(municipio)}</CodigoMunicipio>`,
+    '<ExigibilidadeISS>1</ExigibilidadeISS>',
+    `<MunicipioIncidencia>${esc(municipio)}</MunicipioIncidencia>`,
+    '</Servico>',
+    `<Prestador><CpfCnpj><Cnpj>${esc(cnpjPrestador)}</Cnpj></CpfCnpj><InscricaoMunicipal>${esc(im)}</InscricaoMunicipal></Prestador>`,
+    '<Tomador>',
+    `<IdentificacaoTomador><CpfCnpj><${tagTomador}>${esc(docTomador)}</${tagTomador}></CpfCnpj></IdentificacaoTomador>`,
+    `<RazaoSocial>${esc(tomador.nome || '')}</RazaoSocial>`,
+    '<Endereco>',
+    `<Endereco>${esc(tomador.endereco || '')}</Endereco>`,
+    `<Numero>${esc(tomador.numero || '')}</Numero>`,
+    `<Bairro>${esc(tomador.bairro || '')}</Bairro>`,
+    `<CodigoMunicipio>${esc(municipio)}</CodigoMunicipio>`,
+    `<Uf>${esc(tomador.uf || filial.uf || '')}</Uf>`,
+    `<Cep>${esc(pad(tomador.cep, 8))}</Cep>`,
+    '</Endereco>',
+    `<Contato><Telefone>${esc(tomador.telefone || '')}</Telefone><Email>${esc(tomador.email || '')}</Email></Contato>`,
+    '</Tomador>',
+    `<OptanteSimplesNacional>${esc(cfg.optanteSimplesNacional || '1')}</OptanteSimplesNacional>`,
+    `<IncentivoFiscal>${esc(cfg.incentivoFiscal || '2')}</IncentivoFiscal>`,
+    '</InfDeclaracaoPrestacaoServico>',
+    '</Rps></ListaRps></LoteRps></EnviarLoteRpsEnvio>',
+  ].join('\n');
+}
+
+/** XML de negócio do `ConsultarLoteRpsEnvio` — consulta pelo protocolo devolvido no envio. */
+export function gerarXmlAbrasfConsulta({ filial, protocolo }) {
+  const cnpjPrestador = (filial.cnpj || '').replace(/\D/g, '');
+  const im = (filial.inscricao_mun || '').replace(/\D/g, '');
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<ConsultarLoteRpsEnvio>',
+    `<Prestador><CpfCnpj><Cnpj>${esc(cnpjPrestador)}</Cnpj></CpfCnpj><InscricaoMunicipal>${esc(im)}</InscricaoMunicipal></Prestador>`,
+    `<Protocolo>${esc(protocolo)}</Protocolo>`,
+    '</ConsultarLoteRpsEnvio>',
+  ].join('\n');
+}
+
+function extrairTag(xml, tag) {
+  const m = xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
+  return m ? m[1] : null;
+}
+
+function extrairMensagensRetorno(xml) {
+  const bloco = xml.match(/<ListaMensagemRetorno>([\s\S]*?)<\/ListaMensagemRetorno>/);
+  if (!bloco || !bloco[1].trim()) return [];
+  const mensagens = [];
+  const re = /<MensagemRetorno>([\s\S]*?)<\/MensagemRetorno>/g;
+  let m;
+  while ((m = re.exec(bloco[1]))) {
+    mensagens.push({ codigo: extrairTag(m[1], 'Codigo'), mensagem: extrairTag(m[1], 'Mensagem') });
+  }
+  return mensagens;
+}
+
+/** Resposta do `RecepcionarLoteRps` — só devolve o protocolo, a nota ainda não saiu. */
+export function parseAbrasfEnvioResposta(xml) {
+  return {
+    numeroLote: extrairTag(xml, 'NumeroLote'),
+    protocolo: extrairTag(xml, 'Protocolo'),
+    dataRecebimento: extrairTag(xml, 'DataRecebimento'),
+    mensagens: extrairMensagensRetorno(xml),
+  };
+}
+
+/**
+ * Resposta do `ConsultarLoteRps`. `situacao`: 1=não recebido, 2=não
+ * processado, 3=processado com erro, 4=processado com sucesso (nota saiu).
+ */
+export function parseAbrasfConsultaResposta(xml) {
+  const situacao = extrairTag(xml, 'Situacao');
+  const infNfse = xml.match(/<InfNfse[^>]*>([\s\S]*?)<\/InfNfse>/);
+  const corpo = infNfse ? infNfse[1] : xml;
+  return {
+    situacao: situacao ? Number(situacao) : null,
+    numeroNfse: extrairTag(corpo, 'Numero'),
+    codigoVerificacao: extrairTag(corpo, 'CodigoVerificacao'),
+    mensagens: extrairMensagensRetorno(xml),
+  };
+}

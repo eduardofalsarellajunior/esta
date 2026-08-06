@@ -45,14 +45,18 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
 }
 
 /**
- * Assina o elemento `infDPS` (identificado pelo atributo Id) com XMLDSig:
- * assinatura enveloped, canonicalização C14N padrão, RSA-SHA1/SHA1 — é o que
- * a documentação do padrão de assinatura das notas fiscais brasileiras
- * descreve (junto com EndCertOnly, ver extrairChaveECertificado). Testei
- * RSA-SHA256 antes por suposição; voltando ao documentado. A assinatura é
- * anexada como último filho de `DPS`.
+ * Assina, com XMLDSig, o elemento identificado por `localName` (casado pelo
+ * atributo Id dele): assinatura enveloped, canonicalização C14N padrão,
+ * RSA-SHA1/SHA1 — é o que a documentação do padrão de assinatura das notas
+ * fiscais brasileiras descreve (junto com EndCertOnly, ver
+ * extrairChaveECertificado). Testei RSA-SHA256 antes por suposição; voltando
+ * ao documentado. A assinatura é anexada como último filho do elemento
+ * assinado. Genérico o bastante pra assinar `infDPS` (Padrão Nacional) ou,
+ * em duas chamadas encadeadas, `InfDeclaracaoPrestacaoServico` e depois
+ * `LoteRps` (ABRASF — ver `assinarLoteAbrasf`).
  */
-export function assinarXmlDps(xml, { chavePem, certPem }) {
+function assinarElementoPorLocalName(xml, { localName, chavePem, certPem }) {
+  const xpath = `//*[local-name(.)='${localName}']`;
   const sig = new SignedXml({
     privateKey: chavePem,
     publicCert: certPem,
@@ -60,17 +64,34 @@ export function assinarXmlDps(xml, { chavePem, certPem }) {
     canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
   });
   sig.addReference({
-    xpath: "//*[local-name(.)='infDPS']",
+    xpath,
     digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
   });
-  sig.computeSignature(xml, {
-    location: { reference: "//*[local-name(.)='infDPS']", action: 'after' },
-  });
+  sig.computeSignature(xml, { location: { reference: xpath, action: 'after' } });
   return sig.getSignedXml();
+}
+
+export function assinarXmlDps(xml, { chavePem, certPem }) {
+  return assinarElementoPorLocalName(xml, { localName: 'infDPS', chavePem, certPem });
+}
+
+/**
+ * ABRASF exige assinatura em dois passos (manual de integração 2.03, §3.2.3):
+ * primeiro o RPS isoladamente (`InfDeclaracaoPrestacaoServico`), depois o
+ * lote inteiro já com o RPS assinado dentro (`LoteRps`) — cada assinatura
+ * cobre um escopo maior que a anterior. Se a IMA rejeitar por causa da
+ * assinatura dupla (thread do grupo wsnfsecampinas sugere que só o lote
+ * precisaria), é so parar de assinar o RPS isoladamente — ajuste pequeno e
+ * reversível, mesmo padrão já usado pro Padrão Nacional (ver comentários de
+ * `extrairChaveECertificado`).
+ */
+export function assinarLoteAbrasf(xmlLote, { chavePem, certPem }) {
+  const comRpsAssinado = assinarElementoPorLocalName(xmlLote, { localName: 'InfDeclaracaoPrestacaoServico', chavePem, certPem });
+  return assinarElementoPorLocalName(comRpsAssinado, { localName: 'LoteRps', chavePem, certPem });
 }
 
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */
@@ -78,11 +99,13 @@ export function gzipBase64(texto) {
   return gzipSync(Buffer.from(texto, 'utf-8')).toString('base64');
 }
 
-// Campinas ainda não usa o endpoint nacional compartilhado (sefin.nfse.gov.br)
-// — mantém webservice próprio (hospedado pela IMA), seguindo o mesmo padrão
-// nacional de API (é o que o erro E0039 sinalizava). Se um dia atender outra
-// filial/município que já esteja no endpoint nacional, isso precisa virar
-// uma escolha por filial em vez de uma constante fixa.
+// URLs do webservice próprio de Campinas (hospedado pela IMA), padrão
+// "Padrão Nacional Campinas" — mesmo layout de XML/API do Sistema Nacional
+// NFS-e, mas endpoint próprio da prefeitura (é o que o erro E0039 sinalizava
+// quando se tentou o endpoint nacional compartilhado por engano). ABRASF e o
+// endpoint nacional compartilhado (sefin.nfse.gov.br) ainda não têm URL
+// confirmada pra Campinas — api/gerar-nfse.js bloqueia esses dois padrões
+// antes de chegar aqui (ver `padrao` em filial.config.nfse).
 const URL_POR_AMBIENTE = {
   homologacao: 'https://preprod-nfse.ima.sp.gov.br/notafiscal-adn-ws/api/adn/dps',
   producao: 'https://novanfse.campinas.sp.gov.br/notafiscal-adn-ws/api/adn/dps',
@@ -105,6 +128,53 @@ export function enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha }) {
       resp.on('end', () => {
         resolve({ status: resp.statusCode, corpo: dados });
       });
+    });
+    req.on('error', reject);
+    req.write(corpo);
+    req.end();
+  });
+}
+
+// ABRASF 2.03 (Campinas) — webservice próprio da IMA (mesmo domínio do
+// Padrão Nacional Campinas), mas protocolo SOAP 1.1, document/literal
+// wrapped, confirmado pelo WSDL real (soapAction="" em todas as operações).
+const URL_ABRASF_POR_AMBIENTE = {
+  homologacao: 'https://homol-rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap',
+  producao: 'https://novanfse.campinas.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap',
+};
+
+/**
+ * O corpo SOAP é `<Metodo xmlns="http://nfse.abrasf.org.br">{xmlNegocio}
+ * </Metodo>` — sem prefixo de namespace nas tags de negócio (confirmado
+ * pelos XMLs reais capturados do sistema legado, que não têm nenhum xmlns).
+ * `xmlNegocio` já vem com a declaração `<?xml ...?>` de `gerarXmlAbrasf*`
+ * (útil quando salvo/comparado isolado) — precisa sair daqui, porque só pode
+ * existir uma no início do documento inteiro (o envelope SOAP).
+ */
+function envelopeSoapAbrasf(metodo, xmlNegocio) {
+  const semDeclaracao = xmlNegocio.replace(/^\s*<\?xml[^>]*\?>\s*/, '');
+  return `<?xml version="1.0" encoding="UTF-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><${metodo} xmlns="http://nfse.abrasf.org.br">${semDeclaracao}</${metodo}></soap:Body></soap:Envelope>`;
+}
+
+/**
+ * Envia `xmlNegocio` (já assinado, quando o método exigir) pro webservice
+ * ABRASF via SOAP + mTLS — mesmo certificado/mecanismo de `enviarDps` (o
+ * manual ABRASF exige certificado digital tanto pra assinatura quanto pra
+ * transmissão). `metodo`: "RecepcionarLoteRps" ou "ConsultarLoteRps".
+ */
+export function enviarAbrasf({ metodo, xmlNegocio, ambiente, pfxBuffer, senha }) {
+  const url = URL_ABRASF_POR_AMBIENTE[ambiente] || URL_ABRASF_POR_AMBIENTE.homologacao;
+  const agent = new https.Agent({ pfx: pfxBuffer, passphrase: senha });
+  const corpo = envelopeSoapAbrasf(metodo, xmlNegocio);
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, {
+      method: 'POST', agent,
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: '' },
+    }, (resp) => {
+      let dados = '';
+      resp.on('data', (chunk) => { dados += chunk; });
+      resp.on('end', () => resolve({ status: resp.statusCode, corpo: dados }));
     });
     req.on('error', reject);
     req.write(corpo);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, proximoVencimento, primeiroVencimento, diferencaEmDias, dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
 import { receberMensalidade, ticketRecebimento, descricaoForma } from '../lib/mensalidade.js';
+import { criarNotaFiscal } from '../lib/notaFiscal.js';
 
 /**
  * Recebimento da mensalidade: valor sugerido pelo cadastro, forma de pagamento e
@@ -30,6 +31,7 @@ export function ReceberModal({ mensalista, formas, semCaixa, onConfirmar, onFech
   const [forma, setForma] = useState('');
   const [proximo, setProximo] = useState(proximoInicial);
   const [observacao, setObservacao] = useState('');
+  const [gerarNota, setGerarNota] = useState(!!mensalista.cpf_cnpj);
 
   // Forma padrão = dinheiro (como na saída do pátio).
   useEffect(() => {
@@ -89,7 +91,7 @@ export function ReceberModal({ mensalista, formas, semCaixa, onConfirmar, onFech
             Painel/BI, mas não entra em nenhum fechamento de caixa.
           </p>
         )}
-        <form onSubmit={(e) => { e.preventDefault(); onConfirmar({ mensalista, dtPagamento, valor, forma, proximo, observacao }); }}>
+        <form onSubmit={(e) => { e.preventDefault(); onConfirmar({ mensalista, dtPagamento, valor, forma, proximo, observacao, gerarNota }); }}>
           <div className="campo" style={{ marginBottom: 10 }}>
             <label>Data do pagamento</label>
             <input type="date" value={dtPagamento} onChange={(e) => setDtPagamento(e.target.value)} required />
@@ -121,6 +123,11 @@ export function ReceberModal({ mensalista, formas, semCaixa, onConfirmar, onFech
             <label>Observação (opcional)</label>
             <input value={observacao} onChange={(e) => setObservacao(e.target.value)} />
           </div>
+          <label className="campo-check" style={{ marginBottom: 10 }}>
+            <input type="checkbox" checked={gerarNota} onChange={(e) => setGerarNota(e.target.checked)} />
+            Gerar nota fiscal (DPS) — usa o CPF/CNPJ e endereço do cadastro
+            {!mensalista.cpf_cnpj && ' (mensalista sem CPF/CNPJ cadastrado — sai sem identificação)'}
+          </label>
           {valorInvalido && <p className="aviso">Informe o valor pago.</p>}
           <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
             <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
@@ -200,10 +207,25 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
   const [mensalista, setMensalista] = useState(null); // null = ainda escolhendo na lista
   const [erro, setErro] = useState('');
 
-  async function confirmar({ mensalista: m, dtPagamento, valor, forma, proximo, observacao }) {
+  async function confirmar({ mensalista: m, dtPagamento, valor, forma, proximo, observacao, gerarNota }) {
     setErro('');
     const { error } = await receberMensalidade({ perfil, mensalista: m, dtPagamento, valor, forma, proximo, observacao });
     if (error) { setErro(error); return; }
+    if (gerarNota) {
+      // Best-effort (mesmo espírito da fidelidade no Pátio): o pagamento já
+      // está gravado, uma falha aqui não pode travar o comprovante — se der
+      // errado, a nota simplesmente não aparece em Fiscal.
+      try {
+        await criarNotaFiscal(supabase, {
+          filialId: perfil.filial_id, competencia: dtPagamento, valor,
+          descricao: 'Recebimento de Mensalista',
+          tomador: {
+            cpf_cnpj: m.cpf_cnpj, nome: m.razao, endereco: m.endereco, numero: m.numero,
+            bairro: m.bairro, uf: m.uf, cep: m.cep, telefone: m.telefone, email: m.email,
+          },
+        });
+      } catch { /* nota fiscal é best-effort aqui */ }
+    }
     const ticket = ticketRecebimento({
       mensalista: m, dtPagamento, valor, proximo,
       formaDescricao: descricaoForma(formas, forma), operador: perfil.nome,

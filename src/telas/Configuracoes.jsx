@@ -44,6 +44,19 @@ export default function Configuracoes({ perfil }) {
     setFilial((f) => ({ ...f, config: { ...f.config, nfse: { ...(f.config?.nfse || {}), [campo]: valor } } }));
   }
 
+  function setNfseAbrasf(campo, valor) {
+    setFilial((f) => ({
+      ...f,
+      config: {
+        ...f.config,
+        nfse: {
+          ...(f.config?.nfse || {}),
+          abrasf: { ...(f.config?.nfse?.abrasf || {}), [campo]: valor },
+        },
+      },
+    }));
+  }
+
   return (
     <>
       <div className="card">
@@ -174,6 +187,22 @@ export default function Configuracoes({ perfil }) {
             </div>
             <div className="linha-form" style={{ marginBottom: 10 }}>
               <div className="campo" style={{ maxWidth: 300 }}>
+                <label>Padrão de envio</label>
+                <select value={filial.config?.nfse?.padrao || 'padrao_nacional_campinas'} disabled={!podeEditar}
+                  onChange={(e) => setNfse('padrao', e.target.value)}>
+                  <option value="padrao_nacional">Padrão Nacional</option>
+                  <option value="padrao_nacional_campinas">Padrão Nacional Campinas</option>
+                  <option value="abrasf">ABRASF</option>
+                </select>
+                <span className="suave" style={{ fontSize: 11 }}>
+                  Hoje Campinas emite em produção pelo ABRASF — é o que deve ficar
+                  selecionado (campos específicos dele logo abaixo). Padrão Nacional
+                  Campinas o esta também sabe gerar/enviar, mas ainda não entrou em
+                  operação na prefeitura. Padrão Nacional (ADN compartilhado) é pra
+                  quando Campinas migrar pra lá — sem previsão, envio bloqueado.
+                </span>
+              </div>
+              <div className="campo" style={{ maxWidth: 300 }}>
                 <label>Regime tributário (Simples Nacional)</label>
                 <select value={filial.config?.nfse?.opSimpNac || ''} disabled={!podeEditar}
                   onChange={(e) => setNfse('opSimpNac', e.target.value)}>
@@ -188,6 +217,67 @@ export default function Configuracoes({ perfil }) {
                 </span>
               </div>
             </div>
+
+            <h3 style={{ marginTop: 4 }}>ABRASF (Campinas)</h3>
+            <p className="suave" style={{ marginTop: -6, marginBottom: 10 }}>
+              Só usados quando "Padrão de envio" acima é ABRASF — é diferente do Padrão
+              Nacional (não usa código de tributação municipal, por exemplo).
+            </p>
+            <div className="linha-form" style={{ marginBottom: 10 }}>
+              <div className="campo" style={{ maxWidth: 160 }}>
+                <label>CNAE (Campinas)</label>
+                <input value={filial.config?.nfse?.abrasf?.codigoCnae || ''} disabled={!podeEditar}
+                  maxLength={9} onChange={(e) => setNfseAbrasf('codigoCnae', e.target.value)} />
+                <span className="suave" style={{ fontSize: 11 }}>
+                  9 dígitos, tabela própria de Campinas (drm-codae.campinas.sp.gov.br/cnae.php) —
+                  não é o CNAE do IBGE (7 dígitos).
+                </span>
+              </div>
+              <div className="campo" style={{ maxWidth: 140 }}>
+                <label>Item lista serviço</label>
+                <input value={filial.config?.nfse?.abrasf?.itemListaServico || ''} disabled={!podeEditar}
+                  placeholder="11.01" onChange={(e) => setNfseAbrasf('itemListaServico', e.target.value)} />
+                <span className="suave" style={{ fontSize: 11 }}>LC 116/2003 — "11.01" é Guarda e estacionamento de veículos.</span>
+              </div>
+              <div className="campo" style={{ maxWidth: 120 }}>
+                <label>% tributos (Lei 12.741)</label>
+                <input type="number" step="0.01" min="0" value={filial.config?.nfse?.abrasf?.percTributosLei12741 ?? ''} disabled={!podeEditar}
+                  onChange={(e) => setNfseAbrasf('percTributosLei12741', e.target.value)} />
+                <span className="suave" style={{ fontSize: 11 }}>Vai no texto de discriminação da nota (aviso da Lei 12.741/2012).</span>
+              </div>
+              <div className="campo" style={{ maxWidth: 100 }}>
+                <label>Série RPS</label>
+                <input value={filial.config?.nfse?.abrasf?.serie || ''} disabled={!podeEditar}
+                  placeholder="99" onChange={(e) => setNfseAbrasf('serie', e.target.value)} />
+              </div>
+            </div>
+            <div className="linha-form" style={{ marginBottom: 10 }}>
+              <div className="campo" style={{ maxWidth: 200 }}>
+                <label>Optante Simples Nacional</label>
+                <select value={filial.config?.nfse?.abrasf?.optanteSimplesNacional || '1'} disabled={!podeEditar}
+                  onChange={(e) => setNfseAbrasf('optanteSimplesNacional', e.target.value)}>
+                  <option value="1">Sim</option>
+                  <option value="2">Não</option>
+                </select>
+              </div>
+              <div className="campo" style={{ maxWidth: 160 }}>
+                <label>Incentivo fiscal</label>
+                <select value={filial.config?.nfse?.abrasf?.incentivoFiscal || '2'} disabled={!podeEditar}
+                  onChange={(e) => setNfseAbrasf('incentivoFiscal', e.target.value)}>
+                  <option value="1">Sim</option>
+                  <option value="2">Não</option>
+                </select>
+              </div>
+              <div className="campo" style={{ maxWidth: 160 }}>
+                <label>ISS retido pelo tomador</label>
+                <select value={filial.config?.nfse?.abrasf?.issRetido || '2'} disabled={!podeEditar}
+                  onChange={(e) => setNfseAbrasf('issRetido', e.target.value)}>
+                  <option value="1">Sim</option>
+                  <option value="2">Não</option>
+                </select>
+              </div>
+            </div>
+
             {podeEditar
               ? <button className="btn-primary" type="submit">Salvar</button>
               : <p className="suave">Só supervisores podem editar.</p>}

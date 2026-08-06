@@ -9,6 +9,7 @@ export default function Fiscal() {
   const [xml, setXml] = useState(null);
   const [retorno, setRetorno] = useState(null);
   const [enviando, setEnviando] = useState(null); // id da nota em envio
+  const [consultando, setConsultando] = useState(null); // id da nota em consulta
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -40,13 +41,42 @@ export default function Fiscal() {
     }
   }
 
+  // ABRASF é assíncrono: "Enviar" só entrega o protocolo do lote (status
+  // "enviada"); a nota (ou o erro) sai aqui, consultando o protocolo depois.
+  async function consultar(notaId) {
+    setErro(''); setMsg(''); setConsultando(notaId);
+    try {
+      const { data: sessao } = await supabase.auth.getSession();
+      const resp = await fetch('/api/consultar-nfse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessao.session?.access_token}` },
+        body: JSON.stringify({ notaId }),
+      });
+      const dados = await resp.json();
+      if (!resp.ok) { setErro(dados.erro || `Falha ao consultar (${resp.status}).`); return; }
+      if (dados.status === 'autorizada') setMsg(`NFS-e autorizada — número ${dados.numeroNfse} (ambiente: ${dados.ambiente}).`);
+      else if (dados.status === 'erro') setErro(`Rejeitada pelo governo (ambiente: ${dados.ambiente}) — veja o retorno na linha da nota.`);
+      else setMsg('Ainda em processamento na prefeitura — tente consultar de novo em instantes.');
+    } catch (e) {
+      setErro(`Falha ao contatar o serviço de consulta: ${e.message}`);
+    } finally {
+      setConsultando(null);
+      carregar();
+    }
+  }
+
   return (
     <>
       <div className="card">
         <div className="card-cab">
           <div>
-            <h2>NFS-e / RPS/DPS — Padrão Nacional</h2>
-            <p className="suave">Documentos gerados na saída do veículo (Pátio → menu ⋮ → "Gerar DPS"). "Enviar" assina e transmite pro Sistema Nacional NFS-e.</p>
+            <h2>NFS-e / RPS/DPS</h2>
+            <p className="suave">
+              Documentos gerados na saída do veículo ou no recebimento de mensalidade (menu ⋮ →
+              "Gerar DPS"). "Enviar" assina e transmite no padrão configurado em Configurações →
+              Fiscal. No ABRASF o envio é assíncrono: primeiro sai um protocolo (status "enviada"),
+              depois é preciso "Consultar" pra saber se autorizou.
+            </p>
           </div>
         </div>
         {erro && <div className="aviso">{erro}{erro.includes('notas_fiscais') && ' — rode a migration 0005_fiscal.sql.'}</div>}
@@ -64,13 +94,20 @@ export default function Fiscal() {
                   <td className="mono">{n.numero_rps}</td><td>{n.serie}</td><td>{n.competencia}</td>
                   <td>{fmtBRL(Number(n.valor))}</td><td>{fmtBRL(Number(n.valor_iss))}</td>
                   <td><span className={'status status-' + n.status}>{n.status}</span></td>
-                  <td className="mono" style={{ fontSize: 11 }}>{n.numero_nfse || '—'}</td>
+                  <td className="mono" style={{ fontSize: 11 }}>
+                    {n.numero_nfse || (n.status === 'enviada' && n.lote ? `protocolo ${n.lote}` : '—')}
+                  </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn-ghost" onClick={() => setXml(n.xml)}>XML</button>
                     {n.retorno && <button className="btn-ghost" onClick={() => setRetorno(n.retorno)}>Retorno</button>}
                     {(n.status === 'gerada' || n.status === 'erro') && (
                       <button className="btn-primary" disabled={enviando === n.id} onClick={() => enviar(n.id)}>
                         {enviando === n.id ? 'Enviando…' : (n.status === 'erro' ? 'Reenviar' : 'Enviar')}
+                      </button>
+                    )}
+                    {n.status === 'enviada' && (
+                      <button className="btn-primary" disabled={consultando === n.id} onClick={() => consultar(n.id)}>
+                        {consultando === n.id ? 'Consultando…' : 'Consultar'}
                       </button>
                     )}
                   </td>
@@ -97,7 +134,7 @@ export default function Fiscal() {
       {retorno && (
         <div className="modal-bg" onClick={() => setRetorno(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 640, maxHeight: '80vh', overflow: 'auto' }}>
-            <h2>Retorno da ADN</h2>
+            <h2>Retorno do governo</h2>
             <pre className="mono" style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{retorno}</pre>
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={() => setRetorno(null)}>Fechar</button>
