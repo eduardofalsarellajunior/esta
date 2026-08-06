@@ -181,7 +181,14 @@ export function gerarXmlAbrasfLoteRps({ nota, filial }) {
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<EnviarLoteRpsEnvio><LoteRps Id="${esc('LOTE_' + numero)}" versao="2.03">`,
+    // xmlns="" é necessário: o envelope SOAP (nfse.js) declara xmlns
+    // padrão "http://nfse.abrasf.org.br" no elemento pai (o método SOAP),
+    // que cascateia pros filhos sem prefixo — mas EnviarLoteRpsEnvio é
+    // elementFormDefault="unqualified" no schema (sem namespace nenhum), daí
+    // precisa "zerar" o namespace herdado explicitamente. Sem isso a IMA
+    // rejeita com "Unmarshalling Error: unexpected element (uri:
+    // "http://nfse.abrasf.org.br", local:"EnviarLoteRpsEnvio")".
+    `<EnviarLoteRpsEnvio xmlns=""><LoteRps Id="${esc('LOTE_' + numero)}" versao="2.03">`,
     `<NumeroLote>${numero}</NumeroLote>`,
     `<CpfCnpj><Cnpj>${esc(cnpjPrestador)}</Cnpj></CpfCnpj>`,
     `<InscricaoMunicipal>${esc(im)}</InscricaoMunicipal>`,
@@ -231,7 +238,8 @@ export function gerarXmlAbrasfConsulta({ filial, protocolo }) {
   const im = (filial.inscricao_mun || '').replace(/\D/g, '');
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<ConsultarLoteRpsEnvio>',
+    // xmlns="" pelo mesmo motivo do EnviarLoteRpsEnvio — ver comentário lá.
+    '<ConsultarLoteRpsEnvio xmlns="">',
     `<Prestador><CpfCnpj><Cnpj>${esc(cnpjPrestador)}</Cnpj></CpfCnpj><InscricaoMunicipal>${esc(im)}</InscricaoMunicipal></Prestador>`,
     `<Protocolo>${esc(protocolo)}</Protocolo>`,
     '</ConsultarLoteRpsEnvio>',
