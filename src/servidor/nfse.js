@@ -50,12 +50,18 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
  * RSA-SHA1/SHA1 — é o que a documentação do padrão de assinatura das notas
  * fiscais brasileiras descreve (junto com EndCertOnly, ver
  * extrairChaveECertificado). Testei RSA-SHA256 antes por suposição; voltando
- * ao documentado. A assinatura é inserida como irmã, logo depois do elemento
- * assinado (então "último filho" do pai dele). Genérico o bastante pra
- * assinar `infDPS` (Padrão Nacional) ou `LoteRps` (ABRASF — ver
- * `assinarLoteAbrasf`).
+ * ao documentado. Genérico o bastante pra assinar `infDPS` (Padrão
+ * Nacional), `LoteRps`/`ConsultarLoteRpsEnvio` (ABRASF).
+ *
+ * `action`: 'after' (padrão) insere a assinatura como irmã, logo depois do
+ * elemento assinado — certo quando ele tem um elemento pai (ex.: `LoteRps`
+ * dentro de `EnviarLoteRpsEnvio`). 'append' insere como último FILHO —
+ * obrigatório quando o elemento assinado é a raiz do documento (ex.:
+ * `ConsultarLoteRpsEnvio`), já que XML só pode ter uma raiz — tentar 'after'
+ * nesse caso dá "Hierarchy request error: Only one element can be added and
+ * only after doctype" (descobri testando de verdade contra a IMA).
  */
-function assinarElementoPorLocalName(xml, { localName, chavePem, certPem }) {
+function assinarElementoPorLocalName(xml, { localName, chavePem, certPem, action = 'after' }) {
   const xpath = `//*[local-name(.)='${localName}']`;
   const sig = new SignedXml({
     privateKey: chavePem,
@@ -71,7 +77,7 @@ function assinarElementoPorLocalName(xml, { localName, chavePem, certPem }) {
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
   });
-  sig.computeSignature(xml, { location: { reference: xpath, action: 'after' } });
+  sig.computeSignature(xml, { location: { reference: xpath, action } });
   return sig.getSignedXml();
 }
 
@@ -102,7 +108,10 @@ export function assinarLoteAbrasf(xmlLote, { chavePem, certPem }) {
  * (`xmlns=""` no `ConsultarLoteRpsEnvio`).
  */
 export function assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem }) {
-  return assinarElementoPorLocalName(xmlConsulta, { localName: 'ConsultarLoteRpsEnvio', chavePem, certPem });
+  // action: 'append' — ConsultarLoteRpsEnvio é a raiz do documento, a
+  // assinatura tem que ser filha dela, não irmã depois (ver comentário de
+  // assinarElementoPorLocalName).
+  return assinarElementoPorLocalName(xmlConsulta, { localName: 'ConsultarLoteRpsEnvio', chavePem, certPem, action: 'append' });
 }
 
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */
