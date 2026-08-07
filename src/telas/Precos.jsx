@@ -112,6 +112,8 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
 function Faixas({ perfil, tabela }) {
   const [faixas, setFaixas] = useState([]);
   const [nova, setNova] = useState({ ate: '', valor_hora: '', valor_convenio: '', tipo_cobranca: 'fixo' });
+  const [emEdicao, setEmEdicao] = useState(null); // faixa sendo editada na própria linha
+  const [erro, setErro] = useState('');
 
   async function carregar() {
     const { data } = await supabase.from('tabela_preco_faixas')
@@ -133,6 +135,20 @@ function Faixas({ perfil, tabela }) {
   }
   async function excluir(id) { await supabase.from('tabela_preco_faixas').delete().eq('id', id); carregar(); }
 
+  async function salvarEdicao(e) {
+    e.preventDefault();
+    setErro('');
+    const { error } = await supabase.from('tabela_preco_faixas').update({
+      ate: Number(emEdicao.ate),
+      valor_hora: Number(emEdicao.valor_hora),
+      valor_convenio: Number(emEdicao.valor_convenio || 0),
+      tipo_cobranca: emEdicao.tipo_cobranca,
+    }).eq('id', emEdicao.id);
+    if (error) { setErro(error.message); return; }
+    setEmEdicao(null);
+    carregar();
+  }
+
   return (
     <div className="card">
       <h2>Faixas — {tabela.tipo} · {tabela.descricao}</h2>
@@ -140,18 +156,47 @@ function Faixas({ perfil, tabela }) {
         "Fixo": valor cheio da faixa. "Por hora": <code>valor_hora</code> vira taxa por hora,
         cobrada a partir do teto da faixa anterior (fração arredonda pra cima).
       </p>
+      {erro && <div className="aviso">{erro}</div>}
       <table>
         <thead><tr><th>Ordem</th><th>Até (HH.MM)</th><th>Tipo</th><th>Valor</th><th>Valor convênio</th><th></th></tr></thead>
         <tbody>
-          {faixas.map((f) => (
+          {faixas.map((f) => (emEdicao?.id === f.id ? (
+            // Edição na própria linha: mesmos campos do formulário de baixo.
+            <tr key={f.id}>
+              <td>{f.ordem}</td>
+              <td><input type="number" step="0.01" style={{ width: 90 }} value={emEdicao.ate} required
+                onChange={(e) => setEmEdicao({ ...emEdicao, ate: e.target.value })} /></td>
+              <td>
+                <select value={emEdicao.tipo_cobranca}
+                  onChange={(e) => setEmEdicao({ ...emEdicao, tipo_cobranca: e.target.value })}>
+                  <option value="fixo">Fixo</option>
+                  <option value="hora">Por hora</option>
+                </select>
+              </td>
+              <td><input type="number" step="0.01" style={{ width: 90 }} value={emEdicao.valor_hora} required
+                onChange={(e) => setEmEdicao({ ...emEdicao, valor_hora: e.target.value })} /></td>
+              <td><input type="number" step="0.01" style={{ width: 90 }} value={emEdicao.valor_convenio}
+                onChange={(e) => setEmEdicao({ ...emEdicao, valor_convenio: e.target.value })} /></td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <button className="btn-ghost" onClick={() => setEmEdicao(null)}>Cancelar</button>
+                <button className="btn-primary" onClick={salvarEdicao}>Salvar</button>
+              </td>
+            </tr>
+          ) : (
             <tr key={f.id}>
               <td>{f.ordem}</td><td className="mono">{fmtHora(Number(f.ate))}</td>
               <td>{f.tipo_cobranca === 'hora' ? 'Por hora' : 'Fixo'}</td>
               <td>{fmtBRL(Number(f.valor_hora))}{f.tipo_cobranca === 'hora' ? '/h' : ''}</td>
               <td>{fmtBRL(Number(f.valor_convenio))}</td>
-              <td style={{ textAlign: 'right' }}><button className="btn-ghost aviso-btn" onClick={() => excluir(f.id)}>Excluir</button></td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <button className="btn-ghost" disabled={!!emEdicao} onClick={() => setEmEdicao({
+                  id: f.id, ate: String(f.ate), valor_hora: String(f.valor_hora),
+                  valor_convenio: String(f.valor_convenio ?? 0), tipo_cobranca: f.tipo_cobranca || 'fixo',
+                })}>Editar</button>
+                <button className="btn-ghost aviso-btn" disabled={!!emEdicao} onClick={() => excluir(f.id)}>Excluir</button>
+              </td>
             </tr>
-          ))}
+          )))}
         </tbody>
       </table>
       <form className="linha-form" onSubmit={adicionar} style={{ marginTop: 10 }}>
