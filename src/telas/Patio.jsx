@@ -45,6 +45,7 @@ export default function Patio({ perfil }) {
   const [movimentosComServico, setMovimentosComServico] = useState(new Set());
   const [modalExclusao, setModalExclusao] = useState(null); // { mov, motivo }
   const [modalDps, setModalDps] = useState(null); // { documento, nome }
+  const [modalValor, setModalValor] = useState(null); // { valor } — alteração manual do valor da saída
   const [agora, setAgora] = useState(() => Date.now());
   const [abrirRecebimento, setAbrirRecebimento] = useState(false); // fluxo de "Receber mensalidade" (menu ⋮)
   const [caixaAberto, setCaixaAberto] = useState(null);
@@ -414,19 +415,47 @@ export default function Patio({ perfil }) {
     setModalDps({ documento: '', nome: '' });
   }
 
+  function abrirModalValor() {
+    setModalValor({ valor: String(saindo.resultado.valor) });
+  }
+
+  /**
+   * Sobrescreve o valor calculado pelo motor (cortesia, negociação, erro de
+   * tabela...). Guarda o valor original em `valorCalculado` na primeira
+   * alteração — se alterar de novo, o original continua sendo o do motor, não
+   * o da alteração anterior. O pagamento acompanha o valor novo.
+   */
+  function confirmarAlteracaoValor() {
+    const novo = Number(modalValor.valor);
+    if (!(novo >= 0)) { setErro('Informe um valor válido.'); return; }
+    setSaindo((s) => ({
+      ...s,
+      valorCalculado: s.valorCalculado ?? s.resultado.valor,
+      resultado: { ...s.resultado, valor: novo },
+      pagamentos: [{ forma: s.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D', valor: novo }],
+    }));
+    setModalValor(null);
+  }
+
   async function confirmarSaida(tomadorDps) {
-    const { mov, resultado, pagamentos, convenioCodigo } = saindo;
+    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado } = saindo;
     const dtSaida = hojeISO();
     const hrSaida = agoraHHMM();
     // Liga ao caixa aberto do operador (se houver), para o fechamento.
     const { data: cx } = await supabase.from('caixas').select('id')
       .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
+    const valorFoiAlterado = valorCalculado != null && valorCalculado !== resultado.valor;
     const { error } = await supabase.from('movimentos').update({
       dt_saida: dtSaida, hr_saida: hrSaida,
       convenio_codigo: convenioCodigo || null,
       valor: resultado.valor, valor_proporcional: resultado.valorProporcional,
       valor_convenio: resultado.valorConvenio, pontos_ganhos: resultado.pontos,
       caixa_id: cx?.id ?? null, usuario_saida: perfil.id,
+      // Só marca alteração se o valor final ficou mesmo diferente do calculado
+      // (dá pra abrir o modal e confirmar o mesmo valor — isso não é alteração).
+      valor_calculado: valorFoiAlterado ? valorCalculado : null,
+      usuario_altera: valorFoiAlterado ? perfil.id : null,
+      dt_altera: valorFoiAlterado ? new Date().toISOString() : null,
     }).eq('id', mov.id);
     if (error) { setErro(error.message); return; }
 
@@ -634,7 +663,18 @@ export default function Patio({ perfil }) {
                       ? new Date(m.excluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                       : fmtHora(Number(m.hr_saida))}
                   </td>
-                  <td>{m.excluido_em ? <span className="status status-cancelada">Cancelado</span> : fmtBRL(Number(m.valor || 0))}</td>
+                  <td>
+                    {m.excluido_em
+                      ? <span className="status status-cancelada">Cancelado</span>
+                      : (
+                        <>
+                          {fmtBRL(Number(m.valor || 0))}
+                          {m.valor_calculado != null && (
+                            <span title={`Valor alterado na saída — o cálculo dava ${fmtBRL(Number(m.valor_calculado))}`}> *</span>
+                          )}
+                        </>
+                      )}
+                  </td>
                   <td style={{ textAlign: 'right' }}>
                     <button className="btn-ghost" onClick={() => (m.excluido_em ? reimprimirExclusao(m) : reimprimirSaida(m))}>Reimprimir</button>
                   </td>
@@ -735,8 +775,11 @@ export default function Patio({ perfil }) {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="card-cab">
               <h2>Saída — <span className="placa mono">{saindo.mov.placa}</span></h2>
-              {!saindo.resultado.mensalista && saindo.resultado.valor > 0 && (
-                <CardAcoes acoes={[{ label: 'Gerar DPS', onClick: abrirModalDps }]} />
+              {!saindo.resultado.mensalista && (
+                <CardAcoes acoes={[
+                  { label: 'Alterar valor', onClick: abrirModalValor },
+                  ...(saindo.resultado.valor > 0 ? [{ label: 'Gerar DPS', onClick: abrirModalDps }] : []),
+                ]} />
               )}
             </div>
             {!saindo.resultado.mensalista && (
@@ -765,6 +808,11 @@ export default function Patio({ perfil }) {
               </p>
             )}
             <div className="grande">{fmtBRL(saindo.resultado.valor)}</div>
+            {saindo.valorCalculado != null && saindo.valorCalculado !== saindo.resultado.valor && (
+              <p className="suave" style={{ textAlign: 'center' }}>
+                * valor alterado — o cálculo dava {fmtBRL(saindo.valorCalculado)}
+              </p>
+            )}
 
             {!saindo.resultado.mensalista && saindo.resultado.valor > 0 && (
               <div style={{ margin: '12px 0' }}>
@@ -790,6 +838,28 @@ export default function Patio({ perfil }) {
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={() => setSaindo(null)}>Cancelar</button>
               <button className="btn-primary" onClick={() => confirmarSaida()}>Confirmar saída</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalValor && (
+        <div className="modal-bg" onClick={() => setModalValor(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Alterar valor — <span className="placa mono">{saindo?.mov.placa}</span></h2>
+            <p className="suave">
+              O cálculo deu {fmtBRL(saindo?.resultado.valor || 0)}
+              {saindo?.valorCalculado != null && ` (original: ${fmtBRL(saindo.valorCalculado)})`}.
+              O valor original fica registrado, e a saída aparece marcada com * nas listagens.
+            </p>
+            <div className="campo">
+              <label>Valor a cobrar</label>
+              <input type="number" step="0.01" min="0" autoFocus value={modalValor.valor}
+                onChange={(e) => setModalValor({ valor: e.target.value })} />
+            </div>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setModalValor(null)}>Cancelar</button>
+              <button className="btn-primary" onClick={confirmarAlteracaoValor}>Usar este valor</button>
             </div>
           </div>
         </div>

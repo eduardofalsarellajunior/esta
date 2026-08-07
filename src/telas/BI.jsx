@@ -58,9 +58,12 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
         <td>${v.cancelado ? '—' : `${escapeHtml(v.dt_saida.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_saida)))}`}</td>
         <td>${v.tempo != null ? escapeHtml(fmtHora(v.tempo)) : '—'}</td>
         <td>${escapeHtml(v.pagamento)}</td>
-        <td>${v.cancelado ? '—' : escapeHtml(fmtBRL(v.valor))}</td>
+        <td>${v.cancelado ? '—' : escapeHtml(fmtBRL(v.valor) + (v.valorCalculado != null ? ' *' : ''))}</td>
         <td>${v.cancelado ? '<strong>Cancelado</strong>' : ''}</td>
-      </tr>`).join('') || '<tr><td colspan="9">Nenhum veículo no período.</td></tr>'}</tbody></table>` : '';
+      </tr>`).join('') || '<tr><td colspan="9">Nenhum veículo no período.</td></tr>'}</tbody></table>${
+        veiculosDetalhe.some((v) => v.valorCalculado != null)
+          ? '<p style="font-size:11px">* valor alterado na saída (diferente do calculado pela tabela).</p>' : ''
+      }` : '';
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório BI</title>
     <style>
@@ -230,6 +233,9 @@ export default function BI({ perfil }) {
       id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: m.tipo_veic,
       dt_entrada: m.dt_entrada, hr_entrada: m.hr_entrada, dt_saida: m.dt_saida, hr_saida: m.hr_saida,
       valor: Number(m.valor || 0),
+      // Null quando o valor cobrado é o que o motor calculou; preenchido com o
+      // valor original quando o operador alterou na saída (vira "*" na lista).
+      valorCalculado: m.valor_calculado != null ? Number(m.valor_calculado) : null,
       tempo: (m.hr_saida != null && m.hr_entrada != null) ? horas({
         dtEntrada: dataDeISO(m.dt_entrada), entrada: Number(m.hr_entrada),
         dtSaida: dataDeISO(m.dt_saida), saida: Number(m.hr_saida),
@@ -371,7 +377,16 @@ export default function BI({ perfil }) {
                         <td className="mono">{v.cancelado ? '—' : `${v.dt_saida.split('-').reverse().join('/')} ${fmtHora(Number(v.hr_saida))}`}</td>
                         <td className="mono">{v.tempo != null ? fmtHora(v.tempo) : '—'}</td>
                         <td>{v.pagamento}</td>
-                        <td>{v.cancelado ? '—' : fmtBRL(v.valor)}</td>
+                        <td>
+                          {v.cancelado ? '—' : (
+                            <>
+                              {fmtBRL(v.valor)}
+                              {v.valorCalculado != null && (
+                                <span title={`Valor alterado na saída — o cálculo dava ${fmtBRL(v.valorCalculado)}`}> *</span>
+                              )}
+                            </>
+                          )}
+                        </td>
                         <td>{v.cancelado && <span className="status status-cancelada">Cancelado</span>}</td>
                       </tr>
                     ))}
