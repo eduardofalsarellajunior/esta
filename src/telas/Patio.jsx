@@ -9,6 +9,7 @@ import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
 import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
+import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
 const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
@@ -807,11 +808,13 @@ export default function Patio({ perfil }) {
               <input className="mono" value={modalDps.documento}
                 onChange={(e) => setModalDps({ ...modalDps, documento: e.target.value })}
                 placeholder="Deixe em branco para não identificar" />
-              {modalDps.documento.replace(/\D/g, '').length > 0 && (
-                <span className="suave" style={{ fontSize: 11 }}>
-                  {modalDps.documento.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'} detectado
-                </span>
-              )}
+              {erroCpfCnpj(modalDps.documento)
+                ? <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(modalDps.documento)}</span>
+                : !validarCpfCnpj(modalDps.documento).vazio && (
+                  <span className="suave" style={{ fontSize: 11 }}>
+                    {validarCpfCnpj(modalDps.documento).tipo} válido: {formatarCpfCnpj(modalDps.documento)}
+                  </span>
+                )}
             </div>
             <div className="campo">
               <label>Nome / Razão social (opcional)</label>
@@ -821,7 +824,9 @@ export default function Patio({ perfil }) {
             </div>
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setModalDps(null)}>Cancelar</button>
-              <button className="btn-primary"
+              {/* Documento em branco é permitido (vira tomador não
+                  identificado); errado, não — a prefeitura rejeitaria. */}
+              <button className="btn-primary" disabled={!!erroCpfCnpj(modalDps.documento)}
                 onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome })}>
                 Confirmar saída e gerar DPS
               </button>

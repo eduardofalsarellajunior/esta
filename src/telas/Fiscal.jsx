@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtBRL } from '../lib/tempo.js';
 import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
+import { erroCpfCnpj } from '../lib/documento.js';
 
 export default function Fiscal() {
   const [notas, setNotas] = useState([]);
@@ -242,6 +243,9 @@ export default function Fiscal() {
                   <label>CPF/CNPJ</label>
                   <input className="mono" value={alterando.cpf_cnpj}
                     onChange={(e) => setAlterando({ ...alterando, cpf_cnpj: e.target.value })} />
+                  {erroCpfCnpj(alterando.cpf_cnpj) && (
+                    <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(alterando.cpf_cnpj)}</span>
+                  )}
                 </div>
                 <div className="campo" style={{ flex: 1 }}>
                   <label>Nome / Razão social</label>
@@ -293,7 +297,7 @@ export default function Fiscal() {
 
               <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
                 <button type="button" className="btn-ghost" onClick={() => setAlterando(null)}>Cancelar</button>
-                <button type="submit" className="btn-primary" disabled={salvando}>
+                <button type="submit" className="btn-primary" disabled={salvando || !!erroCpfCnpj(alterando.cpf_cnpj)}>
                   {salvando ? 'Gravando…' : 'Gravar e limpar protocolo'}
                 </button>
               </div>

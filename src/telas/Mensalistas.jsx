@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarModelosVeiculo } from '../lib/dados.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
+import { erroCpfCnpj } from '../lib/documento.js';
 import { dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
 import { receberMensalidade, ticketRecebimento, descricaoForma } from '../lib/mensalidade.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
@@ -45,7 +46,7 @@ export default function Mensalistas({ perfil }) {
     const payload = {
       filial_id: perfil.filial_id, codigo: m.codigo, razao: m.razao,
       tipo_mens: m.tipo_mens || 'I', telefone: m.telefone || null, celular: m.celular || null,
-      email: m.email || null, box: m.box || null,
+      email: m.email || null, box: m.box || null, cpf_cnpj: m.cpf_cnpj || null,
       endereco: m.endereco || null, numero: m.numero || null, bairro: m.bairro || null,
       cidade: m.cidade || null, uf: m.uf || null, cep: m.cep || null,
       dia_venc: m.dia_venc ? Number(m.dia_venc) : null,
@@ -226,6 +227,13 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
             </select>
           </div>
           <div className="campo" style={{ marginBottom: 10 }}>
+            <label>CPF/CNPJ</label>
+            <input className="mono" value={m.cpf_cnpj || ''} onChange={(e) => set('cpf_cnpj', e.target.value)} />
+            {erroCpfCnpj(m.cpf_cnpj)
+              ? <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(m.cpf_cnpj)}</span>
+              : <span className="suave" style={{ fontSize: 11 }}>Usado como tomador na nota fiscal do recebimento da mensalidade.</span>}
+          </div>
+          <div className="campo" style={{ marginBottom: 10 }}>
             <label>Telefone</label>
             <input value={m.telefone || ''} onChange={(e) => set('telefone', e.target.value)} />
           </div>
@@ -300,7 +308,7 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
             {onExcluir ? <button type="button" className="btn-ghost aviso-btn" onClick={onExcluir}>Excluir mensalista</button> : <span />}
             <div className="linha-form">
               <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
-              <button type="submit" className="btn-primary">Salvar</button>
+              <button type="submit" className="btn-primary" disabled={!!erroCpfCnpj(m.cpf_cnpj)}>Salvar</button>
             </div>
           </div>
         </form>
