@@ -136,11 +136,32 @@ export function autoverificarAssinatura(xmlAssinado) {
   }
 }
 
-// ConsultarLoteRps NÃO é assinado — o manual (§4.5.6) define
-// ConsultarLoteRpsEnvio só com Prestador+Protocolo, sem Signature, e bate
-// com o exemplo real do Eduardo. Cheguei a assinar (o WSDL da IMA declarava
-// um Signature opcional ali) mas não resolveu o "erro na assinatura" que
-// aparece ao consultar — revertido; ver api/consultar-nfse.js.
+/**
+ * A consulta TAMBÉM precisa ser assinada — confirmado pelo suporte da
+ * prefeitura ("sim, os métodos de consulta também devem ser assinados"),
+ * apesar de o manual genérico (§4.5.6) não mostrar campo de Signature em
+ * ConsultarLoteRpsEnvio.
+ *
+ * A diferença crítica em relação ao envio: aqui a assinatura é feita **já
+ * dentro do envelope SOAP**, não no XML solto. Motivo: o elemento assinado
+ * (`ConsultarLoteRpsEnvio`) é justamente o que carrega `xmlns=""`. Sozinho,
+ * ele é a raiz e esse `xmlns=""` é redundante — o C14N descarta. Dentro do
+ * envelope, o pai tem `xmlns="http://nfse.abrasf.org.br"`, então o `xmlns=""`
+ * passa a ser significativo e ENTRA na canonicalização. Assinar solto e
+ * embrulhar depois gera digests diferentes dos dois lados ("Arquivo enviado
+ * com erro na assinatura").
+ *
+ * O envio em lote não sofre disso porque lá o elemento assinado (`LoteRps`)
+ * fica abaixo do que zera o namespace — o contexto dele é o mesmo nos dois
+ * casos, por isso `assinarLoteAbrasf` continua assinando o XML solto.
+ */
+export function assinarConsultaAbrasf(envelopeComConsulta, { chavePem, certPem }) {
+  // action: 'append' — a Signature entra como último filho de
+  // ConsultarLoteRpsEnvio (Prestador, Protocolo, Signature).
+  return assinarElementoPorLocalName(envelopeComConsulta, {
+    localName: 'ConsultarLoteRpsEnvio', chavePem, certPem, action: 'append',
+  });
+}
 
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */
 export function gzipBase64(texto) {
@@ -199,7 +220,7 @@ const URL_ABRASF_POR_AMBIENTE = {
  * (útil quando salvo/comparado isolado) — precisa sair daqui, porque só pode
  * existir uma no início do documento inteiro (o envelope SOAP).
  */
-function envelopeSoapAbrasf(metodo, xmlNegocio) {
+export function envelopeSoapAbrasf(metodo, xmlNegocio) {
   const semDeclaracao = xmlNegocio.replace(/^\s*<\?xml[^>]*\?>\s*/, '');
   return `<?xml version="1.0" encoding="UTF-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><${metodo} xmlns="http://nfse.abrasf.org.br">${semDeclaracao}</${metodo}></soap:Body></soap:Envelope>`;
 }
@@ -210,10 +231,13 @@ function envelopeSoapAbrasf(metodo, xmlNegocio) {
  * manual ABRASF exige certificado digital tanto pra assinatura quanto pra
  * transmissão). `metodo`: "RecepcionarLoteRps" ou "ConsultarLoteRps".
  */
-export function enviarAbrasf({ metodo, xmlNegocio, ambiente, pfxBuffer, senha }) {
+export function enviarAbrasf({ metodo, xmlNegocio, envelopePronto, ambiente, pfxBuffer, senha }) {
   const url = URL_ABRASF_POR_AMBIENTE[ambiente] || URL_ABRASF_POR_AMBIENTE.homologacao;
   const agent = new https.Agent({ pfx: pfxBuffer, passphrase: senha });
-  const corpo = envelopeSoapAbrasf(metodo, xmlNegocio);
+  // `envelopePronto` é pra quando a assinatura precisou ser feita já dentro do
+  // envelope (consulta — ver assinarConsultaAbrasf): embrulhar de novo aqui
+  // mudaria os bytes assinados.
+  const corpo = envelopePronto || envelopeSoapAbrasf(metodo, xmlNegocio);
 
   return new Promise((resolve, reject) => {
     const req = https.request(url, {
