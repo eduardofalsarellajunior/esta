@@ -30,3 +30,40 @@ export async function criarNotaFiscal(supabase, { filialId, movimentoId = null, 
   const { error } = await supabase.from('notas_fiscais').insert(nota);
   return { error: error?.message || null };
 }
+
+/**
+ * Corrige uma nota já gerada (ex.: CEP errado do tomador que fez a prefeitura
+ * recusar) e devolve ela pro começo do fluxo: regenera o XML com os dados
+ * novos, limpa protocolo/número da NFS-e/retorno e volta pra "gerada", pronta
+ * pra reenviar. O número do RPS é mantido de propósito — no ABRASF, reenviar
+ * o mesmo número é justamente como se retifica um RPS já enviado (manual
+ * 2.03, §2.2).
+ *
+ * Só faz sentido pra nota que ainda não virou NFS-e: uma "autorizada" já é
+ * documento fiscal válido e teria que ser cancelada/substituída no lugar.
+ */
+export async function atualizarNotaFiscal(supabase, notaId, { competencia, valor, descricao, tomador }) {
+  const { data: atual, error: errNota } = await supabase.from('notas_fiscais').select('*').eq('id', notaId).maybeSingle();
+  if (errNota || !atual) return { error: errNota?.message || 'Nota não encontrada.' };
+  if (atual.status === 'autorizada') return { error: 'Esta nota já virou NFS-e — não dá pra alterar, só cancelar/substituir.' };
+
+  const { data: filial, error: errFilial } = await supabase.from('filiais').select('*').eq('id', atual.filial_id).maybeSingle();
+  if (errFilial || !filial) return { error: errFilial?.message || 'Filial não encontrada.' };
+
+  const padrao = filial.config?.nfse?.padrao || 'padrao_nacional_campinas';
+  const percIss = Number(atual.aliquota_iss || 0);
+  const nota = {
+    ...atual,
+    competencia, descricao, tomador,
+    valor: Number(valor),
+    valor_iss: Number((Number(valor) * percIss / 100).toFixed(2)),
+  };
+  nota.xml = padrao === 'abrasf' ? gerarXmlAbrasfLoteRps({ nota, filial }) : gerarXmlDPS({ nota, filial });
+
+  const { error } = await supabase.from('notas_fiscais').update({
+    competencia: nota.competencia, descricao: nota.descricao, tomador: nota.tomador,
+    valor: nota.valor, valor_iss: nota.valor_iss, xml: nota.xml,
+    status: 'gerada', lote: null, numero_nfse: null, retorno: null,
+  }).eq('id', notaId);
+  return { error: error?.message || null };
+}

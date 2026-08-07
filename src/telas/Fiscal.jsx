@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtBRL } from '../lib/tempo.js';
+import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
 
 export default function Fiscal() {
   const [notas, setNotas] = useState([]);
@@ -12,6 +13,8 @@ export default function Fiscal() {
   const [enviando, setEnviando] = useState(null); // id da nota em envio
   const [consultando, setConsultando] = useState(null); // id da nota em consulta
   const [emLote, setEmLote] = useState(null); // { acao, feitos, total } enquanto roda em lote
+  const [alterando, setAlterando] = useState(null); // nota em edição (formulário do modal)
+  const [salvando, setSalvando] = useState(false);
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -69,6 +72,34 @@ export default function Fiscal() {
       setConsultando(null);
       carregar();
     }
+  }
+
+  function abrirAlteracao(n) {
+    const t = n.tomador || {};
+    setAlterando({
+      id: n.id, numero_rps: n.numero_rps,
+      competencia: n.competencia || '', valor: String(n.valor ?? ''), descricao: n.descricao || '',
+      cpf_cnpj: t.cpf_cnpj || '', nome: t.nome || '', endereco: t.endereco || '', numero: t.numero || '',
+      bairro: t.bairro || '', uf: t.uf || '', cep: t.cep || '', email: t.email || '', telefone: t.telefone || '',
+    });
+  }
+
+  async function salvarAlteracao(e) {
+    e.preventDefault();
+    setErro(''); setMsg(''); setSalvando(true);
+    const a = alterando;
+    const { error } = await atualizarNotaFiscal(supabase, a.id, {
+      competencia: a.competencia, valor: a.valor, descricao: a.descricao,
+      tomador: {
+        cpf_cnpj: a.cpf_cnpj, nome: a.nome, endereco: a.endereco, numero: a.numero,
+        bairro: a.bairro, uf: a.uf, cep: a.cep, email: a.email, telefone: a.telefone,
+      },
+    });
+    setSalvando(false);
+    if (error) { setErro(error); return; }
+    setAlterando(null);
+    setMsg(`RPS ${a.numero_rps} alterado — XML regerado e protocolo limpo. Envie de novo quando quiser.`);
+    carregar();
   }
 
   /**
@@ -155,6 +186,9 @@ export default function Fiscal() {
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn-ghost" onClick={() => setXml(n.xml)}>XML</button>
                     {n.retorno && <button className="btn-ghost" onClick={() => setRetorno(n.retorno)}>Retorno</button>}
+                    {n.status !== 'autorizada' && n.status !== 'cancelada' && (
+                      <button className="btn-ghost" disabled={!!emLote} onClick={() => abrirAlteracao(n)}>Alterar</button>
+                    )}
                     {(n.status === 'gerada' || n.status === 'erro') && (
                       <button className="btn-primary" disabled={enviando === n.id || !!emLote} onClick={() => enviar(n.id)}>
                         {enviando === n.id ? 'Enviando…' : (n.status === 'erro' ? 'Reenviar' : 'Enviar')}
@@ -173,6 +207,100 @@ export default function Fiscal() {
           </table>
         </div>
       </div>
+
+      {alterando && (
+        <div className="modal-bg" onClick={() => setAlterando(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 520, maxHeight: '85vh', overflow: 'auto' }}>
+            <h2>Alterar RPS/DPS {alterando.numero_rps}</h2>
+            <p className="suave">
+              Corrija os dados e grave: o XML é regerado e o protocolo é limpo, voltando a nota
+              para "gerada" — aí é só enviar de novo. O número do RPS continua o mesmo (no ABRASF,
+              reenviar o mesmo número é justamente como se retifica um RPS).
+            </p>
+            <form onSubmit={salvarAlteracao}>
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ maxWidth: 160 }}>
+                  <label>Competência</label>
+                  <input type="date" value={alterando.competencia} required
+                    onChange={(e) => setAlterando({ ...alterando, competencia: e.target.value })} />
+                </div>
+                <div className="campo" style={{ maxWidth: 120 }}>
+                  <label>Valor</label>
+                  <input type="number" step="0.01" min="0" value={alterando.valor} required
+                    onChange={(e) => setAlterando({ ...alterando, valor: e.target.value })} />
+                </div>
+              </div>
+              <div className="campo" style={{ marginBottom: 10 }}>
+                <label>Descrição do serviço</label>
+                <input value={alterando.descricao}
+                  onChange={(e) => setAlterando({ ...alterando, descricao: e.target.value })} />
+              </div>
+
+              <h3 style={{ marginBottom: 4 }}>Tomador</h3>
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ maxWidth: 180 }}>
+                  <label>CPF/CNPJ</label>
+                  <input className="mono" value={alterando.cpf_cnpj}
+                    onChange={(e) => setAlterando({ ...alterando, cpf_cnpj: e.target.value })} />
+                </div>
+                <div className="campo" style={{ flex: 1 }}>
+                  <label>Nome / Razão social</label>
+                  <input value={alterando.nome}
+                    onChange={(e) => setAlterando({ ...alterando, nome: e.target.value })} />
+                </div>
+              </div>
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ flex: 2 }}>
+                  <label>Endereço</label>
+                  <input value={alterando.endereco}
+                    onChange={(e) => setAlterando({ ...alterando, endereco: e.target.value })} />
+                </div>
+                <div className="campo" style={{ width: 90 }}>
+                  <label>Número</label>
+                  <input value={alterando.numero}
+                    onChange={(e) => setAlterando({ ...alterando, numero: e.target.value })} />
+                </div>
+              </div>
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ flex: 1 }}>
+                  <label>Bairro</label>
+                  <input value={alterando.bairro}
+                    onChange={(e) => setAlterando({ ...alterando, bairro: e.target.value })} />
+                </div>
+                <div className="campo" style={{ width: 70 }}>
+                  <label>UF</label>
+                  <input className="mono" maxLength={2} style={{ textTransform: 'uppercase' }} value={alterando.uf}
+                    onChange={(e) => setAlterando({ ...alterando, uf: e.target.value.toUpperCase() })} />
+                </div>
+                <div className="campo" style={{ width: 120 }}>
+                  <label>CEP</label>
+                  <input className="mono" value={alterando.cep}
+                    onChange={(e) => setAlterando({ ...alterando, cep: e.target.value })} />
+                </div>
+              </div>
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ flex: 1 }}>
+                  <label>E-mail</label>
+                  <input value={alterando.email}
+                    onChange={(e) => setAlterando({ ...alterando, email: e.target.value })} />
+                </div>
+                <div className="campo" style={{ width: 150 }}>
+                  <label>Telefone</label>
+                  <input value={alterando.telefone}
+                    onChange={(e) => setAlterando({ ...alterando, telefone: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+                <button type="button" className="btn-ghost" onClick={() => setAlterando(null)}>Cancelar</button>
+                <button type="submit" className="btn-primary" disabled={salvando}>
+                  {salvando ? 'Gravando…' : 'Gravar e limpar protocolo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {xml && (
         <div className="modal-bg" onClick={() => setXml(null)}>
