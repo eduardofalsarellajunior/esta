@@ -60,73 +60,68 @@ export function ReceberModal({ mensalista, formas, semCaixa, onConfirmar, onFech
 
   return (
     <div className="modal-bg" onClick={onFechar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 420 }}>
+      {/* min(...) + maxHeight: em tela estreita (celular na cabine) o modal
+          encolhe e rola, em vez de cortar os botões de baixo. */}
+      <div className="modal" onClick={(e) => e.stopPropagation()}
+        style={{ width: 'min(460px, 92vw)', maxHeight: '85vh', overflow: 'auto' }}>
         <h2>Receber mensalidade — {mensalista.razao}</h2>
-        {primeiraMensalidade ? (
-          <p className="suave">
-            Primeira mensalidade — sem vencimento anterior no cadastro.
-            {mensalista.dia_venc
-              ? ` O vencimento fixo é dia ${mensalista.dia_venc}; o período até lá é cobrado proporcional.`
-              : ' Cadastre o "Dia vencimento" pra fixar sempre no mesmo dia e prorratear a primeira mensalidade.'}
-            {' '}Confira/ajuste o valor e a data abaixo antes de confirmar.
-          </p>
-        ) : (
-          <p className="suave">
-            Vencimento no cadastro: {fmtDataBR(mensalista.proximo_pagamento)}. Ao confirmar, o
-            próximo pagamento passa para a data abaixo
-            {mensalista.dia_venc ? ` (dia ${mensalista.dia_venc} do mês seguinte, o vencimento fixo do cadastro)` : ' (mesmo dia do mês seguinte — cadastre o "Dia vencimento" pra fixar sempre no mesmo dia)'}
-            {' '}e o comprovante é impresso.
-          </p>
-        )}
-        {sugestaoAoVivo && (sugestaoAoVivo.proximo !== proximo || String(sugestaoAoVivo.valor) !== valor) && (
-          <p className="suave">
-            Pela data do pagamento acima: {sugestaoAoVivo.dias} dia(s) até {fmtDataBR(sugestaoAoVivo.proximo)},
-            {' '}valor proporcional {fmtBRL(sugestaoAoVivo.valor)}.{' '}
-            <button type="button" className="btn-ghost" onClick={usarSugestao} style={{ padding: '2px 8px' }}>Usar esta sugestão</button>
-          </p>
-        )}
+        <p className="suave" style={{ marginTop: -4 }}>
+          {primeiraMensalidade
+            ? `Primeira mensalidade${mensalista.dia_venc ? ` · vencimento fixo dia ${mensalista.dia_venc}, período até lá cobrado proporcional` : ''}`
+            : `Vencimento no cadastro: ${fmtDataBR(mensalista.proximo_pagamento)}`}
+          {!mensalista.dia_venc && ' · sem "Dia vencimento" no cadastro (o próximo cai no mesmo dia do mês seguinte)'}
+        </p>
         {semCaixa && (
-          <p className="aviso">
-            Você não tem caixa aberto — este recebimento fica registrado e aparece no
-            Painel/BI, mas não entra em nenhum fechamento de caixa.
+          <p className="aviso" style={{ fontSize: 12 }}>
+            Sem caixa aberto — o recebimento é registrado e aparece no Painel/BI, mas fica fora do fechamento de caixa.
           </p>
         )}
         <form onSubmit={(e) => { e.preventDefault(); onConfirmar({ mensalista, dtPagamento, valor, forma, proximo, observacao, gerarNota }); }}>
-          <div className="campo" style={{ marginBottom: 10 }}>
-            <label>Data do pagamento</label>
-            <input type="date" value={dtPagamento} onChange={(e) => setDtPagamento(e.target.value)} required />
+          <div className="linha-form" style={{ marginBottom: 10 }}>
+            <div className="campo" style={{ flex: "1 1 180px", minWidth: 0 }}>
+              <label>Data do pagamento</label>
+              <input type="date" value={dtPagamento} onChange={(e) => setDtPagamento(e.target.value)} required />
+            </div>
+            <div className="campo" style={{ flex: "1 1 180px", minWidth: 0 }}>
+              <label>Valor pago</label>
+              <input type="number" step="0.01" min="0.01" value={valor} onChange={(e) => setValor(e.target.value)} required />
+              {Number(mensalista.valor_mensalidade || 0) > 0 && (
+                <span className="suave" style={{ fontSize: 11 }}>Cadastro: {fmtBRL(Number(mensalista.valor_mensalidade))}</span>
+              )}
+            </div>
           </div>
-          <div className="campo" style={{ marginBottom: 10 }}>
-            <label>Valor pago</label>
-            <input type="number" step="0.01" min="0.01" value={valor} onChange={(e) => setValor(e.target.value)} required />
-            {Number(mensalista.valor_mensalidade || 0) > 0 && (
-              <span className="suave" style={{ fontSize: 11 }}>Mensalidade do cadastro: {fmtBRL(Number(mensalista.valor_mensalidade))}</span>
-            )}
+          <div className="linha-form" style={{ marginBottom: 10 }}>
+            <div className="campo" style={{ flex: "1 1 180px", minWidth: 0 }}>
+              <label>Forma de pagamento</label>
+              <select value={forma} onChange={(e) => setForma(e.target.value)} required>
+                {formas.map((f) => <option key={f.codigo} value={f.codigo}>{f.descricao}</option>)}
+              </select>
+              {semFormas && <span className="suave" style={{ fontSize: 11 }}>Nenhuma forma ativa — cadastre em Cadastros.</span>}
+            </div>
+            <div className="campo" style={{ flex: "1 1 180px", minWidth: 0 }}>
+              <label>Próximo pagamento</label>
+              <input type="date" value={proximo} onChange={(e) => setProximo(e.target.value)} required />
+              {!dentroDoVencimento(proximo, 0) && (
+                <span className="suave" style={{ fontSize: 11 }}>Continua vencido (pagamento em atraso).</span>
+              )}
+            </div>
           </div>
-          <div className="campo" style={{ marginBottom: 10 }}>
-            <label>Forma de pagamento</label>
-            <select value={forma} onChange={(e) => setForma(e.target.value)} required>
-              {formas.map((f) => <option key={f.codigo} value={f.codigo}>{f.descricao}</option>)}
-            </select>
-            {semFormas && <span className="suave" style={{ fontSize: 11 }}>Nenhuma forma ativa — cadastre em Cadastros → Formas de pagamento.</span>}
-          </div>
-          <div className="campo" style={{ marginBottom: 10 }}>
-            <label>Próximo pagamento</label>
-            <input type="date" value={proximo} onChange={(e) => setProximo(e.target.value)} required />
-            {!dentroDoVencimento(proximo, 0) && (
-              <span className="suave" style={{ fontSize: 11 }}>
-                Continua vencido — é o pagamento de um mês em atraso; receba os meses seguintes ou ajuste a data.
-              </span>
-            )}
-          </div>
+          {/* Sugestão da 1ª mensalidade fica junto dos campos que ela altera. */}
+          {sugestaoAoVivo && (sugestaoAoVivo.proximo !== proximo || String(sugestaoAoVivo.valor) !== valor) && (
+            <p className="suave" style={{ fontSize: 12, marginTop: -4, marginBottom: 10 }}>
+              Pela data acima: {sugestaoAoVivo.dias} dia(s) até {fmtDataBR(sugestaoAoVivo.proximo)},
+              {' '}proporcional {fmtBRL(sugestaoAoVivo.valor)}.{' '}
+              <button type="button" className="btn-ghost" onClick={usarSugestao} style={{ padding: '2px 8px' }}>Usar</button>
+            </p>
+          )}
           <div className="campo" style={{ marginBottom: 10 }}>
             <label>Observação (opcional)</label>
             <input value={observacao} onChange={(e) => setObservacao(e.target.value)} />
           </div>
           <label className="campo-check" style={{ marginBottom: 10 }}>
             <input type="checkbox" checked={gerarNota} onChange={(e) => setGerarNota(e.target.checked)} />
-            Gerar nota fiscal (DPS) — usa o CPF/CNPJ e endereço do cadastro
-            {!mensalista.cpf_cnpj && ' (mensalista sem CPF/CNPJ cadastrado — sai sem identificação)'}
+            Gerar nota fiscal (DPS)
+            {!mensalista.cpf_cnpj && <span className="suave"> — mensalista sem CPF/CNPJ, sai sem identificação</span>}
           </label>
           {valorInvalido && <p className="aviso">Informe o valor pago.</p>}
           <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
