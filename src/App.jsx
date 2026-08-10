@@ -13,6 +13,7 @@ import Fiscal from './telas/Fiscal.jsx';
 import Configuracoes from './telas/Configuracoes.jsx';
 import Usuarios from './telas/Usuarios.jsx';
 import ImportarDbf from './telas/ImportarDbf.jsx';
+import ModelosTicket from './telas/ModelosTicket.jsx';
 
 export default function App() {
   const [sessao, setSessao] = useState(null);
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="fiscal" element={<Fiscal perfil={perfil} />} />
           <Route path="configuracoes" element={<Configuracoes perfil={perfil} />} />
           <Route path="usuarios" element={<Usuarios perfil={perfil} />} />
+          <Route path="modelos-ticket" element={<ModelosTicket perfil={perfil} />} />
           <Route path="importar" element={<ImportarDbf perfil={perfil} />} />
         </Route>
       </Routes>

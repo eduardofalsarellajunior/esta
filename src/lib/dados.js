@@ -60,6 +60,17 @@ export async function carregarModelosVeiculo() {
   return data;
 }
 
+/**
+ * Layout dos comprovantes da filial: `{ tipo: conteudo }`.
+ * Erro aqui não é fatal — sem modelo (ou sem a tabela, se a migration 0017
+ * ainda não rodou) o ticket sai no layout fixo de sempre.
+ */
+export async function carregarModelosTicket() {
+  const { data, error } = await supabase.from('modelos_ticket').select('tipo, conteudo');
+  if (error) return {};
+  return Object.fromEntries((data || []).map((m) => [m.tipo, m.conteudo]));
+}
+
 /** Tabelas liberadas para seleção manual (carro fora do catálogo). */
 export async function carregarTabelasManuais() {
   const { data, error } = await supabase

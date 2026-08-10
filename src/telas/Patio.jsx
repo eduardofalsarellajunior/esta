@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais } from '../lib/dados.js';
+import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais, carregarModelosTicket } from '../lib/dados.js';
 import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL, dentroDoVencimento } from '../lib/tempo.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
@@ -9,6 +9,7 @@ import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
 import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
+import { dadosFilial, dadosMovimento, permanenciaDe } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
@@ -38,7 +39,8 @@ export default function Patio({ perfil }) {
   const [confirmPlaca, setConfirmPlaca] = useState(null); // placa digitada, fora do formato esperado
   const [ticket, setTicket] = useState(null); // { titulo, linhas: [[rotulo, valor], ...] }
   const [celularTicket, setCelularTicket] = useState('');
-  const [filial, setFilial] = useState(null); // { nome_fantasia, endereco, cnpj } — cabeçalho do ticket
+  const [filial, setFilial] = useState(null); // dados do estabelecimento — cabeçalho/tokens do ticket
+  const [modelosTicket, setModelosTicket] = useState({}); // tipo -> layout com tokens (vazio = layout fixo)
   const [saidasRecentes, setSaidasRecentes] = useState([]);
   const [servicos, setServicos] = useState([]);
   const [modalServicos, setModalServicos] = useState(null); // { mov, marcados: Set<servico_id> }
@@ -86,7 +88,7 @@ export default function Patio({ perfil }) {
     try {
       const hoje = hojeISO();
       const { inicio: inicioHoje, fim: fimHoje } = limitesDiaLocal(hoje, hoje);
-      const [t, p, cv, fp, md, tm, sr, fl, sv] = await Promise.all([
+      const [t, p, cv, fp, md, tm, sr, fl, sv, mt] = await Promise.all([
         carregarTabelasPreco(), carregarPatio(),
         supabase.from('convenios').select('*'),
         supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo'),
@@ -94,8 +96,9 @@ export default function Patio({ perfil }) {
         // Saídas normais de hoje + veículos excluídos (cancelados) hoje — ordenado/limitado depois em JS.
         supabase.from('movimentos').select('*')
           .or(`dt_saida.eq.${hoje},and(excluido_em.gte.${inicioHoje},excluido_em.lt.${fimHoje})`),
-        supabase.from('filiais').select('nome_fantasia, endereco, cnpj').eq('id', perfil.filial_id).maybeSingle(),
+        supabase.from('filiais').select('*').eq('id', perfil.filial_id).maybeSingle(),
         supabase.from('servicos').select('*').eq('ativo', true).order('codigo'),
+        carregarModelosTicket(),
       ]);
       setTabelas(t); setPatio(p);
       setConvenios(Object.fromEntries((cv.data || []).map((c) => [c.codigo, c])));
@@ -108,6 +111,7 @@ export default function Patio({ perfil }) {
       setSaidasRecentes(listaSaidas);
       setFilial(fl.data || null);
       setServicos(sv.data || []);
+      setModelosTicket(mt);
       const idsPatio = p.map((m) => m.id);
       if (idsPatio.length > 0) {
         const { data: ms } = await supabase.from('movimento_servicos').select('movimento_id').in('movimento_id', idsPatio);
@@ -118,6 +122,16 @@ export default function Patio({ perfil }) {
     } catch (e) { setErro(e.message); }
   }
   useEffect(() => { recarregar(); /* eslint-disable-next-line */ }, []);
+
+  /**
+   * Aplica o layout que a filial cadastrou (tabela `modelos_ticket`) ao ticket.
+   * Sem modelo pro tipo, devolve o ticket como veio — o layout fixo de sempre.
+   */
+  function comModelo(tipo, ticket, dados) {
+    const modelo = modelosTicket[tipo];
+    if (!modelo) return ticket;
+    return { ...ticket, modelo, dados: { ...dadosFilial(filial || {}), ...dados } };
+  }
 
   function encontrarNoPatio(p) {
     return patio.find((m) => m.placa === p);
@@ -220,16 +234,18 @@ export default function Patio({ perfil }) {
     const p = placa.trim().toUpperCase();
     const dtEntrada = hojeISO();
     const hrEntrada = agoraHHMM();
-    const { error } = await supabase.from('movimentos').insert({
+    const nomeMensalista = detectado?.nome || '';
+    // `select()` para ter o id do movimento — é o número de controle (@C#@) do ticket.
+    const { data: novo, error } = await supabase.from('movimentos').insert({
       filial_id: perfil.filial_id, placa: p, modelo: nomeModelo || null,
       dt_entrada: dtEntrada, hr_entrada: hrEntrada,
       tipo_veic: tipoVeic,
       tipo_mens: tipoMens ?? detectado?.tipo_mens ?? 'E',
       convenio_codigo: convenioCodigo ?? detectado?.convenio_codigo ?? null,
       usuario_entrada: perfil.id,
-    });
+    }).select().single();
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
-    setTicket({
+    setTicket(comModelo('entrada', {
       titulo: 'Ticket de entrada',
       linhas: [
         ['Placa', p],
@@ -238,7 +254,10 @@ export default function Patio({ perfil }) {
         ['Entrada', `${dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(hrEntrada))}`],
         ['Operador', perfil.nome],
       ],
-    });
+    }, {
+      ...dadosMovimento({ movimento: novo, operador: perfil.nome }),
+      MENSALISTA: nomeMensalista,
+    }));
     setCelularTicket('');
     limparFormEntrada();
     recarregar();
@@ -491,7 +510,7 @@ export default function Patio({ perfil }) {
     const formaTexto = resultado.mensalista ? 'Mensalista/hóspede'
       : (pagos.map((p) => formas.find((f) => f.codigo === p.forma)?.descricao || p.forma).join(' + ') || '—');
     const { servicosSelecionados } = saindo;
-    setTicket({
+    setTicket(comModelo('saida', {
       titulo: 'Ticket de saída',
       linhas: [
         ['Placa', mov.placa],
@@ -507,7 +526,14 @@ export default function Patio({ perfil }) {
         ['Saída', `${dtSaida.split('-').reverse().join('/')} ${fmtHora(Number(hrSaida))}`],
         ['Operador', perfil.nome],
       ],
-    });
+    }, {
+      ...dadosMovimento({
+        movimento: { ...mov, dt_saida: dtSaida, hr_saida: hrSaida, valor: resultado.valor },
+        resultado, operador: perfil.nome,
+        servicos: servicosSelecionados, convenio: convenios[convenioCodigo],
+      }),
+      MOEDA: formaTexto,
+    }));
     setCelularTicket('');
     setSaindo(null); recarregar();
   }
@@ -520,7 +546,10 @@ export default function Patio({ perfil }) {
       : (MENSALISTA.has(mov.tipo_mens) ? 'Mensalista/hóspede' : '—');
     const valorConvenio = Number(mov.valor_convenio || 0);
     const servicosDoMov = await buscarServicosDoMovimento(mov.id);
-    setTicket({
+    // O resultado do motor não fica gravado; pra reimpressão basta o que está
+    // no movimento + a permanência recalculada a partir dos horários.
+    const permanencia = permanenciaDe(mov);
+    setTicket(comModelo('saida', {
       titulo: 'Ticket de saída (reimpressão)',
       linhas: [
         ['Placa', mov.placa],
@@ -535,7 +564,33 @@ export default function Patio({ perfil }) {
         ['Saída', `${mov.dt_saida.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_saida))}`],
         ['Reimpresso por', perfil.nome],
       ],
-    });
+    }, {
+      ...dadosMovimento({
+        movimento: mov,
+        resultado: { valor: Number(mov.valor || 0), valorConvenio, tempoDecorrido: permanencia },
+        operador: perfil.nome, servicos: servicosDoMov, convenio: convenios[mov.convenio_codigo],
+      }),
+      MOEDA: formaTexto,
+    }));
+    setCelularTicket('');
+  }
+
+  /**
+   * 2ª via do comprovante de entrada — o cliente perdeu o ticket e o veículo
+   * ainda está no pátio. O modelo padrão traz o termo de retirada com
+   * assinatura, como no TICKET2 do sistema antigo.
+   */
+  function segundaVia(mov) {
+    setTicket(comModelo('segunda_via', {
+      titulo: 'Ticket de entrada (2ª via)',
+      linhas: [
+        ['Placa', mov.placa],
+        ['Carro', mov.modelo || '—'],
+        ['Tabela', mov.tipo_veic],
+        ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
+        ['Reimpresso por', perfil.nome],
+      ],
+    }, dadosMovimento({ movimento: mov, operador: perfil.nome })));
     setCelularTicket('');
   }
 
@@ -646,6 +701,7 @@ export default function Patio({ perfil }) {
                     {podeExcluir(m) && (
                       <button className="btn-ghost aviso-btn" onClick={() => abrirExclusao(m)}>Excluir</button>
                     )}
+                    <button className="btn-ghost" onClick={() => segundaVia(m)} title="Cliente perdeu o ticket">2ª via</button>
                     <button
                       className={movimentosComServico.has(m.id) ? 'btn-servico-ativo' : 'btn-ghost'}
                       onClick={() => abrirServicosModal(m)}

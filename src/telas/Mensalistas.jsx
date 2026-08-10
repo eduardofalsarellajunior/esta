@@ -4,7 +4,7 @@ import { carregarModelosVeiculo } from '../lib/dados.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { erroCpfCnpj } from '../lib/documento.js';
 import { dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
-import { receberMensalidade, ticketRecebimento, descricaoForma } from '../lib/mensalidade.js';
+import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
 import { ReceberModal } from '../componentes/ReceberMensalidade.jsx';
 import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
@@ -73,13 +73,13 @@ export default function Mensalistas({ perfil }) {
   // Grava o evento de recebimento e avança o próximo pagamento no cadastro.
   async function receber({ mensalista, dtPagamento, valor, forma, proximo, observacao }) {
     setErro('');
-    const { error } = await receberMensalidade({ perfil, mensalista, dtPagamento, valor, forma, proximo, observacao });
+    const { error, pagamento } = await receberMensalidade({ perfil, mensalista, dtPagamento, valor, forma, proximo, observacao });
     if (error) { setErro(error); return; }
     // Reflete a nova data no selecionado (recarrega o histórico logo abaixo).
     setSel((s) => (s && s.id === mensalista.id ? { ...s, proximo_pagamento: proximo } : s));
 
-    setTicket(ticketRecebimento({
-      mensalista, dtPagamento, valor, proximo,
+    setTicket(await ticketRecebimentoComModelo({
+      mensalista, dtPagamento, valor, proximo, recibo: pagamento?.id,
       formaDescricao: descricaoForma(formas, forma), operador: perfil.nome,
     }));
     setCelularTicket(mensalista.celular || '');
@@ -133,11 +133,11 @@ export default function Mensalistas({ perfil }) {
       {sel && <Veiculos perfil={perfil} mensalista={sel} />}
       {sel && (
         <Recebimentos mensalista={sel} formas={formas}
-          onReimprimir={(p) => {
-            setTicket(ticketRecebimento({
+          onReimprimir={async (p) => {
+            setTicket(await ticketRecebimentoComModelo({
               mensalista: sel, dtPagamento: p.dt_pagamento, valor: p.valor_pago,
               proximo: p.proximo_pagamento, formaDescricao: descricaoForma(formas, p.forma_pagamento),
-              operador: perfil.nome, reimpressao: true,
+              operador: perfil.nome, reimpressao: true, recibo: p.id,
             }));
             setCelularTicket(sel.celular || '');
           }} />

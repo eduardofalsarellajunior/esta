@@ -3,10 +3,17 @@ import { supabase } from '../lib/supabase.js';
 import { fmtBRL } from '../lib/tempo.js';
 import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
 import { erroCpfCnpj } from '../lib/documento.js';
+import { carregarModelosTicket } from '../lib/dados.js';
+import { dadosFilial, dadosMovimento, dadosRps, permanenciaDe } from '../lib/dadosTicket.js';
+import { TicketModal } from '../componentes/Ticket.jsx';
 
 export default function Fiscal() {
   const [notas, setNotas] = useState([]);
   const [padrao, setPadrao] = useState('');
+  const [filial, setFilial] = useState(null);
+  const [modeloRps, setModeloRps] = useState(''); // layout do RPS, se a filial cadastrou um
+  const [ticket, setTicket] = useState(null);
+  const [celularTicket, setCelularTicket] = useState('');
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [xml, setXml] = useState(null);
@@ -19,14 +26,42 @@ export default function Fiscal() {
 
   const carregar = useCallback(async () => {
     setErro('');
-    const [{ data: n, error }, { data: f }] = await Promise.all([
+    const [{ data: n, error }, { data: f }, modelos] = await Promise.all([
       supabase.from('notas_fiscais').select('*').order('created_at', { ascending: false }).limit(200),
-      supabase.from('filiais').select('config').maybeSingle(),
+      supabase.from('filiais').select('*').maybeSingle(),
+      carregarModelosTicket(),
     ]);
     if (error) setErro(error.message); else setNotas(n || []);
+    setFilial(f || null);
     setPadrao(f?.config?.nfse?.padrao || 'padrao_nacional_campinas');
+    setModeloRps(modelos.rps || '');
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
+
+  /**
+   * Imprime o RPS no layout que a filial cadastrou (Modelos de ticket → RPS).
+   * Sem modelo cadastrado o botão nem aparece: aqui não existe layout fixo de
+   * fallback, o comprovante do RPS é o modelo.
+   */
+  async function imprimirRps(n) {
+    let movimento = null;
+    if (n.movimento_id) {
+      const { data } = await supabase.from('movimentos').select('*').eq('id', n.movimento_id).maybeSingle();
+      movimento = data;
+    }
+    setTicket({
+      titulo: `RPS/DPS ${n.numero_rps}`,
+      linhas: [['RPS/DPS', n.numero_rps], ['Valor', fmtBRL(Number(n.valor))]],
+      modelo: modeloRps,
+      dados: {
+        ...dadosFilial(filial || {}),
+        ...(movimento ? dadosMovimento({ movimento, resultado: { valor: movimento.valor, tempoDecorrido: permanenciaDe(movimento) } }) : {}),
+        ...dadosRps({ nota: n, filial }),
+        V: fmtBRL(Number(n.valor)), // no RPS o valor é o da nota, não o do movimento
+      },
+    });
+    setCelularTicket(n.tomador?.celular || n.tomador?.telefone || '');
+  }
 
   // Assinatura (XMLDSig) + envio (mTLS) rodam nas funções do Vercel — elas
   // precisam do certificado, que nunca fica no navegador.
@@ -187,6 +222,7 @@ export default function Fiscal() {
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn-ghost" onClick={() => setXml(n.xml)}>XML</button>
+                    {modeloRps && <button className="btn-ghost" onClick={() => imprimirRps(n)}>Imprimir</button>}
                     {n.retorno && <button className="btn-ghost" onClick={() => setRetorno(n.retorno)}>Retorno</button>}
                     {n.status !== 'autorizada' && n.status !== 'cancelada' && (
                       <button className="btn-ghost" disabled={!!emLote} onClick={() => abrirAlteracao(n)}>Alterar</button>
@@ -209,6 +245,11 @@ export default function Fiscal() {
           </table>
         </div>
       </div>
+
+      {ticket && (
+        <TicketModal ticket={ticket} filial={filial} celular={celularTicket}
+          onCelular={setCelularTicket} onFechar={() => setTicket(null)} />
+      )}
 
       {alterando && (
         <div className="modal-bg" onClick={() => setAlterando(null)}>

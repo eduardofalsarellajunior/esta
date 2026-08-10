@@ -24,6 +24,7 @@ const GRUPOS = [
   { titulo: 'Configurações', itens: [
     { to: '/configuracoes', rotulo: 'Dados do estacionamento' },
     { to: '/usuarios', rotulo: 'Usuários' },
+    { to: '/modelos-ticket', rotulo: 'Modelos de ticket' },
   ]},
 ];
 

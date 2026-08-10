@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, proximoVencimento, primeiroVencimento, diferencaEmDias, dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
-import { receberMensalidade, ticketRecebimento, descricaoForma } from '../lib/mensalidade.js';
+import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 
 /**
@@ -204,7 +204,7 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
 
   async function confirmar({ mensalista: m, dtPagamento, valor, forma, proximo, observacao, gerarNota }) {
     setErro('');
-    const { error } = await receberMensalidade({ perfil, mensalista: m, dtPagamento, valor, forma, proximo, observacao });
+    const { error, pagamento } = await receberMensalidade({ perfil, mensalista: m, dtPagamento, valor, forma, proximo, observacao });
     if (error) { setErro(error); return; }
     if (gerarNota) {
       // Best-effort (mesmo espírito da fidelidade no Pátio): o pagamento já
@@ -221,8 +221,8 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
         });
       } catch { /* nota fiscal é best-effort aqui */ }
     }
-    const ticket = ticketRecebimento({
-      mensalista: m, dtPagamento, valor, proximo,
+    const ticket = await ticketRecebimentoComModelo({
+      mensalista: m, dtPagamento, valor, proximo, recibo: pagamento?.id,
       formaDescricao: descricaoForma(formas, forma), operador: perfil.nome,
     });
     onConcluido(ticket, m.celular || '');
