@@ -278,15 +278,22 @@ export function parseAbrasfEnvioResposta(xml) {
 /**
  * Resposta do `ConsultarLoteRps`. `situacao`: 1=não recebido, 2=não
  * processado, 3=processado com erro, 4=processado com sucesso (nota saiu).
+ *
+ * `jaInformado` separa um caso específico de situação 3: o RPS já tinha sido
+ * convertido em NFS-e num protocolo anterior ("Tipo: 1 Série: 01 Número: 7 já
+ * informado anteriormente"). Não é erro de verdade — a nota existe, só saiu
+ * por outro protocolo, e a prefeitura não devolve o número dela aqui.
  */
 export function parseAbrasfConsultaResposta(xml) {
   const situacao = extrairTag(xml, 'Situacao');
   const infNfse = xml.match(/<InfNfse[^>]*>([\s\S]*?)<\/InfNfse>/);
   const corpo = infNfse ? infNfse[1] : xml;
+  const mensagens = extrairMensagensRetorno(xml);
   return {
     situacao: situacao ? Number(situacao) : null,
     numeroNfse: extrairTag(corpo, 'Numero'),
     codigoVerificacao: extrairTag(corpo, 'CodigoVerificacao'),
-    mensagens: extrairMensagensRetorno(xml),
+    mensagens,
+    jaInformado: mensagens.some((m) => /j[áa]\s+informad[oa]\s+anteriormente/i.test(m.mensagem || '')),
   };
 }

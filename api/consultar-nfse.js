@@ -55,6 +55,15 @@ export default async function handler(req, res) {
         status: 'autorizada', numero_nfse: parsed.numeroNfse, retorno: resposta.corpo,
       }).eq('id', nota.id);
       res.status(200).json({ ok: true, status: 'autorizada', numeroNfse: parsed.numeroNfse, codigoVerificacao: parsed.codigoVerificacao, ambiente });
+    } else if (parsed.situacao === 3 && parsed.jaInformado) {
+      // "já informado anteriormente" (L999): esse RPS já virou NFS-e num
+      // protocolo anterior — não é erro, é duplicidade. Marca com "IA"
+      // (Informado Anteriormente) no lugar do número da nota, já que o
+      // número real saiu no protocolo antigo e a prefeitura não devolve aqui.
+      await supabase.from('notas_fiscais').update({
+        status: 'autorizada', numero_nfse: 'IA', retorno: resposta.corpo,
+      }).eq('id', nota.id);
+      res.status(200).json({ ok: true, status: 'autorizada', numeroNfse: 'IA', jaInformado: true, ambiente });
     } else if (parsed.situacao === 3) {
       // Rejeição de verdade do governo (o lote foi processado e recusado) —
       // aí sim vira "erro" definitivo, com o retorno gravado.

@@ -63,7 +63,8 @@ export default function Fiscal() {
     try {
       const { httpOk, httpStatus, dados } = await chamarApi('/api/consultar-nfse', notaId);
       if (!httpOk) { setErro(dados.erro || `Falha ao consultar (${httpStatus}).`); return; }
-      if (dados.status === 'autorizada') setMsg(`NFS-e autorizada — número ${dados.numeroNfse} (ambiente: ${dados.ambiente}).`);
+      if (dados.jaInformado) setMsg('Este RPS já tinha virado NFS-e num protocolo anterior — marcado como "IA" (informado anteriormente), não é erro.');
+      else if (dados.status === 'autorizada') setMsg(`NFS-e autorizada — número ${dados.numeroNfse} (ambiente: ${dados.ambiente}).`);
       else if (dados.status === 'erro') setErro(`Rejeitada pelo governo (ambiente: ${dados.ambiente}) — veja o retorno na linha da nota.`);
       else if (dados.status === 'falha_consulta') setErro(`Falha ao consultar: ${dados.erro}`);
       else setMsg('Ainda em processamento na prefeitura — tente consultar de novo em instantes.');
