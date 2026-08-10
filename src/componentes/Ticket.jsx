@@ -1,5 +1,6 @@
 // Comprovante/ticket compartilhado (entrada, saída, exclusão, mensalidade).
 // Um ticket é `{ titulo, linhas: [[rotulo, valor], ...] }`.
+import { useEffect } from 'react';
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -49,8 +50,29 @@ export function linkWhatsApp(ticket, celular, filial) {
 /**
  * Modal do comprovante, com campo de celular (WhatsApp) e botão de imprimir.
  * `celular`/`onCelular` ficam no chamador para o campo zerar junto com o ticket.
+ *
+ * Atalhos de teclado (F/W/I) porque na cabine o fluxo é rápido e quase sempre
+ * termina em imprimir — sem precisar tirar a mão do teclado pra pegar o mouse.
  */
 export function TicketModal({ ticket, filial, celular, onCelular, onFechar }) {
+  useEffect(() => {
+    function aoTeclar(e) {
+      // Digitando o celular (ou qualquer campo)? Atalho não vale — senão um
+      // "9" tudo bem, mas o "F" de um telefone fecharia o ticket.
+      const alvo = e.target;
+      if (alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.tagName === 'SELECT' || alvo.isContentEditable)) return;
+      // Deixa os atalhos do navegador em paz (Ctrl+P, Alt+Tab...).
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      const tecla = e.key.toLowerCase();
+      if (tecla === 'f' || tecla === 'escape') { e.preventDefault(); onFechar(); }
+      else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); }
+      else if (tecla === 'i') { e.preventDefault(); imprimirTicket(ticket, filial); }
+    }
+    document.addEventListener('keydown', aoTeclar);
+    return () => document.removeEventListener('keydown', aoTeclar);
+  }, [ticket, filial, celular, onFechar]);
+
   return (
     <div className="modal-bg" onClick={onFechar}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -64,10 +86,13 @@ export function TicketModal({ ticket, filial, celular, onCelular, onFechar }) {
           <label>Celular para WhatsApp (opcional)</label>
           <input value={celular} onChange={(e) => onCelular(e.target.value)} placeholder="(19) 99999-9999" />
         </div>
+        {/* A letra sublinhada é o atalho (ver o useEffect acima). */}
         <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-          <button className="btn-ghost" onClick={onFechar}>Fechar</button>
-          <a className="btn-ghost" href={linkWhatsApp(ticket, celular, filial)} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
-          <button className="btn-primary" onClick={() => imprimirTicket(ticket, filial)}>Imprimir</button>
+          <button className="btn-ghost" onClick={onFechar}><u>F</u>echar</button>
+          <a className="btn-ghost" href={linkWhatsApp(ticket, celular, filial)} target="_blank" rel="noopener noreferrer">
+            Enviar por <u>W</u>hatsApp
+          </a>
+          <button className="btn-primary" onClick={() => imprimirTicket(ticket, filial)}><u>I</u>mprimir</button>
         </div>
       </div>
     </div>
