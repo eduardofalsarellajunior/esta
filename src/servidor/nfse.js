@@ -142,25 +142,43 @@ export function autoverificarAssinatura(xmlAssinado) {
  * apesar de o manual genérico (§4.5.6) não mostrar campo de Signature em
  * ConsultarLoteRpsEnvio.
  *
- * A diferença crítica em relação ao envio: aqui a assinatura é feita **já
- * dentro do envelope SOAP**, não no XML solto. Motivo: o elemento assinado
- * (`ConsultarLoteRpsEnvio`) é justamente o que carrega `xmlns=""`. Sozinho,
- * ele é a raiz e esse `xmlns=""` é redundante — o C14N descarta. Dentro do
- * envelope, o pai tem `xmlns="http://nfse.abrasf.org.br"`, então o `xmlns=""`
- * passa a ser significativo e ENTRA na canonicalização. Assinar solto e
- * embrulhar depois gera digests diferentes dos dois lados ("Arquivo enviado
- * com erro na assinatura").
+ * Duas diferenças em relação ao envio, as duas por causa do mesmo detalhe:
+ * `ConsultarLoteRpsEnvio` NÃO tem atributo `Id` no schema (o `LoteRps` tem).
  *
- * O envio em lote não sofre disso porque lá o elemento assinado (`LoteRps`)
- * fica abaixo do que zera o namespace — o contexto dele é o mesmo nos dois
- * casos, por isso `assinarLoteAbrasf` continua assinando o XML solto.
+ * 1. Referência `URI=""` (documento inteiro), não `#Id`. Sem forçar isso, o
+ *    xml-crypto inventa um Id ("_0") e referencia "#_0" — atributo que o
+ *    schema não permite e ID que o validador da prefeitura não reconhece.
+ * 2. Assina o XML solto (não o envelope). Com `URI=""` o C14N cobre a raiz
+ *    do documento, onde o `xmlns=""` é redundante e acaba descartado — que é
+ *    exatamente a orientação do grupo wsnfsecampinas ("pra Consulta não se
+ *    deve incluir o namespace na assinatura"), mantendo o `xmlns=""` no XML
+ *    transmitido, que o unmarshalling exige.
  */
-export function assinarConsultaAbrasf(envelopeComConsulta, { chavePem, certPem }) {
-  // action: 'append' — a Signature entra como último filho de
-  // ConsultarLoteRpsEnvio (Prestador, Protocolo, Signature).
-  return assinarElementoPorLocalName(envelopeComConsulta, {
-    localName: 'ConsultarLoteRpsEnvio', chavePem, certPem, action: 'append',
+export function assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem }) {
+  const xpath = "//*[local-name(.)='ConsultarLoteRpsEnvio']";
+  const sig = new SignedXml({
+    privateKey: chavePem,
+    publicCert: certPem,
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
   });
+  sig.addReference({
+    xpath,
+    // URI="" (documento inteiro) em vez de "#Id": ConsultarLoteRpsEnvio não
+    // tem atributo Id no schema (diferente de LoteRps, que tem). Sem passar
+    // isso explicitamente, o xml-crypto INVENTA um Id ("_0") e referencia
+    // "#_0" — atributo que o schema não permite e ID que o validador da
+    // prefeitura não reconhece.
+    uri: '',
+    isEmptyUri: true,
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    ],
+  });
+  sig.computeSignature(xmlConsulta, { location: { reference: xpath, action: 'append' } });
+  return sig.getSignedXml();
 }
 
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */

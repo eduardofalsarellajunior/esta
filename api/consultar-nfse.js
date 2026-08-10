@@ -4,7 +4,7 @@
 // (mTLS) do envio; ver api/gerar-nfse.js.
 import { createClient } from '@supabase/supabase-js';
 import { gerarXmlAbrasfConsulta, parseAbrasfConsultaResposta } from '../src/lib/fiscal.js';
-import { extrairChaveECertificado, enviarAbrasf, envelopeSoapAbrasf, assinarConsultaAbrasf } from '../src/servidor/nfse.js';
+import { extrairChaveECertificado, enviarAbrasf, assinarConsultaAbrasf } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -42,14 +42,11 @@ export default async function handler(req, res) {
   try {
     const pfxBuffer = Buffer.from(pfxB64, 'base64');
     const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
-    // Monta o envelope PRIMEIRO e assina dentro dele — a assinatura da
-    // consulta depende do contexto de namespace do envelope (ver
-    // assinarConsultaAbrasf). Por isso vai como `envelopePronto`: embrulhar
-    // depois mudaria os bytes que foram assinados.
+    // Assina o XML solto (com URI="" — ver assinarConsultaAbrasf) e deixa o
+    // envelope SOAP pro enviarAbrasf, como no envio.
     const xmlConsulta = gerarXmlAbrasfConsulta({ filial, protocolo: nota.lote });
-    const envelope = envelopeSoapAbrasf('ConsultarLoteRps', xmlConsulta);
-    const envelopeAssinado = assinarConsultaAbrasf(envelope, { chavePem, certPem });
-    const resposta = await enviarAbrasf({ envelopePronto: envelopeAssinado, ambiente, pfxBuffer, senha });
+    const xmlAssinado = assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem });
+    const resposta = await enviarAbrasf({ metodo: 'ConsultarLoteRps', xmlNegocio: xmlAssinado, ambiente, pfxBuffer, senha });
     const ehFalhaTransporte = resposta.status < 200 || resposta.status >= 300 || resposta.corpo.includes('<soap:Fault>');
     const parsed = parseAbrasfConsultaResposta(resposta.corpo);
 
