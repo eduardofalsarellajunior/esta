@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais } from '../lib/dados.js';
 import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL, dentroDoVencimento } from '../lib/tempo.js';
@@ -49,6 +49,18 @@ export default function Patio({ perfil }) {
   const [agora, setAgora] = useState(() => Date.now());
   const [abrirRecebimento, setAbrirRecebimento] = useState(false); // fluxo de "Receber mensalidade" (menu ⋮)
   const [caixaAberto, setCaixaAberto] = useState(null);
+  const placaRef = useRef(null);
+
+  /**
+   * Volta o cursor pro campo de placa — na cabine o operador encadeia um carro
+   * atrás do outro e não deveria precisar do mouse. Chamado ao abrir a tela e
+   * ao fechar o comprovante (não logo depois da entrada/saída: enquanto o
+   * ticket está aberto o foco pertence a ele, inclusive pros atalhos F/W/I).
+   */
+  function focarPlaca() {
+    placaRef.current?.focus();
+  }
+  useEffect(() => { focarPlaca(); }, []);
 
   useEffect(() => {
     supabase.from('caixas').select('id').eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle()
@@ -556,7 +568,7 @@ export default function Patio({ perfil }) {
         <form className="linha-form" onSubmit={darEntrada}>
           <div className="campo">
             <label>Placa</label>
-            <input className="mono" value={placa}
+            <input className="mono" ref={placaRef} value={placa}
               onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); }}
               onBlur={(e) => detectar(e.target.value)}
               placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 220, fontSize: 18 }} />
@@ -761,7 +773,7 @@ export default function Patio({ perfil }) {
 
       {ticket && (
         <TicketModal ticket={ticket} filial={filial} celular={celularTicket}
-          onCelular={setCelularTicket} onFechar={() => setTicket(null)} />
+          onCelular={setCelularTicket} onFechar={() => { setTicket(null); focarPlaca(); }} />
       )}
 
       {abrirRecebimento && (
