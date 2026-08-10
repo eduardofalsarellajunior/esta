@@ -27,8 +27,9 @@ export async function criarNotaFiscal(supabase, { filialId, movimentoId = null, 
   };
   nota.xml = padrao === 'abrasf' ? gerarXmlAbrasfLoteRps({ nota, filial }) : gerarXmlDPS({ nota, filial });
 
-  const { error } = await supabase.from('notas_fiscais').insert(nota);
-  return { error: error?.message || null };
+  // Devolve a nota gravada para o chamador poder imprimir o RPS na hora.
+  const { data: gravada, error } = await supabase.from('notas_fiscais').insert(nota).select().single();
+  return { error: error?.message || null, nota: gravada || null, filial };
 }
 
 /**

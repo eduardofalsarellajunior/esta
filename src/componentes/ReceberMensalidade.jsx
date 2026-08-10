@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase.js';
 import { hojeISO, proximoVencimento, primeiroVencimento, diferencaEmDias, dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
 import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
+import { carregarModelosTicket } from '../lib/dados.js';
+import { montarTicketRps } from '../lib/dadosTicket.js';
 
 /**
  * Recebimento da mensalidade: valor sugerido pelo cadastro, forma de pagamento e
@@ -206,12 +208,13 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
     setErro('');
     const { error, pagamento } = await receberMensalidade({ perfil, mensalista: m, dtPagamento, valor, forma, proximo, observacao });
     if (error) { setErro(error); return; }
+    let ticketRps = null;
     if (gerarNota) {
       // Best-effort (mesmo espírito da fidelidade no Pátio): o pagamento já
       // está gravado, uma falha aqui não pode travar o comprovante — se der
       // errado, a nota simplesmente não aparece em Fiscal.
       try {
-        await criarNotaFiscal(supabase, {
+        const { nota, filial } = await criarNotaFiscal(supabase, {
           filialId: perfil.filial_id, competencia: dtPagamento, valor,
           descricao: 'Recebimento de Mensalista',
           tomador: {
@@ -219,13 +222,18 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
             bairro: m.bairro, uf: m.uf, cep: m.cep, telefone: m.telefone, email: m.email,
           },
         });
+        if (nota) {
+          const modelos = await carregarModelosTicket();
+          ticketRps = montarTicketRps({ nota, filial, modelo: modelos.rps });
+        }
       } catch { /* nota fiscal é best-effort aqui */ }
     }
     const ticket = await ticketRecebimentoComModelo({
       mensalista: m, dtPagamento, valor, proximo, recibo: pagamento?.id,
       formaDescricao: descricaoForma(formas, forma), operador: perfil.nome,
     });
-    onConcluido(ticket, m.celular || '');
+    // Com nota gerada, o comprovante ganha o botão "Imprimir RPS".
+    onConcluido({ ...ticket, ticketRps }, m.celular || '');
   }
 
   if (!mensalista) {

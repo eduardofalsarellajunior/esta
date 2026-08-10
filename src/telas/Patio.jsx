@@ -9,7 +9,7 @@ import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
 import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
-import { dadosFilial, dadosMovimento, permanenciaDe } from '../lib/dadosTicket.js';
+import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
@@ -498,19 +498,27 @@ export default function Patio({ perfil }) {
     // Fidelidade (best-effort).
     if (!resultado.mensalista) await atualizarFidelidade(mov.placa, resultado.pontos);
 
+    let ticketRps = null;
     if (tomadorDps) {
-      const { error: errNota } = await criarNotaFiscal(supabase, {
+      const { error: errNota, nota } = await criarNotaFiscal(supabase, {
         filialId: perfil.filial_id, movimentoId: mov.id, competencia: dtSaida,
         valor: resultado.valor, tomador: tomadorDps,
       });
       if (errNota) setErro(errNota);
+      // Com nota gerada, o comprovante de saída ganha o botão "Imprimir RPS".
+      if (nota) {
+        ticketRps = montarTicketRps({
+          nota, filial, modelo: modelosTicket.rps,
+          movimento: { ...mov, dt_saida: dtSaida, hr_saida: hrSaida, valor: resultado.valor },
+        });
+      }
     }
     setModalDps(null);
 
     const formaTexto = resultado.mensalista ? 'Mensalista/hóspede'
       : (pagos.map((p) => formas.find((f) => f.codigo === p.forma)?.descricao || p.forma).join(' + ') || '—');
     const { servicosSelecionados } = saindo;
-    setTicket(comModelo('saida', {
+    const ticketSaida = comModelo('saida', {
       titulo: 'Ticket de saída',
       linhas: [
         ['Placa', mov.placa],
@@ -533,7 +541,8 @@ export default function Patio({ perfil }) {
         servicos: servicosSelecionados, convenio: convenios[convenioCodigo],
       }),
       MOEDA: formaTexto,
-    }));
+    });
+    setTicket({ ...ticketSaida, ticketRps });
     setCelularTicket('');
     setSaindo(null); recarregar();
   }

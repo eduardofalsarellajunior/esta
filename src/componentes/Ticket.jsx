@@ -108,6 +108,7 @@ export function TicketModal({ ticket, filial, celular, onCelular, onFechar }) {
       if (tecla === 'f' || tecla === 'escape') { e.preventDefault(); onFechar(); }
       else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); }
       else if (tecla === 'i') { e.preventDefault(); imprimirTicket(ticket, filial); }
+      else if (tecla === 'r' && ticket.ticketRps) { e.preventDefault(); imprimirTicket(ticket.ticketRps, filial); }
     }
     document.addEventListener('keydown', aoTeclar);
     return () => document.removeEventListener('keydown', aoTeclar);
@@ -138,6 +139,13 @@ export function TicketModal({ ticket, filial, celular, onCelular, onFechar }) {
           <a className="btn-ghost" href={linkWhatsApp(ticket, celular, filial)} target="_blank" rel="noopener noreferrer">
             Enviar por <u>W</u>hatsApp
           </a>
+          {/* Nota fiscal gerada junto com este comprovante: imprime na sequência,
+              sem ter que ir até a tela Fiscal procurar o documento. */}
+          {ticket.ticketRps && (
+            <button className="btn-ghost" onClick={() => imprimirTicket(ticket.ticketRps, filial)}>
+              Imprimir <u>R</u>PS
+            </button>
+          )}
           <button className="btn-primary" onClick={() => imprimirTicket(ticket, filial)}><u>I</u>mprimir</button>
         </div>
       </div>

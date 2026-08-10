@@ -1,4 +1,5 @@
 import { fmtBRL, fmtDataBR, fmtHora, dataHoraDe } from './tempo.js';
+import { MODELOS_PADRAO } from './modelosPadrao.js';
 
 // Monta o mapa token -> valor consumido por `renderizarModelo`. Os nomes dos
 // tokens são os mesmos do sistema legado (SISPROC.PRG), pra dar pra colar um
@@ -135,4 +136,28 @@ export function dadosRps({ nota, filial } = {}) {
 /** Junta as partes que o ticket em questão precisar. */
 export function montarDadosTicket(...partes) {
   return Object.assign({}, ...partes);
+}
+
+/**
+ * Ticket do RPS/DPS, pronto pro TicketModal. Diferente dos outros comprovantes,
+ * este não tem layout fixo de fallback — sem modelo cadastrado usa o padrão de
+ * fábrica, senão o RPS simplesmente não teria como ser impresso.
+ *
+ * Usado tanto na tela Fiscal quanto logo depois de gerar a nota (saída do pátio
+ * e recebimento de mensalidade), onde vira o botão "Imprimir RPS" do ticket.
+ */
+export function montarTicketRps({ nota, filial, movimento, modelo }) {
+  return {
+    titulo: `RPS/DPS ${nota.numero_rps}`,
+    linhas: [['RPS/DPS', nota.numero_rps], ['Valor', fmtBRL(Number(nota.valor))]],
+    modelo: modelo || MODELOS_PADRAO.rps,
+    dados: {
+      ...dadosFilial(filial || {}),
+      ...(movimento
+        ? dadosMovimento({ movimento, resultado: { valor: movimento.valor, tempoDecorrido: permanenciaDe(movimento) } })
+        : {}),
+      ...dadosRps({ nota, filial }),
+      V: fmtBRL(Number(nota.valor)), // no RPS o valor é o da nota, não o do movimento
+    },
+  };
 }

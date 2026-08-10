@@ -4,7 +4,7 @@ import { fmtBRL } from '../lib/tempo.js';
 import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
 import { erroCpfCnpj } from '../lib/documento.js';
 import { carregarModelosTicket } from '../lib/dados.js';
-import { dadosFilial, dadosMovimento, dadosRps, permanenciaDe } from '../lib/dadosTicket.js';
+import { montarTicketRps } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
 
 export default function Fiscal() {
@@ -39,9 +39,8 @@ export default function Fiscal() {
   useEffect(() => { carregar(); }, [carregar]);
 
   /**
-   * Imprime o RPS no layout que a filial cadastrou (Modelos de ticket → RPS).
-   * Sem modelo cadastrado o botão nem aparece: aqui não existe layout fixo de
-   * fallback, o comprovante do RPS é o modelo.
+   * Imprime o RPS no layout de Modelos de ticket → RPS (ou no padrão de
+   * fábrica, se a filial ainda não cadastrou um).
    */
   async function imprimirRps(n) {
     let movimento = null;
@@ -49,17 +48,7 @@ export default function Fiscal() {
       const { data } = await supabase.from('movimentos').select('*').eq('id', n.movimento_id).maybeSingle();
       movimento = data;
     }
-    setTicket({
-      titulo: `RPS/DPS ${n.numero_rps}`,
-      linhas: [['RPS/DPS', n.numero_rps], ['Valor', fmtBRL(Number(n.valor))]],
-      modelo: modeloRps,
-      dados: {
-        ...dadosFilial(filial || {}),
-        ...(movimento ? dadosMovimento({ movimento, resultado: { valor: movimento.valor, tempoDecorrido: permanenciaDe(movimento) } }) : {}),
-        ...dadosRps({ nota: n, filial }),
-        V: fmtBRL(Number(n.valor)), // no RPS o valor é o da nota, não o do movimento
-      },
-    });
+    setTicket(montarTicketRps({ nota: n, filial, movimento, modelo: modeloRps }));
     setCelularTicket(n.tomador?.celular || n.tomador?.telefone || '');
   }
 
@@ -222,7 +211,7 @@ export default function Fiscal() {
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn-ghost" onClick={() => setXml(n.xml)}>XML</button>
-                    {modeloRps && <button className="btn-ghost" onClick={() => imprimirRps(n)}>Imprimir</button>}
+                    <button className="btn-ghost" onClick={() => imprimirRps(n)}>Imprimir</button>
                     {n.retorno && <button className="btn-ghost" onClick={() => setRetorno(n.retorno)}>Retorno</button>}
                     {n.status !== 'autorizada' && n.status !== 'cancelada' && (
                       <button className="btn-ghost" disabled={!!emLote} onClick={() => abrirAlteracao(n)}>Alterar</button>
