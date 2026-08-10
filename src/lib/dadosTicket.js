@@ -118,6 +118,7 @@ export function dadosRps({ nota, filial } = {}) {
     NNFE: String(nota.numero_nfse || nota.numero_rps || ''),
     SERIERPS: nota.serie || '',
     RPSDESCR: nota.descricao || '',
+    COMPETENCIA: fmtDataBR(nota.competencia),
     ISS: fmtBRL(Number(nota.valor_iss || 0)),
     PERCISS: String(nota.aliquota_iss ?? ''),
     CCPF: tomador.cpf_cnpj || '',
@@ -152,6 +153,9 @@ export function montarTicketRps({ nota, filial, movimento, modelo }) {
     linhas: [['RPS/DPS', nota.numero_rps], ['Valor', fmtBRL(Number(nota.valor))]],
     modelo: modelo || MODELOS_PADRAO.rps,
     dados: {
+      // Um modelo só atende as duas origens: `@SE(MENSALIDADE)@` na parte que
+      // só faz sentido na mensalidade, `@SE(#MENSALIDADE)@` na do pátio.
+      MENSALIDADE: movimento ? '' : 'S',
       ...dadosFilial(filial || {}),
       ...(movimento
         ? dadosMovimento({ movimento, resultado: { valor: movimento.valor, tempoDecorrido: permanenciaDe(movimento) } })

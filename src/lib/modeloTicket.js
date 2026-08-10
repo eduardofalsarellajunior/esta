@@ -22,17 +22,24 @@ const ESTILOS = {
 /**
  * Uma condicional vale para a linha inteira, como no legado:
  *   @SE(servicos)@Serv.: @SERVICOS@     -> só sai se `servicos` tiver conteúdo
+ *   @SE(#servicos)@Sem servicos         -> só sai se estiver vazio (negação)
  *   @SE(tipo_veic=P)@TABELA P           -> igualdade
- *   @SE(tipo_mens<>E)@Mensalista        -> diferença
+ *   @SE(tipo_mens<>E)@Mensalista        -> diferença (`#` é o mesmo que `<>`)
  * Devolve null quando a linha não tem condicional.
+ *
+ * O `#` (prefixo e operador) existe porque é o "diferente" do Clipper/Harbour —
+ * é o que já se escreve nos modelos do sistema antigo.
  */
 function avaliarCondicional(linha, dados) {
   const m = linha.match(/^@SE\(([^)]*)\)@/);
   if (!m) return null;
 
-  const expressao = m[1].trim();
+  const bruta = m[1].trim();
   const resto = linha.slice(m[0].length);
-  const comparacao = expressao.match(/^([^=<>]+?)\s*(<>|=)\s*(.*)$/);
+  // Prefixo de negação: nega o que vier depois, seja presença ou comparação.
+  const negado = /^[#!]/.test(bruta);
+  const expressao = negado ? bruta.slice(1).trim() : bruta;
+  const comparacao = expressao.match(/^([^=<>#]+?)\s*(<>|#|=)\s*(.*)$/);
 
   let verdadeiro;
   if (comparacao) {
@@ -47,7 +54,7 @@ function avaliarCondicional(linha, dados) {
     verdadeiro = texto !== '' && texto !== '0' && Number(atual) !== 0;
     if (texto !== '' && Number.isNaN(Number(atual))) verdadeiro = true;
   }
-  return { verdadeiro, resto };
+  return { verdadeiro: negado ? !verdadeiro : verdadeiro, resto };
 }
 
 function valorDoToken(token, dados) {

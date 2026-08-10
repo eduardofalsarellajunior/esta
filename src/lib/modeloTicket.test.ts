@@ -40,6 +40,19 @@ test('@SE(campo=valor)@ e @SE(campo<>valor)@', () => {
   assert.equal(modeloParaTexto('@SE(TIPO_VEIC<>P)@Nao e P', dados), '');
 });
 
+test('@SE(#campo)@: nega a presença (linha só sai com o campo vazio)', () => {
+  assert.equal(modeloParaTexto('@SE(#MENSALISTA)@Avulso', dados), 'Avulso');
+  assert.equal(modeloParaTexto('@SE(#SERVICOS)@Sem servico', dados), '');
+  // `!` faz o mesmo, pra quem não vem do Clipper.
+  assert.equal(modeloParaTexto('@SE(!MENSALISTA)@Avulso', dados), 'Avulso');
+});
+
+test('# funciona como o <> do Clipper, e negando uma comparação', () => {
+  assert.equal(modeloParaTexto('@SE(TIPO_VEIC#G)@Nao e G', dados), 'Nao e G');
+  assert.equal(modeloParaTexto('@SE(TIPO_VEIC#P)@Nao e P', dados), '');
+  assert.equal(modeloParaTexto('@SE(#TIPO_VEIC=G)@Nao e G', dados), 'Nao e G');
+});
+
 test('@P3@ gera as quebras de linha', () => {
   assert.deepEqual(renderizarModelo('A@P3@B', dados).map((l) => l.map((t) => t.texto).join('')),
     ['A', '', '', 'B']);

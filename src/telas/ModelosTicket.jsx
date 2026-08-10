@@ -35,6 +35,8 @@ const TOKENS = {
     ['@MULTA@', 'Multa/juros'], ['@EXTRA@', 'Extras'], ['@MOEDA@', 'Forma de pagamento'],
   ],
   rps: [
+    ['@MENSALIDADE@', 'Preenchido quando a nota veio de mensalidade (não do pátio)'],
+    ['@COMPETENCIA@', 'Competência da nota'],
     ['@NNFE@', 'Número da nota/RPS'], ['@SERIERPS@', 'Série'],
     ['@RAZAORPS@', 'Razão social do prestador'], ['@IMRPS@', 'Inscrição municipal'],
     ['@RPSDESCR@', 'Descrição do serviço'], ['@ISS@', 'Valor do ISS'], ['@PERCISS@', '% ISS'],
@@ -65,6 +67,7 @@ const EXEMPLO = {
   MEMAIL: 'jose@exemplo.com.br', VAGAS: '2', CC01: 'ABC1D23', CV01: 'FIESTA',
   CC02: 'XYZ9W87', CV02: 'GOL', VM: 'R$ 160,00', MULTA: '', MULTA_NUM: 0,
   EXTRA: '', EXTRA_NUM: 0, MOEDA: 'DINHEIRO',
+  MENSALIDADE: '', COMPETENCIA: '10/08/2026', // exemplo = nota vinda do pátio
   NNFE: '716', SERIERPS: '1', RAZAORPS: 'ESTACIONAMENTO MODELO LTDA', IMRPS: '123456',
   RPSDESCR: 'Estacionamento de veículo', ISS: 'R$ 0,30', PERCISS: '2',
   CCPF: '529.982.247-25', CNOME: 'JOSE DA SILVA', CENDE: 'Rua das Flores',
@@ -179,8 +182,9 @@ export default function ModelosTicket({ perfil }) {
 
           <h3 style={{ marginBottom: 4 }}>Tokens deste comprovante</h3>
           <p className="suave" style={{ fontSize: 11, marginTop: 0 }}>
-            Condicional: <code>@SE(CAMPO)@</code> imprime a linha só se o campo tiver conteúdo;
-            também vale <code>@SE(CAMPO=valor)@</code> e <code>@SE(CAMPO&lt;&gt;valor)@</code>.
+            Condicional: <code>@SE(CAMPO)@</code> imprime a linha só se o campo tiver conteúdo, e
+            <code>@SE(#CAMPO)@</code> só se estiver vazio. Também vale <code>@SE(CAMPO=valor)@</code> e
+            <code>@SE(CAMPO&lt;&gt;valor)@</code> — o <code>#</code> serve como <code>&lt;&gt;</code>, igual no Clipper.
             Formatação: <code>@PG+@…@PG-@</code> grande, <code>@PE+@</code> negrito,
             <code>@PP+@</code> pequeno, <code>@PI+@</code> itálico, <code>@PS+@</code> sublinhado.
           </p>
