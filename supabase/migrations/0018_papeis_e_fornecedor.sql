@@ -123,26 +123,29 @@ begin
     return new;
   end if;
 
-  if tg_op = 'UPDATE' and new.papel is distinct from old.papel and not usuario_eh_supervisor() then
-    raise exception 'Só supervisor pode mudar o papel de um usuário.';
-  end if;
-
   if new.papel = 'fornecedor' and not usuario_eh_fornecedor() then
     raise exception 'Só o fornecedor pode criar outro fornecedor.';
   end if;
 
-  if tg_op = 'UPDATE' and old.papel = 'fornecedor' and not usuario_eh_fornecedor() then
-    raise exception 'Só o fornecedor pode alterar o perfil de um fornecedor.';
-  end if;
+  -- Tudo que compara com OLD fica aqui dentro: no INSERT o OLD não existe, e
+  -- tocar nele fora deste ramo derruba a inserção (o AND do SQL não garante
+  -- avaliação da esquerda pra direita).
+  if tg_op = 'UPDATE' then
+    if new.papel is distinct from old.papel and not usuario_eh_supervisor() then
+      raise exception 'Só supervisor pode mudar o papel de um usuário.';
+    end if;
 
-  if tg_op = 'UPDATE' and new.filial_ativa is distinct from old.filial_ativa
-     and not usuario_eh_fornecedor() then
-    raise exception 'Só o fornecedor pode trocar a filial ativa.';
-  end if;
+    if old.papel = 'fornecedor' and not usuario_eh_fornecedor() then
+      raise exception 'Só o fornecedor pode alterar o perfil de um fornecedor.';
+    end if;
 
-  if tg_op = 'UPDATE' and new.filial_id is distinct from old.filial_id
-     and not usuario_eh_fornecedor() then
-    raise exception 'Só o fornecedor pode mover um usuário de filial.';
+    if new.filial_ativa is distinct from old.filial_ativa and not usuario_eh_fornecedor() then
+      raise exception 'Só o fornecedor pode trocar a filial ativa.';
+    end if;
+
+    if new.filial_id is distinct from old.filial_id and not usuario_eh_fornecedor() then
+      raise exception 'Só o fornecedor pode mover um usuário de filial.';
+    end if;
   end if;
 
   return new;
