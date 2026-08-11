@@ -14,6 +14,8 @@ import Configuracoes from './telas/Configuracoes.jsx';
 import Usuarios from './telas/Usuarios.jsx';
 import ImportarDbf from './telas/ImportarDbf.jsx';
 import ModelosTicket from './telas/ModelosTicket.jsx';
+import EscolherFilial from './telas/EscolherFilial.jsx';
+import { ehFornecedor } from './lib/acesso.js';
 
 export default function App() {
   const [sessao, setSessao] = useState(null);
@@ -29,7 +31,15 @@ export default function App() {
 
   useEffect(() => {
     if (!sessao) { setPerfil(null); return; }
-    supabase.from('perfis').select('*').eq('id', sessao.user.id).maybeSingle().then(({ data }) => setPerfil(data));
+    // `filial_id` do perfil passa a significar "filial que estou operando": pro
+    // fornecedor é a que ele escolheu, pros demais é a própria. Assim todas as
+    // telas continuam usando `perfil.filial_id` sem saber que isso existe.
+    supabase.from('perfis').select('*').eq('id', sessao.user.id).maybeSingle()
+      .then(({ data }) => setPerfil(data && {
+        ...data,
+        filial_id: data.filial_ativa || data.filial_id,
+        filial_propria: data.filial_id,
+      }));
   }, [sessao]);
 
   if (!configurado) return <ConfigPendente />;
@@ -48,6 +58,9 @@ export default function App() {
       <div style={{ marginTop: 12 }}><button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button></div>
     </div></div>
   );
+
+  // Fornecedor atende vários clientes: escolhe qual acessar antes de entrar.
+  if (ehFornecedor(perfil) && !perfil.filial_ativa) return <EscolherFilial perfil={perfil} />;
 
   return (
     <BrowserRouter>

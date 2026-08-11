@@ -7,7 +7,7 @@ import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
 
-export default function Fiscal() {
+export default function Fiscal({ perfil }) {
   const [notas, setNotas] = useState([]);
   const [padrao, setPadrao] = useState('');
   const [filial, setFilial] = useState(null);
@@ -28,14 +28,16 @@ export default function Fiscal() {
     setErro('');
     const [{ data: n, error }, { data: f }, modelos] = await Promise.all([
       supabase.from('notas_fiscais').select('*').order('created_at', { ascending: false }).limit(200),
-      supabase.from('filiais').select('*').maybeSingle(),
+      // Com id: o fornecedor enxerga várias filiais, e sem o filtro o
+      // maybeSingle() quebraria ao voltar mais de uma linha.
+      supabase.from('filiais').select('*').eq('id', perfil.filial_id).maybeSingle(),
       carregarModelosTicket(),
     ]);
     if (error) setErro(error.message); else setNotas(n || []);
     setFilial(f || null);
     setPadrao(f?.config?.nfse?.padrao || 'padrao_nacional_campinas');
     setModeloRps(modelos.rps || '');
-  }, []);
+  }, [perfil.filial_id]);
   useEffect(() => { carregar(); }, [carregar]);
 
   /**

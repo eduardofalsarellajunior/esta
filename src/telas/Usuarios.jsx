@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { PAPEIS, ehSupervisor, ehFornecedor } from '../lib/acesso.js';
 
 // Quem acessa o sistema (perfis) — nome, papel e ativo/inativo.
 // Criar o login (e-mail/senha) roda em api/criar-usuario.js, que tem a chave
@@ -11,7 +12,7 @@ export default function Usuarios({ perfil }) {
   const [editando, setEditando] = useState(null); // objeto no modal (null = fechado)
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
-  const podeEditar = perfil.papel === 'supervisor';
+  const podeEditar = ehSupervisor(perfil);
 
   async function carregar() {
     const { data, error } = await supabase.from('perfis').select('*').order('nome');
@@ -78,7 +79,7 @@ export default function Usuarios({ perfil }) {
               <tr key={u.id}>
                 <td>{u.nome}</td>
                 <td>{u.email || '—'}</td>
-                <td>{u.papel === 'supervisor' ? 'Supervisor' : 'Operador'}</td>
+                <td>{PAPEIS[u.papel] || u.papel}</td>
                 <td>{u.ativo ? 'Sim' : 'Não'}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {podeEditar && (
@@ -99,13 +100,14 @@ export default function Usuarios({ perfil }) {
       </div>
 
       {editando && (
-        <UsuarioModal inicial={editando.novo ? {} : editando} onSalvar={salvar} onFechar={() => setEditando(null)} />
+        <UsuarioModal inicial={editando.novo ? {} : editando} onSalvar={salvar}
+          podeCriarFornecedor={ehFornecedor(perfil)} onFechar={() => setEditando(null)} />
       )}
     </div>
   );
 }
 
-function UsuarioModal({ inicial, onSalvar, onFechar }) {
+function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, onFechar }) {
   const [u, setU] = useState({ modo: 'novo-login', ...inicial });
   const [salvando, setSalvando] = useState(false);
   const set = (k, v) => setU((o) => ({ ...o, [k]: v }));
@@ -164,8 +166,12 @@ function UsuarioModal({ inicial, onSalvar, onFechar }) {
           <div className="campo" style={{ marginBottom: 10 }}>
             <label>Papel</label>
             <select value={u.papel || 'operador'} onChange={(e) => set('papel', e.target.value)}>
-              <option value="operador">Operador</option>
-              <option value="supervisor">Supervisor</option>
+              <option value="operador">Operador — pátio e caixa</option>
+              <option value="gerente">Gerente — + painel, mensalistas, convênios, serviços, fiscal e receber</option>
+              <option value="supervisor">Supervisor — tudo do estacionamento</option>
+              {/* Fornecedor acessa todos os clientes; só outro fornecedor cria
+                  um (o banco recusa, não é só a tela que esconde). */}
+              {podeCriarFornecedor && <option value="fornecedor">Fornecedor — todos os estacionamentos</option>}
             </select>
           </div>
           {!criandoLogin && (

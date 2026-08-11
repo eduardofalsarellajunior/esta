@@ -11,6 +11,7 @@ import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
+import { ehGerente } from '../lib/acesso.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
 const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
@@ -350,9 +351,9 @@ export default function Patio({ perfil }) {
     return servicos.filter((s) => ids.has(s.id));
   }
 
-  // Operador só exclui nos primeiros 5min da entrada; supervisor sem limite.
+  // Operador só exclui nos primeiros 5min da entrada; do gerente pra cima, sem limite.
   function podeExcluir(mov) {
-    if (perfil.papel === 'supervisor') return true;
+    if (ehGerente(perfil)) return true;
     const minutos = (agora - dataHoraDe(mov.dt_entrada, Number(mov.hr_entrada)).getTime()) / 60000;
     return minutos <= EXCLUSAO_JANELA_MIN;
   }
@@ -865,7 +866,7 @@ export default function Patio({ perfil }) {
                 <select value={saindo.convenioCodigo} onChange={(e) => mudarConvenioSaida(e.target.value)}>
                   <option value="">— Sem convênio —</option>
                   {Object.values(convenios)
-                    .filter((c) => c.ativo && (!c.so_supervisor || perfil.papel === 'supervisor'))
+                    .filter((c) => c.ativo && (!c.so_supervisor || ehGerente(perfil)))
                     .map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.razao}</option>)}
                 </select>
               </div>

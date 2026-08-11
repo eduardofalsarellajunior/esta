@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { obterTema, aplicarTema } from '../lib/tema.js';
+import { ehFornecedor } from '../lib/acesso.js';
 
-// Dados do estacionamento (nome/endereço/CNPJ) para o cabeçalho dos tickets.
-// A RLS de `filiais` já restringe UPDATE a supervisores (ver 0002_rls.sql).
+// Dados do estacionamento (nome/endereço/CNPJ/fiscal). Só o fornecedor altera:
+// são dados com efeito legal e fiscal, e mexer neles é chamado de suporte. A
+// trava não é só desta tela — a policy de UPDATE em `filiais` exige fornecedor
+// (ver 0018_papeis_e_fornecedor.sql), então vale também fora do app.
 export default function Configuracoes({ perfil }) {
   const [filial, setFilial] = useState(null);
   const [erro, setErro] = useState('');
   const [salvo, setSalvo] = useState(false);
   const [tema, setTema] = useState(obterTema());
-  const podeEditar = perfil.papel === 'supervisor';
+  const podeEditar = ehFornecedor(perfil);
 
   function mudarTema(novoTema) {
     aplicarTema(novoTema);
@@ -121,7 +124,7 @@ export default function Configuracoes({ perfil }) {
               </div>
               {podeEditar
                 ? <button className="btn-primary" type="submit">Salvar</button>
-                : <p className="suave">Só supervisores podem editar.</p>}
+                : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
             </form>
           </>
         )}
@@ -280,7 +283,7 @@ export default function Configuracoes({ perfil }) {
 
             {podeEditar
               ? <button className="btn-primary" type="submit">Salvar</button>
-              : <p className="suave">Só supervisores podem editar.</p>}
+              : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
           </form>
         )}
       </div>

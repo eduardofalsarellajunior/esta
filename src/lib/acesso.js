@@ -1,8 +1,43 @@
-// Controle de acesso por papel — só na camada de UI (rotas/menu); o banco
-// (RLS) ainda isola apenas por filial, não por papel (pendência conhecida).
+// Controle de acesso por papel. A escada é operador < gerente < supervisor <
+// fornecedor (ver supabase/migrations/0018_papeis_e_fornecedor.sql).
+//
+// O que vale aqui é a camada de UI (rotas e menu). No banco, a RLS isola por
+// filial e o que é exclusivo do fornecedor — alterar os dados do estacionamento
+// e trocar de filial — tem policy própria, então esse pedaço vale mesmo fora do
+// app. A fronteira gerente/supervisor ainda é só de interface (pendência
+// conhecida: exigiria policy por tabela).
+
+export const PAPEIS = {
+  operador: 'Operador',
+  gerente: 'Gerente',
+  supervisor: 'Supervisor',
+  fornecedor: 'Fornecedor',
+};
+
 export const ROTAS_OPERADOR = ['/', '/caixa'];
 
-export function podeAcessar(perfil, pathname) {
-  if (perfil.papel === 'supervisor') return true;
-  return ROTAS_OPERADOR.includes(pathname);
+// Gerente: o dia a dia de quem toca o pátio e atende o cliente — sem mexer no
+// que afeta cobrança (preços), em quem acessa (usuários) nem no financeiro de
+// saída (pagar/banco).
+export const ROTAS_GERENTE = [
+  ...ROTAS_OPERADOR,
+  '/bi', '/mensalistas', '/convenios', '/servicos', '/modelos', '/fiscal', '/receber',
+];
+
+/** Rotas permitidas, ou `null` quando o papel acessa tudo. */
+export function rotasDoPapel(papel) {
+  if (papel === 'supervisor' || papel === 'fornecedor') return null;
+  if (papel === 'gerente') return ROTAS_GERENTE;
+  return ROTAS_OPERADOR;
 }
+
+export function podeAcessar(perfil, pathname) {
+  const rotas = rotasDoPapel(perfil?.papel);
+  return rotas === null || rotas.includes(pathname);
+}
+
+export const ehFornecedor = (perfil) => perfil?.papel === 'fornecedor';
+/** Fornecedor tem, por definição, todo poder de supervisor. */
+export const ehSupervisor = (perfil) => perfil?.papel === 'supervisor' || ehFornecedor(perfil);
+/** "Do gerente pra cima" — usado nas permissões pontuais dentro das telas. */
+export const ehGerente = (perfil) => perfil?.papel === 'gerente' || ehSupervisor(perfil);

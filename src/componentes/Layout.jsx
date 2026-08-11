@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { ROTAS_OPERADOR } from '../lib/acesso.js';
+import { PAPEIS, podeAcessar, ehFornecedor } from '../lib/acesso.js';
+import { trocarFilialAtiva } from '../telas/EscolherFilial.jsx';
 
 const GRUPOS = [
   { titulo: 'Operação', itens: [
@@ -31,20 +32,31 @@ const GRUPOS = [
 export default function Layout({ perfil }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [nomeFilial, setNomeFilial] = useState('');
+  const [filiais, setFiliais] = useState([]); // só o fornecedor tem mais de uma
   const location = useLocation();
-  const supervisor = perfil.papel === 'supervisor';
 
   useEffect(() => {
+    // Fornecedor enxerga todas as filiais (é o que alimenta o seletor); os
+    // demais enxergam só a própria, então o maybeSingle continua valendo.
+    if (ehFornecedor(perfil)) {
+      supabase.from('filiais').select('id, nome_fantasia, razao_social').order('razao_social')
+        .then(({ data }) => {
+          setFiliais(data || []);
+          const atual = (data || []).find((f) => f.id === perfil.filial_ativa);
+          setNomeFilial(atual?.nome_fantasia || atual?.razao_social || '');
+        });
+      return;
+    }
     supabase.from('filiais').select('nome_fantasia').maybeSingle()
       .then(({ data }) => setNomeFilial(data?.nome_fantasia || ''));
-  }, []);
+  }, [perfil]);
 
-  if (!supervisor && !ROTAS_OPERADOR.includes(location.pathname)) {
+  if (!podeAcessar(perfil, location.pathname)) {
     return <Navigate to="/" replace />;
   }
 
-  const grupos = supervisor ? GRUPOS : GRUPOS
-    .map((g) => ({ ...g, itens: g.itens.filter((i) => ROTAS_OPERADOR.includes(i.to)) }))
+  const grupos = GRUPOS
+    .map((g) => ({ ...g, itens: g.itens.filter((i) => podeAcessar(perfil, i.to)) }))
     .filter((g) => g.itens.length > 0);
 
   return (
@@ -66,11 +78,24 @@ export default function Layout({ perfil }) {
       </aside>
       {menuAberto && <div className="menu-fundo" onClick={() => setMenuAberto(false)} />}
       <main className="conteudo">
-        {nomeFilial && <div className="topo-filial">{nomeFilial}</div>}
+        {/* Pro fornecedor o nome do cliente vira seletor: é a informação mais
+            importante da tela, já que ele opera vários estacionamentos. */}
+        {ehFornecedor(perfil) ? (
+          <div className="topo-filial">
+            <select value={perfil.filial_ativa || ''} style={{ padding: '2px 8px', fontSize: 'inherit' }}
+              onChange={(e) => trocarFilialAtiva(perfil.id, e.target.value)}>
+              {filiais.map((f) => (
+                <option key={f.id} value={f.id}>{f.nome_fantasia || f.razao_social}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          nomeFilial && <div className="topo-filial">{nomeFilial}</div>
+        )}
         <header className="topo">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button className="menu-toggle btn-ghost" onClick={() => setMenuAberto((v) => !v)} aria-label="Menu">☰</button>
-            <span className="filial-nome">{perfil.nome} · {perfil.papel}</span>
+            <span className="filial-nome">{perfil.nome} · {PAPEIS[perfil.papel] || perfil.papel}</span>
           </div>
           <button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button>
         </header>

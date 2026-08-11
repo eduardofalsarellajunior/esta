@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { PreviaModelo } from '../componentes/Ticket.jsx';
 import { MODELOS_PADRAO, TIPOS_TICKET } from '../lib/modelosPadrao.js';
+import { ehSupervisor } from '../lib/acesso.js';
 
 // Layout do comprovante por filial, no mesmo esquema do sistema legado: texto
 // com tokens entre arrobas. Sem modelo salvo pra um tipo, o app usa o layout
@@ -83,7 +84,7 @@ export default function ModelosTicket({ perfil }) {
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const podeEditar = perfil.papel === 'supervisor';
+  const podeEditar = ehSupervisor(perfil);
 
   async function carregar() {
     setErro('');

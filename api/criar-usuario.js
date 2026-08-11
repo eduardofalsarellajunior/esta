@@ -18,7 +18,9 @@ export default async function handler(req, res) {
   const { email, senha, nome, papel = 'operador' } = req.body || {};
   if (!email || !senha || !nome) { res.status(400).json({ erro: 'E-mail, senha e nome são obrigatórios.' }); return; }
   if (String(senha).length < 6) { res.status(400).json({ erro: 'A senha precisa ter pelo menos 6 caracteres.' }); return; }
-  if (!['operador', 'supervisor'].includes(papel)) { res.status(400).json({ erro: 'Papel inválido.' }); return; }
+  if (!['operador', 'gerente', 'supervisor', 'fornecedor'].includes(papel)) {
+    res.status(400).json({ erro: 'Papel inválido.' }); return;
+  }
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
@@ -35,14 +37,24 @@ export default async function handler(req, res) {
   if (errSessao || !sessao?.user) { res.status(401).json({ erro: 'Sessão inválida — faça login de novo.' }); return; }
 
   const { data: meuPerfil } = await comoUsuario.from('perfis')
-    .select('filial_id, papel, ativo').eq('id', sessao.user.id).maybeSingle();
-  if (!meuPerfil?.ativo || meuPerfil.papel !== 'supervisor') {
+    .select('filial_id, filial_ativa, papel, ativo').eq('id', sessao.user.id).maybeSingle();
+  const ehFornecedor = meuPerfil?.papel === 'fornecedor';
+  if (!meuPerfil?.ativo || !(ehFornecedor || meuPerfil.papel === 'supervisor')) {
     res.status(403).json({ erro: 'Só supervisor pode criar usuário.' });
+    return;
+  }
+  // Fornecedor é quem mantém o sistema: só ele cria outro fornecedor. Esta
+  // função usa service_role (bypassa RLS), então a checagem tem que ser aqui —
+  // o trigger do banco não alcança.
+  if (papel === 'fornecedor' && !ehFornecedor) {
+    res.status(403).json({ erro: 'Só o fornecedor pode criar outro fornecedor.' });
     return;
   }
 
   // 2) Cria o login. A filial vem do perfil de quem pediu (nunca do corpo),
-  // pra um supervisor não conseguir criar usuário em outra filial.
+  // pra um supervisor não conseguir criar usuário em outra filial. Pro
+  // fornecedor, é a filial que ele está operando no momento.
+  const filialDestino = meuPerfil.filial_ativa || meuPerfil.filial_id;
   const admin = createClient(process.env.VITE_SUPABASE_URL, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -55,7 +67,7 @@ export default async function handler(req, res) {
   // login órfão que não consegue entrar no app (sem perfil) nem ser recriado
   // (e-mail já em uso).
   const { error: errPerfil } = await admin.from('perfis').insert({
-    id: criado.user.id, filial_id: meuPerfil.filial_id, nome, papel, email, ativo: true,
+    id: criado.user.id, filial_id: filialDestino, nome, papel, email, ativo: true,
   });
   if (errPerfil) {
     await admin.auth.admin.deleteUser(criado.user.id);
