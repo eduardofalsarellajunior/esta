@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { fmtBRL } from '../lib/tempo.js';
+import { fmtBRL, fmtDataBR } from '../lib/tempo.js';
 import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
 import { erroCpfCnpj } from '../lib/documento.js';
 import { carregarModelosTicket } from '../lib/dados.js';
@@ -203,7 +203,8 @@ export default function Fiscal() {
             <tbody>
               {notas.map((n) => (
                 <tr key={n.id}>
-                  <td className="mono">{n.numero_rps}</td><td>{n.serie}</td><td>{n.competencia}</td>
+                  <td className="mono">{n.numero_rps}</td><td>{n.serie}</td>
+                  <td className="mono">{fmtDataBR(n.competencia)}</td>
                   <td>{fmtBRL(Number(n.valor))}</td><td>{fmtBRL(Number(n.valor_iss))}</td>
                   <td><span className={'status status-' + n.status}>{n.status}</span></td>
                   <td className="mono" style={{ fontSize: 11 }}>
