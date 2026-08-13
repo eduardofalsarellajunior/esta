@@ -41,7 +41,8 @@ export function dadosMovimento({ movimento = {}, resultado, operador, servicos =
   const valorServicos = servicos.reduce((s, x) => s + Number(x.valor || 0), 0);
 
   return {
-    'C#': movimento.id ? String(movimento.id).slice(0, 8).toUpperCase() : '',
+    // Número de controle do ticket: curto de propósito, é ditado na saída.
+    'C#': movimento.controle != null ? String(movimento.controle).padStart(4, '0') : '',
     CC: movimento.placa || '',
     CV: movimento.modelo || '',
     TV: movimento.tipo_veic || '',

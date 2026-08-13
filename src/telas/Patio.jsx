@@ -134,8 +134,19 @@ export default function Patio({ perfil }) {
     return { ...ticket, modelo, dados: { ...dadosFilial(filial || {}), ...dados } };
   }
 
-  function encontrarNoPatio(p) {
-    return patio.find((m) => m.placa === p);
+  /**
+   * Acha o carro no pátio pelo que o operador digitou no campo da placa: o
+   * número de controle (só dígitos) ou a placa. Não há ambiguidade porque
+   * placa brasileira sempre tem letra.
+   */
+  function encontrarNoPatio(texto) {
+    const p = String(texto || '').trim().toUpperCase();
+    if (!p) return null;
+    if (/^\d{1,4}$/.test(p)) {
+      const porControle = patio.find((m) => m.controle === Number(p));
+      if (porControle) return porControle;
+    }
+    return patio.find((m) => m.placa === p) || null;
   }
 
   // Detecção de mensalista ao digitar a placa.
@@ -144,11 +155,13 @@ export default function Patio({ perfil }) {
     setDetectado(null);
     setVagaEsgotada(null);
     setMensalistaVencido(null);
-    if (p.length < 3) return;
 
-    // Placa já estacionada? Pula direto pra rotina de saída.
+    // Já está no pátio (por placa ou pelo nº de controle)? Vai direto pra saída.
+    // Antes do corte de 3 caracteres: número de controle costuma ter 1 ou 2.
     const jaNoPatio = encontrarNoPatio(p);
     if (jaNoPatio) { limparFormEntrada(); prepararSaida(jaNoPatio); return; }
+
+    if (p.length < 3) return;
 
     // Já esteve aqui antes? Traz o modelo de volta pro campo Carro.
     if (!buscaModelo.trim()) {
@@ -231,24 +244,46 @@ export default function Patio({ perfil }) {
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
   }
 
+  /**
+   * Grava a entrada reservando o número de controle (@C#@) — o número curto que
+   * o operador entrega ao cliente e recebe de volta na saída.
+   *
+   * O banco garante que ele não se repete entre os carros no pátio; se duas
+   * cabines pegarem o mesmo número no mesmo instante, a segunda leva erro de
+   * duplicidade e aqui tentamos o próximo livre.
+   */
+  async function inserirComControle(dados, tentativas = 3) {
+    for (let i = 0; i < tentativas; i++) {
+      const { data: proximo, error: errSeq } = await supabase.rpc('proximo_controle', { p_filial: perfil.filial_id });
+      // Sem a migration 0020 no ar, segue sem número em vez de travar a entrada.
+      const payload = errSeq ? dados : { ...dados, controle: proximo };
+      const res = await supabase.from('movimentos').insert(payload).select().single();
+      if (!res.error) return res;
+      const colidiuNoControle = res.error.code === '23505' && String(res.error.message).includes('controle');
+      if (!colidiuNoControle) return res;
+    }
+    return { data: null, error: { message: 'Não consegui reservar um número de controle livre. Tente de novo.' } };
+  }
+
   async function registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo) {
     const p = placa.trim().toUpperCase();
     const dtEntrada = hojeISO();
     const hrEntrada = agoraHHMM();
     const nomeMensalista = detectado?.nome || '';
-    // `select()` para ter o id do movimento — é o número de controle (@C#@) do ticket.
-    const { data: novo, error } = await supabase.from('movimentos').insert({
+    // `select()` para ter o movimento gravado — é dele que sai o ticket.
+    const { data: novo, error } = await inserirComControle({
       filial_id: perfil.filial_id, placa: p, modelo: nomeModelo || null,
       dt_entrada: dtEntrada, hr_entrada: hrEntrada,
       tipo_veic: tipoVeic,
       tipo_mens: tipoMens ?? detectado?.tipo_mens ?? 'E',
       convenio_codigo: convenioCodigo ?? detectado?.convenio_codigo ?? null,
       usuario_entrada: perfil.id,
-    }).select().single();
+    });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
     setTicket(comModelo('entrada', {
       titulo: 'Ticket de entrada',
       linhas: [
+        ...(novo?.controle != null ? [['Controle', String(novo.controle).padStart(4, '0')]] : []),
         ['Placa', p],
         ['Carro', nomeModelo || '—'],
         ['Tabela', tipoVeic],
@@ -522,6 +557,7 @@ export default function Patio({ perfil }) {
     const ticketSaida = comModelo('saida', {
       titulo: 'Ticket de saída',
       linhas: [
+        ...(mov.controle != null ? [['Controle', String(mov.controle).padStart(4, '0')]] : []),
         ['Placa', mov.placa],
         ['Carro', mov.modelo || '—'],
         ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
@@ -594,6 +630,7 @@ export default function Patio({ perfil }) {
     setTicket(comModelo('segunda_via', {
       titulo: 'Ticket de entrada (2ª via)',
       linhas: [
+        ...(mov.controle != null ? [['Controle', String(mov.controle).padStart(4, '0')]] : []),
         ['Placa', mov.placa],
         ['Carro', mov.modelo || '—'],
         ['Tabela', mov.tipo_veic],
@@ -632,11 +669,12 @@ export default function Patio({ perfil }) {
         </div>
         <form className="linha-form" onSubmit={darEntrada}>
           <div className="campo">
-            <label>Placa</label>
+            <label>Placa ou nº do ticket</label>
             <input className="mono" ref={placaRef} value={placa}
               onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); }}
               onBlur={(e) => detectar(e.target.value)}
-              placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 220, fontSize: 18 }} />
+              placeholder="ABC1D23 ou 42" style={{ textTransform: 'uppercase', width: 220, fontSize: 18 }} />
+            <span className="suave" style={{ fontSize: 11 }}>Só o número do controle já leva pra saída.</span>
           </div>
           <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); detectar(p); }} />
           <div className="campo campo-busca" style={{ minWidth: 340 }}>
@@ -698,10 +736,15 @@ export default function Patio({ perfil }) {
         <h2>No pátio ({patio.length}) — {avulsosNoPatio} avulso(s), {mensalistasNoPatio} mensalista(s)</h2>
         <div className="tabela-scroll">
           <table>
-            <thead><tr><th>Placa</th><th>Carro</th><th>Tabela</th><th>Tipo</th><th>Entrada</th><th></th></tr></thead>
+            <thead><tr><th>Nº</th><th>Placa</th><th>Carro</th><th>Tabela</th><th>Tipo</th><th>Entrada</th><th></th></tr></thead>
             <tbody>
               {patio.map((m) => (
                 <tr key={m.id}>
+                  {/* O número de controle é o que o cliente devolve na saída —
+                      dá pra digitá-lo no mesmo campo da placa. */}
+                  <td className="mono" style={{ fontWeight: 700 }}>
+                    {m.controle != null ? String(m.controle).padStart(4, '0') : '—'}
+                  </td>
                   <td><span className="placa mono">{m.placa}</span></td>
                   <td>{m.modelo || '—'}</td>
                   <td>{m.tipo_veic}</td>
@@ -720,7 +763,7 @@ export default function Patio({ perfil }) {
                   </td>
                 </tr>
               ))}
-              {patio.length === 0 && <tr><td colSpan={6} className="suave">Pátio vazio.</td></tr>}
+              {patio.length === 0 && <tr><td colSpan={7} className="suave">Pátio vazio.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -852,7 +895,14 @@ export default function Patio({ perfil }) {
         <div className="modal-bg" onClick={() => setSaindo(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="card-cab">
-              <h2>Saída — <span className="placa mono">{saindo.mov.placa}</span></h2>
+              <h2>
+                Saída — <span className="placa mono">{saindo.mov.placa}</span>
+                {saindo.mov.controle != null && (
+                  <span className="suave mono" style={{ marginLeft: 8 }}>
+                    nº {String(saindo.mov.controle).padStart(4, '0')}
+                  </span>
+                )}
+              </h2>
               {!saindo.resultado.mensalista && (
                 <CardAcoes acoes={[
                   { label: 'Alterar valor', onClick: abrirModalValor },
