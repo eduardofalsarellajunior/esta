@@ -951,14 +951,18 @@ export default function Patio({ perfil }) {
               <p className="suave">Mensalista/hóspede — sem cobrança na saída (mensalidade paga à parte).</p>
             ) : (
               <>
-                <p className="mono suave">Tempo: {fmtHora(saindo.resultado.tempoDecorrido)}</p>
+                {/* A tabela usada é informação de diagnóstico: com Tabela alt.
+                    no convênio, o cálculo sai da tabela DELE, não da de entrada. */}
+                <p className="mono suave">
+                  Tempo: {fmtHora(saindo.resultado.tempoDecorrido)} · tabela {tabelaDaSaida(saindo, convenios)}
+                </p>
                 {/* Quanto o convênio está bancando: sem isso, um convênio mal
                     cadastrado passa despercebido (o valor simplesmente não cai). */}
                 {saindo.convenioCodigo && (
                   <p className={saindo.resultado.valorConvenio > 0 ? 'ok-txt' : 'aviso'} style={{ fontSize: 13 }}>
                     {saindo.resultado.valorConvenio > 0
                       ? `Convênio ${saindo.convenioCodigo} paga ${fmtBRL(saindo.resultado.valorConvenio)}`
-                      : `Convênio ${saindo.convenioCodigo} sem desconto — confira o cadastro dele (% desc., valor fixo ou grade própria) e a coluna "Valor convênio" da tabela ${saindo.mov.tipo_veic}.`}
+                      : `Convênio ${saindo.convenioCodigo} sem desconto — confira o cadastro dele (% desc., valor fixo ou grade própria) e a coluna "Valor convênio" da tabela ${tabelaDaSaida(saindo, convenios)}.`}
                   </p>
                 )}
               </>
@@ -1082,6 +1086,13 @@ export default function Patio({ perfil }) {
 
 function rotuloTipo(t) {
   return { E: 'Avulso', I: 'Mensalista', P: 'Pacote', H: 'Hóspede', C: 'Convênio' }[t] || t;
+}
+
+/** Tabela que o motor usou: a do convênio (Tabela alt.), se houver, ou a da entrada. */
+function tabelaDaSaida(saindo, convenios) {
+  if (saindo.servicosSelecionados?.length) return saindo.servicosSelecionados.map((s) => s.tabela_tipo).join('+');
+  const alt = saindo.convenioCodigo ? convenios[saindo.convenioCodigo]?.tab_conv : null;
+  return alt || saindo.mov.tipo_veic;
 }
 
 function mapConvenio(c) {
