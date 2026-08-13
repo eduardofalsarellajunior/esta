@@ -4,8 +4,11 @@ import { supabase } from '../lib/supabase.js';
 /**
  * CRUD genérico sobre uma tabela do Supabase (RLS isola por filial).
  * `colunas`: [{ campo, rotulo, tipo?('text'|'number'|'bool'|'hora'|'select'), opcoes?, obrigatorio?, naTabela?, noForm? }]
+ * `exclusivos`: grupos de campos que não podem conviver, ex.: [['perc_conv','vlr_conv','tab_horas']].
+ *   Preencher um zera os outros do grupo — evita a regra silenciosa de qual
+ *   deles vence quando mais de um está preenchido.
  */
-export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem = 'created_at', ascending = true, aoMudar }) {
+export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem = 'created_at', ascending = true, aoMudar, exclusivos = [] }) {
   const [linhas, setLinhas] = useState([]);
   const [erro, setErro] = useState('');
   const [editando, setEditando] = useState(null); // objeto (edição) ou {} (novo)
@@ -73,7 +76,8 @@ export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem
         </table>
       </div>
       {editando && (
-        <FormModal colunas={colunas} inicial={editando} onSalvar={salvar} onFechar={() => setEditando(null)} titulo={titulo} />
+        <FormModal colunas={colunas} inicial={editando} exclusivos={exclusivos}
+          onSalvar={salvar} onFechar={() => setEditando(null)} titulo={titulo} />
       )}
     </div>
   );
@@ -86,10 +90,34 @@ function formatar(v, c) {
   return String(v);
 }
 
-function FormModal({ colunas, inicial, onSalvar, onFechar, titulo }) {
+/** Campo "preenchido": zero e falso contam como vazio (é o que o motor ignora). */
+function temValor(v) {
+  if (v === null || v === undefined || v === '' || v === false) return false;
+  if (v === true) return true;
+  const n = Number(v);
+  return Number.isNaN(n) ? String(v).trim() !== '' : n !== 0;
+}
+
+function FormModal({ colunas, inicial, exclusivos = [], onSalvar, onFechar, titulo }) {
   const [obj, setObj] = useState(inicial);
   const campos = colunas.filter((c) => c.noForm !== false);
-  function set(campo, valor) { setObj((o) => ({ ...o, [campo]: valor })); }
+
+  function set(campo, valor) {
+    setObj((o) => {
+      const novo = { ...o, [campo]: valor };
+      // Preencheu um campo de um grupo exclusivo? Os outros do grupo zeram.
+      if (temValor(valor)) {
+        for (const grupo of exclusivos) {
+          if (!grupo.includes(campo)) continue;
+          for (const outro of grupo) {
+            if (outro === campo) continue;
+            novo[outro] = colunas.find((c) => c.campo === outro)?.tipo === 'bool' ? false : '';
+          }
+        }
+      }
+      return novo;
+    });
+  }
   return (
     <div className="modal-bg" onClick={onFechar}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 480, maxHeight: '85vh', overflow: 'auto' }}>

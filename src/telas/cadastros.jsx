@@ -13,17 +13,24 @@ export function Convenios({ perfil }) {
       .then(({ data }) => setTabelasOpcoes((data || []).map((t) => ({ valor: t.tipo, rotulo: `${t.tipo} · ${t.descricao}` }))));
   }, []);
 
+  // O motor aplica os três em cascata e o último preenchido vence (fiel ao
+  // legado, que contava com o operador preencher só um). Aqui a tela garante
+  // isso: preencher um zera os outros dois.
   return <Crud perfil={perfil} titulo="Convênios" tabela="convenios" ordem="codigo"
-    subtitulo="Descontos aplicados na saída (percentual, valor fixo, tabela alternativa ou grade própria)."
+    subtitulo="Desconto na saída. Escolha UMA forma: % de desconto, valor fixo ou a grade própria (coluna CON da tabela de preço)."
+    exclusivos={[['perc_conv', 'vlr_conv', 'tab_horas']]}
     colunas={[
       { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
       { campo: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: [{ valor: 'C', rotulo: 'Convênio' }, { valor: 'V', rotulo: 'Vale' }] },
       { campo: 'razao', rotulo: 'Razão', obrigatorio: true },
-      { campo: 'perc_conv', rotulo: '% desc.', tipo: 'number' },
-      { campo: 'vlr_conv', rotulo: 'Vlr fixo', tipo: 'number' },
+      { campo: 'perc_conv', rotulo: '% desc.', tipo: 'number',
+        ajuda: 'Desconto percentual sobre o valor calculado.' },
+      { campo: 'vlr_conv', rotulo: 'Vlr fixo', tipo: 'number',
+        ajuda: 'Valor fixo que o convênio paga, independente do tempo.' },
       { campo: 'tab_conv', rotulo: 'Tabela alt.', tipo: 'select', opcoes: tabelasOpcoes, naTabela: false,
-        ajuda: 'Só tabelas de preço já cadastradas em Preços.' },
-      { campo: 'tab_horas', rotulo: 'Grade própria (CON)', tipo: 'bool', naTabela: false },
+        ajuda: 'Cobra por outra tabela de preço. Combina com qualquer uma das três formas acima.' },
+      { campo: 'tab_horas', rotulo: 'Grade própria (CON)', tipo: 'bool', naTabela: false,
+        ajuda: 'O convênio paga o valor da coluna "Valor convênio" da faixa, em Preços.' },
       { campo: 'hor_conv', rotulo: 'Hora corte', tipo: 'hora', naTabela: false },
       { campo: 'pede_hora', rotulo: 'Pede hora', tipo: 'bool', naTabela: false },
       { campo: 'selos', rotulo: 'Selos', tipo: 'number', naTabela: false },
