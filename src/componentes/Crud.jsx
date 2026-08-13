@@ -76,7 +76,7 @@ export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem
         </table>
       </div>
       {editando && (
-        <FormModal colunas={colunas} inicial={editando} exclusivos={exclusivos}
+        <FormModal colunas={colunas} inicial={editando} exclusivos={exclusivos} erro={erro}
           onSalvar={salvar} onFechar={() => setEditando(null)} titulo={titulo} />
       )}
     </div>
@@ -98,7 +98,7 @@ function temValor(v) {
   return Number.isNaN(n) ? String(v).trim() !== '' : n !== 0;
 }
 
-function FormModal({ colunas, inicial, exclusivos = [], onSalvar, onFechar, titulo }) {
+function FormModal({ colunas, inicial, exclusivos = [], erro, onSalvar, onFechar, titulo }) {
   const [obj, setObj] = useState(inicial);
   const campos = colunas.filter((c) => c.noForm !== false);
 
@@ -144,6 +144,10 @@ function FormModal({ colunas, inicial, exclusivos = [], onSalvar, onFechar, titu
               {c.ajuda && <span className="suave" style={{ fontSize: 11 }}>{c.ajuda}</span>}
             </div>
           ))}
+          {/* O erro de gravação precisa aparecer AQUI: o modal continua aberto
+              quando o salvar falha, e a mensagem lá do card fica escondida
+              atrás dele — dava a impressão de que tinha salvado. */}
+          {erro && <div className="aviso">{erro}</div>}
           <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
             <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
             <button type="submit" className="btn-primary">Salvar</button>
