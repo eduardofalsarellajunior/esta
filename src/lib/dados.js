@@ -10,7 +10,13 @@ export async function carregarTabelasPreco() {
     .from('tabelas_preco')
     .select('*')
     .is('vigencia_fim', null)
-    .eq('ativo', true);
+    .eq('ativo', true)
+    // Havendo mais de uma tabela vigente pro mesmo tipo (cadastro duplicado), o
+    // mapa abaixo faz a última vencer. Sem ordenar, "a última" é o que o banco
+    // devolver — ou seja, o preço cobrado poderia mudar entre dois carregamentos.
+    // Ordenando, vence sempre a de vigência mais recente.
+    .order('vigencia_inicio', { ascending: true })
+    .order('created_at', { ascending: true });
   if (e1) throw e1;
 
   const { data: faixas, error: e2 } = await supabase
