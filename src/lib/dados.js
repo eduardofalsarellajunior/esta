@@ -11,10 +11,10 @@ export async function carregarTabelasPreco() {
     .select('*')
     .is('vigencia_fim', null)
     .eq('ativo', true)
-    // Havendo mais de uma tabela vigente pro mesmo tipo (cadastro duplicado), o
-    // mapa abaixo faz a última vencer. Sem ordenar, "a última" é o que o banco
-    // devolver — ou seja, o preço cobrado poderia mudar entre dois carregamentos.
-    // Ordenando, vence sempre a de vigência mais recente.
+    // A RLS já limita à filial, e o normal é ter uma tabela vigente por tipo.
+    // Se por engano houver duas, o mapa abaixo faz a última vencer — e sem
+    // ordenar "a última" seria o que o banco devolvesse, com o preço cobrado
+    // podendo mudar entre dois carregamentos. Ordenando, vence a mais recente.
     .order('vigencia_inicio', { ascending: true })
     .order('created_at', { ascending: true });
   if (e1) throw e1;
