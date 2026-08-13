@@ -154,6 +154,39 @@ test('convênio por grade própria (TABHORAS/CON): usa coluna CON', () => {
   assert.equal(r.valor, 4);
 });
 
+// Grade própria com faixa por hora: a coluna CON acumula igual à HOR — CON
+// zerado numa faixa 'hora' não acrescenta nada ao valor achado até ali.
+const TH: TabelaPreco = {
+  tipo: 'TH',
+  faixas: [f(1.0, 10, 10), f(5.0, 2, 1, 'hora'), f(12.0, 3, 0, 'hora')],
+};
+
+test('grade própria: coluna CON soma por hora nas faixas "hora"', () => {
+  const r = calcularTarifa({
+    tabelas: { ...tabelas, TH },
+    tipoVeic: 'TH',
+    // 3h: faixa 1 (fixo 10/10) + 2h da faixa 2 (2/h e 1/h) = 14 e 12.
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 13.0 },
+    convenio: { codigo: 'X', tabHoras: true },
+  });
+  assert.equal(r.valorProporcional, 14);
+  assert.equal(r.valorConvenio, 12);
+  assert.equal(r.valor, 2);
+});
+
+test('grade própria: CON zerado em faixa "hora" mantém o valor achado antes', () => {
+  const r = calcularTarifa({
+    tabelas: { ...tabelas, TH },
+    tipoVeic: 'TH',
+    // 6h: faixa 1 (10/10) + 4h da faixa 2 (8/4) + 1h da faixa 3 (3/0).
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 16.0 },
+    convenio: { codigo: 'X', tabHoras: true },
+  });
+  assert.equal(r.valorProporcional, 21);
+  assert.equal(r.valorConvenio, 14); // a faixa 3 não acrescentou nada
+  assert.equal(r.valor, 7);
+});
+
 test('piso em zero: convênio maior que o valor', () => {
   const r = calcularTarifa({
     tabelas, tipoVeic: 'G',

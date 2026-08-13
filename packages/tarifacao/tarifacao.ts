@@ -21,7 +21,11 @@ export interface Faixa {
   ate: HoraComercial;
   /** Valor cobrado nesta faixa (coluna HOR). Fixo (valor cheio) ou por hora, conforme `tipoCobranca`. */
   hor: number;
-  /** Valor quando a tabela é usada como grade de convênio (coluna CON). Sempre um valor fixo (ver `calcularValorFaixas`). */
+  /**
+   * Valor que o convênio banca nesta faixa (coluna CON), quando a tabela é
+   * usada como grade própria. Segue o mesmo `tipoCobranca` da faixa: fixo
+   * substitui o total, 'hora' soma por hora (ver `calcularValorFaixas`).
+   */
   con: number;
   /**
    * 'fixo': `hor` é o valor cheio da faixa (substitui o total acumulado até aqui).
@@ -204,6 +208,7 @@ export function selecionaFaixa(
 export function calcularValorFaixas(
   faixas: Faixa[],
   tempo: HoraComercial,
+  coluna: 'hor' | 'con' = 'hor',
 ): { valor: number; indice: number } | null {
   const alvo = Math.round(tempo * 100);
   let fronteira: HoraComercial = 0;
@@ -211,12 +216,13 @@ export function calcularValorFaixas(
   for (let i = 0; i < faixas.length; i++) {
     const f = faixas[i]!;
     const dentro = alvo <= Math.round(f.ate * 100);
+    const preco = coluna === 'con' ? f.con : f.hor;
     if (f.tipoCobranca === 'hora') {
       const fimBloco = dentro ? tempo : f.ate;
       const horas = Math.ceil((minuto(fimBloco) - minuto(fronteira)) / 60);
-      total += horas * f.hor;
+      total += horas * preco;
     } else {
-      total = f.hor;
+      total = preco;
     }
     if (dentro) return { valor: total, indice: i + 1 };
     fronteira = f.ate;
@@ -314,8 +320,10 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
   let valorConvenio = 0;
   if (convenio) {
     if (convenio.tabHoras) {
-      // [VALIDAR] usaValorConvenioDaFaixa: coluna CON como valor de convênio.
-      const fc = selecionaFaixa(tbl.faixas, tempoDecorrido, true);
+      // Grade própria: a coluna CON percorre as faixas com a MESMA regra da
+      // HOR — numa faixa 'hora' ela soma por hora (CON=0 não acrescenta nada
+      // ao valor achado até ali), numa faixa 'fixo' ela substitui o total.
+      const fc = calcularValorFaixas(tbl.faixas, tempoDecorrido, 'con');
       valorConvenio = fc?.valor ?? 0;
     }
     if (convenio.perConv) {

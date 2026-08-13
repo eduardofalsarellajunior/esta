@@ -48,9 +48,14 @@ teto da faixa anterior. Faixas 100% "fixo" (todas as tabelas hoje) se
 comportam exatamente como antes — o `tipo_cobranca` nasce `'fixo'` em todas
 por padrão, então nenhuma tabela existente muda de valor sozinha.
 
-A grade de convênio (coluna CON, usada quando `convenio.tabHoras=true`)
-continua sendo sempre um valor fixo (`selecionaFaixa`) — não participa dessa
-lógica de fixo/hora.
+A grade de convênio (coluna CON, usada quando `convenio.tabHoras=true`) segue a
+**mesma** regra: percorre as faixas com `calcularValorFaixas(faixas, tempo,
+'con')`, somando por hora nas faixas `'hora'` e substituindo o total nas
+`'fixo'`. Um CON zerado numa faixa `'hora'` não acrescenta nada ao valor achado
+até ali — é como se aquele trecho fosse por conta do cliente.
+
+As duas colunas saem sempre da **mesma faixa**, então o que o cliente paga é
+`HOR − CON` com piso em zero, e `CON` é o que fica a pagar pelo convênio.
 
 ## Serviços: soma de tabelas
 
