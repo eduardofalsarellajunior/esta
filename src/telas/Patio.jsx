@@ -950,10 +950,18 @@ export default function Patio({ perfil }) {
             {saindo.resultado.mensalista ? (
               <p className="suave">Mensalista/hóspede — sem cobrança na saída (mensalidade paga à parte).</p>
             ) : (
-              <p className="mono suave">
-                Tempo: {fmtHora(saindo.resultado.tempoDecorrido)}
-                {saindo.resultado.valorConvenio > 0 && ` · conv. -${fmtBRL(saindo.resultado.valorConvenio)}`}
-              </p>
+              <>
+                <p className="mono suave">Tempo: {fmtHora(saindo.resultado.tempoDecorrido)}</p>
+                {/* Quanto o convênio está bancando: sem isso, um convênio mal
+                    cadastrado passa despercebido (o valor simplesmente não cai). */}
+                {saindo.convenioCodigo && (
+                  <p className={saindo.resultado.valorConvenio > 0 ? 'ok-txt' : 'aviso'} style={{ fontSize: 13 }}>
+                    {saindo.resultado.valorConvenio > 0
+                      ? `Convênio ${saindo.convenioCodigo} paga ${fmtBRL(saindo.resultado.valorConvenio)}`
+                      : `Convênio ${saindo.convenioCodigo} sem desconto — confira o cadastro dele (% desc., valor fixo ou grade própria) e a coluna "Valor convênio" da tabela ${saindo.mov.tipo_veic}.`}
+                  </p>
+                )}
+              </>
             )}
             {saindo.servicosSelecionados?.length > 0 && (
               <p className="suave">

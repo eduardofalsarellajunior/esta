@@ -111,7 +111,10 @@ function FormModal({ colunas, inicial, exclusivos = [], onSalvar, onFechar, titu
           if (!grupo.includes(campo)) continue;
           for (const outro of grupo) {
             if (outro === campo) continue;
-            novo[outro] = colunas.find((c) => c.campo === outro)?.tipo === 'bool' ? false : '';
+            // Zera com 0/false, não com vazio: as colunas numéricas do banco
+            // costumam ser NOT NULL DEFAULT 0, e `salvar` manda '' como null.
+            const tipo = colunas.find((c) => c.campo === outro)?.tipo;
+            novo[outro] = tipo === 'bool' ? false : (tipo === 'number' || tipo === 'hora' ? 0 : '');
           }
         }
       }
