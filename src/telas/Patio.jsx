@@ -16,6 +16,12 @@ import { ehGerente } from '../lib/acesso.js';
 const MENSALISTA = new Set(['I', 'P', 'H']);
 const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
 
+/** Placa fictícia de quem entrou sem placa — convenção herdada do legado. */
+const semChapa = (placa) => String(placa || '').startsWith('$$$');
+const placaSemChapa = (controle) => `$$$${String(controle).padStart(4, '0')}`;
+/** Na tela, `$$$0042` só polui: o nº já está na coluna ao lado. */
+const rotuloPlaca = (placa) => (semChapa(placa) ? 'sem placa' : placa);
+
 export default function Patio({ perfil }) {
   const [tabelas, setTabelas] = useState({});
   const [convenios, setConvenios] = useState({});
@@ -256,7 +262,18 @@ export default function Patio({ perfil }) {
     for (let i = 0; i < tentativas; i++) {
       const { data: proximo, error: errSeq } = await supabase.rpc('proximo_controle', { p_filial: perfil.filial_id });
       // Sem a migration 0020 no ar, segue sem número em vez de travar a entrada.
-      const payload = errSeq ? dados : { ...dados, controle: proximo };
+      if (errSeq && !dados.placa) {
+        return { data: null, error: { message: 'Sem numeração de controle disponível — digite a placa (ou aplique a migration 0020).' } };
+      }
+      const payload = errSeq ? dados : {
+        ...dados,
+        controle: proximo,
+        // Carro sem placa: o próprio nº de controle vira o identificador, no
+        // formato $$$0042 do sistema antigo. Lá o $$$ vinha de um contador
+        // separado; aqui é o mesmo número do ticket, então o operador tem um
+        // só pra procurar.
+        placa: dados.placa || placaSemChapa(proximo),
+      };
       const res = await supabase.from('movimentos').insert(payload).select().single();
       if (!res.error) return res;
       const colidiuNoControle = res.error.code === '23505' && String(res.error.message).includes('controle');
@@ -284,7 +301,7 @@ export default function Patio({ perfil }) {
       titulo: 'Ticket de entrada',
       linhas: [
         ...(novo?.controle != null ? [['Controle', String(novo.controle).padStart(4, '0')]] : []),
-        ['Placa', p],
+        ['Placa', novo?.placa || p],
         ['Carro', nomeModelo || '—'],
         ['Tabela', tipoVeic],
         ['Entrada', `${dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(hrEntrada))}`],
@@ -303,13 +320,14 @@ export default function Patio({ perfil }) {
     e.preventDefault();
     setErro('');
     const p = placa.trim().toUpperCase();
-    if (!p) return;
 
     // Segurança extra (ex.: Enter sem sair do campo, sem disparar o onBlur).
     const jaNoPatio = encontrarNoPatio(p);
     if (jaNoPatio) { limparFormEntrada(); prepararSaida(jaNoPatio); return; }
 
-    if (!REGEX_PLACA.test(p)) { setConfirmPlaca(p); return; }
+    // Enter com a placa em branco: entra sem placa e o nº de controle vira o
+    // identificador ($$$0042), como no sistema antigo.
+    if (p && !REGEX_PLACA.test(p)) { setConfirmPlaca(p); return; }
     await prosseguirEntrada();
   }
 
@@ -745,7 +763,9 @@ export default function Patio({ perfil }) {
                   <td className="mono" style={{ fontWeight: 700 }}>
                     {m.controle != null ? String(m.controle).padStart(4, '0') : '—'}
                   </td>
-                  <td><span className="placa mono">{m.placa}</span></td>
+                  <td>{semChapa(m.placa)
+                    ? <span className="suave">{rotuloPlaca(m.placa)}</span>
+                    : <span className="placa mono">{m.placa}</span>}</td>
                   <td>{m.modelo || '—'}</td>
                   <td>{m.tipo_veic}</td>
                   <td>{rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}</td>
@@ -777,7 +797,9 @@ export default function Patio({ perfil }) {
             <tbody>
               {saidasRecentes.map((m) => (
                 <tr key={m.id}>
-                  <td><span className="placa mono">{m.placa}</span></td>
+                  <td>{semChapa(m.placa)
+                    ? <span className="suave">{rotuloPlaca(m.placa)}{m.controle != null ? ` ${String(m.controle).padStart(4, '0')}` : ''}</span>
+                    : <span className="placa mono">{m.placa}</span>}</td>
                   <td>{m.modelo || '—'}</td>
                   <td className="mono">
                     {m.excluido_em
@@ -896,7 +918,9 @@ export default function Patio({ perfil }) {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="card-cab">
               <h2>
-                Saída — <span className="placa mono">{saindo.mov.placa}</span>
+                Saída — {semChapa(saindo.mov.placa)
+                  ? <span className="suave">{rotuloPlaca(saindo.mov.placa)}</span>
+                  : <span className="placa mono">{saindo.mov.placa}</span>}
                 {saindo.mov.controle != null && (
                   <span className="suave mono" style={{ marginLeft: 8 }}>
                     nº {String(saindo.mov.controle).padStart(4, '0')}
