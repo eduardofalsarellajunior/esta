@@ -13,8 +13,8 @@ import {
 } from './tarifacao.ts';
 
 // Helpers -------------------------------------------------------------------
-const f = (ate: number, hor: number, con = 0, tipoCobranca: 'fixo' | 'hora' = 'fixo'): Faixa =>
-  ({ ate, hor, con, tipoCobranca });
+const f = (ate: number, hor: number, con = 0, tipoCobranca: 'fixo' | 'hora' = 'fixo', periodo?: number): Faixa =>
+  ({ ate, hor, con, tipoCobranca, periodo });
 const dia = (iso: string): Date => {
   const [y, m, d] = iso.split('-').map(Number) as [number, number, number];
   return new Date(y, m - 1, d);
@@ -87,6 +87,41 @@ test('faixas fixo/hora: 2:35 = R$10 (base) + 2h×R$5 (1:05→2:35 arred. pra cim
 
 test('faixas fixo/hora: 15:20 = R$10 + 11h×R$5 (faixa 3 inteira) + 4h×R$3 (3:15 arred.) = R$77', () => {
   assert.deepEqual(calcularValorFaixas(FAIXAS_MISTAS, 15.2), { valor: 77, indice: 4 });
+});
+
+// Período configurável (faixa 'hora' sem ser necessariamente 1h) -------------
+test('período ausente = 1h, igual ao comportamento de sempre', () => {
+  // Mesma FAIXAS_MISTAS (sem periodo definido) — replica os dois casos acima
+  // usando o valor default explicitamente, pra travar que "ausente" == "1h".
+  const comPeriodoExplicito = [
+    f(0.3, 8, 0, 'fixo'),
+    f(1.05, 10, 0, 'fixo'),
+    f(12.05, 5, 0, 'hora', 1.0),
+    f(99999.0, 3, 0, 'hora', 1.0),
+  ];
+  assert.deepEqual(calcularValorFaixas(comPeriodoExplicito, 2.35), calcularValorFaixas(FAIXAS_MISTAS, 2.35));
+  assert.deepEqual(calcularValorFaixas(comPeriodoExplicito, 15.2), calcularValorFaixas(FAIXAS_MISTAS, 15.2));
+});
+
+test('período de 30 minutos: cobra em blocos de 0:30, fração arredonda pra cima', () => {
+  const faixas = [f(99999.0, 2, 0, 'hora', 0.3)]; // R$2 a cada 30min
+  assert.deepEqual(calcularValorFaixas(faixas, 0.01), { valor: 2, indice: 1 }); // 1min -> 1 bloco
+  assert.deepEqual(calcularValorFaixas(faixas, 0.30), { valor: 2, indice: 1 }); // exatos 30min -> 1 bloco
+  assert.deepEqual(calcularValorFaixas(faixas, 0.31), { valor: 4, indice: 1 }); // 31min -> 2 blocos
+  assert.deepEqual(calcularValorFaixas(faixas, 1.00), { valor: 4, indice: 1 }); // 60min -> 2 blocos
+  assert.deepEqual(calcularValorFaixas(faixas, 1.01), { valor: 6, indice: 1 }); // 61min -> 3 blocos
+});
+
+test('período de 24 horas: cobra em diárias', () => {
+  const faixas = [f(99999.0, 50, 0, 'hora', 24.0)]; // R$50 por diária de 24h
+  assert.deepEqual(calcularValorFaixas(faixas, 20.0), { valor: 50, indice: 1 });  // 20h -> 1 diária
+  assert.deepEqual(calcularValorFaixas(faixas, 24.0), { valor: 50, indice: 1 });  // exatas 24h -> 1 diária
+  assert.deepEqual(calcularValorFaixas(faixas, 25.0), { valor: 100, indice: 1 }); // 25h -> 2 diárias
+});
+
+test('período também vale para a coluna CON (grade de convênio)', () => {
+  const faixas = [f(99999.0, 10, 3, 'hora', 0.3)]; // cliente R$10/30min, convênio R$3/30min
+  assert.deepEqual(calcularValorFaixas(faixas, 0.45, 'con'), { valor: 6, indice: 1 }); // 45min -> 2 blocos
 });
 
 // Proporcional (avulso) -----------------------------------------------------

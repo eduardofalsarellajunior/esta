@@ -29,10 +29,16 @@ export interface Faixa {
   con: number;
   /**
    * 'fixo': `hor` é o valor cheio da faixa (substitui o total acumulado até aqui).
-   * 'hora': `hor` é uma taxa por hora, somada cumulativamente a partir do teto
-   * da faixa anterior, com fração de hora arredondada pra cima.
+   * 'hora': `hor` é uma taxa por PERÍODO (ver `periodo`), somada cumulativamente
+   * a partir do teto da faixa anterior, com fração de período arredondada pra cima.
    */
   tipoCobranca: 'fixo' | 'hora';
+  /**
+   * Duração do período de cobrança nas faixas 'hora', em HH.MM (1.00 = 1h,
+   * padrão; 0.30 = 30min; 24.00 = 24h). Ignorado em faixas 'fixo'. Ausente ou
+   * zero cai no padrão de 1h — preserva o comportamento de antes desta opção existir.
+   */
+  periodo?: HoraComercial;
 }
 
 export interface TabelaPreco {
@@ -199,9 +205,10 @@ export function selecionaFaixa(
  * acumulado:
  *  - Faixa 'fixo': o total VIRA o valor da faixa (substitui, não soma, o que
  *    veio antes) — é o comportamento de sempre (lookup único).
- *  - Faixa 'hora': soma ao total `horas × hor`, onde `horas` é o tempo entre
- *    a fronteira e (o tempo, se cai nesta faixa; senão o teto desta faixa),
- *    sempre arredondado pra cima (fração de hora conta como 1h).
+ *  - Faixa 'hora': soma ao total `periodos × hor`, onde `periodos` é o tempo
+ *    entre a fronteira e (o tempo, se cai nesta faixa; senão o teto desta
+ *    faixa), dividido pela duração de `periodo` (padrão 1h) e sempre
+ *    arredondado pra cima (fração de período conta como um período cheio).
  * A fronteira avança para o teto da faixa a cada passo, fixo ou hora.
  * Retorna null se o tempo estourar todas as faixas (igual antes).
  */
@@ -219,8 +226,12 @@ export function calcularValorFaixas(
     const preco = coluna === 'con' ? f.con : f.hor;
     if (f.tipoCobranca === 'hora') {
       const fimBloco = dentro ? tempo : f.ate;
-      const horas = Math.ceil((minuto(fimBloco) - minuto(fronteira)) / 60);
-      total += horas * preco;
+      // periodo ausente/zero (faixas de antes desta opção existir) = 1h, o
+      // comportamento de sempre. Guarda contra período zero (evitaria divisão
+      // por zero / Infinity).
+      const periodoMin = minuto(f.periodo ?? 1.0) || 60;
+      const periodos = Math.ceil((minuto(fimBloco) - minuto(fronteira)) / periodoMin);
+      total += periodos * preco;
     } else {
       total = preco;
     }

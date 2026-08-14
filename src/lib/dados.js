@@ -37,6 +37,7 @@ export async function carregarTabelasPreco() {
           hor: Number(f.valor_hora),
           con: Number(f.valor_convenio),
           tipoCobranca: f.tipo_cobranca,
+          periodo: Number(f.periodo ?? 1),
         })),
     };
   }

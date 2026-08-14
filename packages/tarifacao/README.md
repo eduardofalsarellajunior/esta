@@ -48,6 +48,13 @@ teto da faixa anterior. Faixas 100% "fixo" (todas as tabelas hoje) se
 comportam exatamente como antes — o `tipo_cobranca` nasce `'fixo'` em todas
 por padrão, então nenhuma tabela existente muda de valor sozinha.
 
+Faixa "hora" cobra por **período**, não necessariamente por hora cheia: o
+campo `periodo` (HH.MM) define o tamanho do bloco — `1.00` = 1h (padrão),
+`0.30` = 30min, `24.00` = uma diária. Fração de período conta como um período
+inteiro (mesmo arredondamento pra cima de antes). `periodo` ausente ou zero
+cai no padrão de 1h, preservando o comportamento das faixas cadastradas antes
+desta opção existir.
+
 A grade de convênio (coluna CON, usada quando `convenio.tabHoras=true`) segue a
 **mesma** regra: percorre as faixas com `calcularValorFaixas(faixas, tempo,
 'con')`, somando por hora nas faixas `'hora'` e substituindo o total nas
