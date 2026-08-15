@@ -64,6 +64,11 @@ export default function Mensalistas({ perfil }) {
       tolerancia_dias: Number(m.tolerancia_dias || 0), qte_vagas: Number(m.qte_vagas || 1),
       valor_mensalidade: Number(m.valor_mensalidade || 0),
       proximo_pagamento: m.proximo_pagamento || null,
+      // Dia/turno contratado (RESTRM/T/N) — vazio = sem restrição (todo dia
+      // liberado, o comportamento de sempre). Período em branco vira 0, que o
+      // motor lê como "usa o padrão 6h/12h/18h" (ver restricaoMensalista.js).
+      restr_manha: m.restr_manha || null, restr_tarde: m.restr_tarde || null, restr_noite: m.restr_noite || null,
+      periodo1: Number(m.periodo1 || 0), periodo2: Number(m.periodo2 || 0), periodo3: Number(m.periodo3 || 0),
       ativo: m.ativo ?? true,
     };
     const res = m.id
@@ -321,6 +326,7 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
             <label>Vagas contratadas (veículos simultâneos)</label>
             <input type="number" min="1" value={m.qte_vagas ?? 1} onChange={(e) => set('qte_vagas', e.target.value)} required />
           </div>
+          <RestricaoTurnos m={m} set={set} />
           <label className="campo-check" style={{ marginBottom: 10 }}>
             <input type="checkbox" checked={m.ativo ?? true} onChange={(e) => set('ativo', e.target.checked)} /> Ativo
           </label>
@@ -333,6 +339,71 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const TURNOS = [
+  { campo: 'restr_manha', rotulo: 'Manhã', periodo: 'periodo1', padrao: '6.00' },
+  { campo: 'restr_tarde', rotulo: 'Tarde', periodo: 'periodo2', padrao: '12.00' },
+  { campo: 'restr_noite', rotulo: 'Noite', periodo: 'periodo3', padrao: '18.00' },
+];
+
+/**
+ * Dias/turnos contratados pelo mensalista (RESTRM/T/N do legado) + os
+ * horários que começam cada turno (PERIODO1/2/3). Campo vazio = sem
+ * restrição, contratado todo dia — é o padrão de quem nunca mexer aqui.
+ */
+function RestricaoTurnos({ m, set }) {
+  function diaContratado(campo, i) {
+    const valor = m[campo];
+    return valor ? valor.toUpperCase()[i] === 'S' : true; // vazio = liberado
+  }
+  function alternarDia(campo, i) {
+    // Primeira mudança materializa "tudo liberado" (SSSSSSS) antes de marcar
+    // o dia clicado como não-contratado — assim o operador só precisa
+    // desmarcar os dias que faltam, não montar a string inteira.
+    const atual = (m[campo] || 'SSSSSSS').toUpperCase().padEnd(7, 'S').split('');
+    atual[i] = atual[i] === 'S' ? 'N' : 'S';
+    set(campo, atual.join(''));
+  }
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label>Dias e turnos contratados</label>
+      <p className="suave" style={{ fontSize: 11, marginTop: -2, marginBottom: 6 }}>
+        Desmarque só o que NÃO está contratado. Tudo marcado (o padrão) entra em qualquer dia/turno, como hoje.
+      </p>
+      <div className="tabela-scroll">
+        <table>
+          <thead>
+            <tr><th></th>{DIAS_SEMANA.map((d) => <th key={d} style={{ textAlign: 'center' }}>{d}</th>)}<th>A partir de</th></tr>
+          </thead>
+          <tbody>
+            {TURNOS.map((t) => (
+              <tr key={t.campo}>
+                <td>{t.rotulo}</td>
+                {DIAS_SEMANA.map((_, i) => (
+                  <td key={i} style={{ textAlign: 'center' }}>
+                    <input type="checkbox" checked={diaContratado(t.campo, i)}
+                      onChange={() => alternarDia(t.campo, i)} />
+                  </td>
+                ))}
+                <td>
+                  <input type="number" step="0.01" min="0" style={{ width: 80 }}
+                    placeholder={t.padrao} value={m[t.periodo] || ''}
+                    onChange={(e) => set(t.periodo, e.target.value)} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <span className="suave" style={{ fontSize: 11 }}>
+        Horário HH.MM (ex.: 8.30 = 8h30) em que cada turno começa — termina no início do próximo.
+        Em branco usa o padrão 6h/12h/18h.
+      </span>
     </div>
   );
 }

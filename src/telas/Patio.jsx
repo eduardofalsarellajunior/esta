@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase.js';
 import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais, carregarModelosTicket } from '../lib/dados.js';
 import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL, dentroDoVencimento } from '../lib/tempo.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
-import { calcularTarifa } from '../../packages/tarifacao/tarifacao.ts';
+import { calcularTarifa, horas as horasDecorridas } from '../../packages/tarifacao/tarifacao.ts';
+import { diaSemanaLegado, calcularRestricaoEntrada } from '../lib/restricaoMensalista.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
 import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
@@ -31,6 +32,8 @@ export default function Patio({ perfil }) {
   const [detectado, setDetectado] = useState(null); // {mensalista, convenio_codigo, tipo_mens}
   const [vagaEsgotada, setVagaEsgotada] = useState(null); // nome do mensalista, se as vagas dele já estão ocupadas
   const [mensalistaVencido, setMensalistaVencido] = useState(null); // nome do mensalista, se venceu (entra como avulso)
+  const [restricaoHorario, setRestricaoHorario] = useState(null); // { nome, livreAPartir } — fora do dia/turno contratado
+  const [livreAPartirEntrada, setLivreAPartirEntrada] = useState(null); // valor a persistir na entrada (ver registrarEntrada)
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
 
@@ -161,6 +164,8 @@ export default function Patio({ perfil }) {
     setDetectado(null);
     setVagaEsgotada(null);
     setMensalistaVencido(null);
+    setRestricaoHorario(null);
+    setLivreAPartirEntrada(null);
 
     // Já está no pátio (por placa ou pelo nº de controle)? Vai direto pra saída.
     // Antes do corte de 3 caracteres: número de controle costuma ter 1 ou 2.
@@ -208,6 +213,19 @@ export default function Patio({ perfil }) {
       return;
     }
 
+    // Dia/turno fora do contratado (RESTRM/RESTRT/RESTRN + PERIODO1/2/3)?
+    // Entra como avulso, mas cobra só até o próximo turno contratado do dia
+    // (ver calcularResultadoSaida) — não a estadia inteira.
+    const restricao = calcularRestricaoEntrada({
+      horaEntrada: agoraHHMM(), diaSemana: diaSemanaLegado(new Date()), mensalista: m,
+    });
+    if (!restricao.dentroDoHorario) {
+      setRestricaoHorario({ nome: m.razao, livreAPartir: restricao.livreAPartir });
+      setLivreAPartirEntrada(restricao.livreAPartir);
+      if (mv.tipo_veic) await registrarEntrada(mv.tipo_veic, mv.modelo, 'E', null);
+      return;
+    }
+
     let convCod = null;
     if (m.convenio_id) {
       const { data: c } = await supabase.from('convenios').select('codigo').eq('id', m.convenio_id).maybeSingle();
@@ -246,6 +264,7 @@ export default function Patio({ perfil }) {
 
   function limparFormEntrada() {
     setPlaca(''); setDetectado(null); setVagaEsgotada(null); setMensalistaVencido(null);
+    setRestricaoHorario(null); setLivreAPartirEntrada(null);
     setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
   }
@@ -282,7 +301,13 @@ export default function Patio({ perfil }) {
     return { data: null, error: { message: 'Não consegui reservar um número de controle livre. Tente de novo.' } };
   }
 
-  async function registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo) {
+  /**
+   * `livreAPartir` (omitido = usa o que `detectar()` calculou, se houver):
+   * fora do dia/turno contratado, é o horário em que a saída passa a cobrar
+   * avulso só até ali. `undefined` explícito porque `null` é um valor válido
+   * (default explícito no parâmetro só entraria com `undefined`).
+   */
+  async function registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo, livreAPartir = livreAPartirEntrada) {
     const p = placa.trim().toUpperCase();
     const dtEntrada = hojeISO();
     const hrEntrada = agoraHHMM();
@@ -294,6 +319,7 @@ export default function Patio({ perfil }) {
       tipo_veic: tipoVeic,
       tipo_mens: tipoMens ?? detectado?.tipo_mens ?? 'E',
       convenio_codigo: convenioCodigo ?? detectado?.convenio_codigo ?? null,
+      livre_a_partir: livreAPartir ?? null,
       usuario_entrada: perfil.id,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
@@ -468,6 +494,31 @@ export default function Patio({ perfil }) {
       // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
       return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, mensalista: true, tempoDecorrido: 0 };
     }
+
+    // Entrou fora do dia/turno contratado (ver detectar()): cobra avulso só
+    // até o horário guardado em livre_a_partir — dali em diante já está
+    // dentro do período contratado, sem cobrança. Só vale no mesmo dia da
+    // entrada (a restrição não tenta prever o dia seguinte), só depois que a
+    // saída realmente ultrapassa esse horário (antes disso é avulso normal,
+    // pela permanência real — o boundary nunca chegou a valer), e só sem
+    // convênio escolhido à mão (escolha do operador tem prioridade).
+    if (!convenioCodigo && mov.livre_a_partir != null && mov.dt_entrada === hojeISO() && agoraHHMM() > Number(mov.livre_a_partir)) {
+      const parcial = calcularTarifa({
+        tabelas, tipoVeic: mov.tipo_veic,
+        movimento: {
+          dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada),
+          dtSaida: dataDeISO(mov.dt_entrada), saida: Number(mov.livre_a_partir),
+        },
+      });
+      return {
+        ...parcial,
+        // Tempo mostrado ao operador é o real (quanto tempo o carro ficou),
+        // mesmo cobrando só a parte fora do horário contratado.
+        tempoDecorrido: horasDecorridas({ dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() }),
+        restricaoAte: Number(mov.livre_a_partir),
+      };
+    }
+
     const convenio = convenioCodigo ? mapConvenio(convenios[convenioCodigo]) : undefined;
     return calcularTarifa({
       tabelas, tipoVeic: mov.tipo_veic, convenio,
@@ -749,6 +800,14 @@ export default function Patio({ perfil }) {
               Mensalidade de {mensalistaVencido} vencida — entrando como avulso
             </span>
           )}
+          {restricaoHorario && (
+            <span className="badge-mens" style={{ color: 'var(--ambar)', borderColor: 'var(--ambar)', background: 'rgba(245,166,35,.12)' }}>
+              {restricaoHorario.nome} fora do dia/turno contratado — avulso
+              {restricaoHorario.livreAPartir != null
+                ? ` até as ${fmtHora(restricaoHorario.livreAPartir)}`
+                : ' pelo período todo'}
+            </span>
+          )}
         </form>
       </div>
 
@@ -963,6 +1022,14 @@ export default function Patio({ perfil }) {
                     {saindo.resultado.valorConvenio > 0
                       ? `Convênio ${saindo.convenioCodigo} paga ${fmtBRL(saindo.resultado.valorConvenio)}`
                       : `Convênio ${saindo.convenioCodigo} sem desconto — confira o cadastro dele (% desc., valor fixo ou grade própria) e a coluna "Valor convênio" da tabela ${tabelaDaSaida(saindo, convenios)}.`}
+                  </p>
+                )}
+                {/* Entrou fora do dia/turno contratado: cobra só até aqui —
+                    dali em diante já estava dentro do período contratado. */}
+                {saindo.resultado.restricaoAte != null && (
+                  <p className="suave" style={{ fontSize: 13 }}>
+                    Fora do horário contratado na entrada — cobrando só até as {fmtHora(saindo.resultado.restricaoAte)}
+                    {' '}(quando o período contratado começa).
                   </p>
                 )}
               </>
