@@ -16,6 +16,7 @@ import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 // avança o próximo pagamento um mês no cadastro e imprime o comprovante.
 export default function Mensalistas({ perfil }) {
   const [lista, setLista] = useState([]);
+  const [ordenarPor, setOrdenarPor] = useState('codigo'); // 'codigo' (placa) | 'razao' (nome, A-Z)
   const [sel, setSel] = useState(null); // mensalista cujos veículos aparecem embaixo
   const [editando, setEditando] = useState(null); // objeto no modal de cabeçalho (null = fechado)
   const [recebendo, setRecebendo] = useState(null); // mensalista no modal de recebimento
@@ -31,6 +32,16 @@ export default function Mensalistas({ perfil }) {
     if (error) setErro(error.message); else setLista(data);
   }
   useEffect(() => { carregar(); }, []);
+
+  // Ordenação em memória (a lista inteira já está carregada) — troca na hora,
+  // sem ida ao banco. 'codigo' é a placa do veículo principal na maioria dos
+  // cadastros (ver importação do legado), daí valer como "por placa".
+  const listaOrdenada = useMemo(() => {
+    const cmp = ordenarPor === 'razao'
+      ? (a, b) => a.razao.localeCompare(b.razao, 'pt-BR', { sensitivity: 'base' })
+      : (a, b) => a.codigo.localeCompare(b.codigo, 'pt-BR', { sensitivity: 'base', numeric: true });
+    return [...lista].sort(cmp);
+  }, [lista, ordenarPor]);
 
   useEffect(() => {
     supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo')
@@ -93,7 +104,16 @@ export default function Mensalistas({ perfil }) {
         <div className="card-cab">
           <div><h2>Mensalistas</h2>
             <p className="suave">Mensalistas/hóspedes, com os veículos e a quantidade de vagas contratadas simultâneas.</p></div>
-          <button className="btn-primary" onClick={() => setEditando({ novo: true })}>+ Novo</button>
+          <div className="linha-form" style={{ alignItems: 'flex-end' }}>
+            <div className="campo" style={{ minWidth: 170 }}>
+              <label>Ordenar por</label>
+              <select value={ordenarPor} onChange={(e) => setOrdenarPor(e.target.value)}>
+                <option value="codigo">Placa/código</option>
+                <option value="razao">Nome (A-Z)</option>
+              </select>
+            </div>
+            <button className="btn-primary" onClick={() => setEditando({ novo: true })}>+ Novo</button>
+          </div>
         </div>
         {erro && <div className="aviso">{erro}</div>}
         <div className="tabela-scroll">
@@ -103,7 +123,7 @@ export default function Mensalistas({ perfil }) {
               <th>Mensalidade</th><th>Próx. pagamento</th><th>Ativo</th><th></th>
             </tr></thead>
             <tbody>
-              {lista.map((m) => (
+              {listaOrdenada.map((m) => (
                 <tr key={m.id}>
                   <td className="mono">{m.codigo}</td>
                   <td>{m.razao}</td>
