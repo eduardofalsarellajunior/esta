@@ -3,6 +3,10 @@ import { NavLink, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { PAPEIS, podeAcessar, ehFornecedor } from '../lib/acesso.js';
 import { trocarFilialAtiva } from '../telas/EscolherFilial.jsx';
+import { imprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
+import { imprimirTicket } from './Ticket.jsx';
+
+const INTERVALO_VERIFICACAO_MS = 4000;
 
 const GRUPOS = [
   { titulo: 'Operação', itens: [
@@ -50,6 +54,50 @@ export default function Layout({ perfil }) {
     supabase.from('filiais').select('nome_fantasia').maybeSingle()
       .then(({ data }) => setNomeFilial(data?.nome_fantasia || ''));
   }, [perfil]);
+
+  /**
+   * Pedidos de impressão vindos do celular (ver Ticket.jsx e
+   * supabase/migrations/0023_print_jobs.sql). Só roda quando este navegador
+   * marcou "imprime pedidos da cabine" em Configurações — normalmente só o
+   * navegador kiosk fixo da cabine (ver docs/CABINE.md). Reaproveita o mesmo
+   * imprimirTicket() que já imprime silencioso ali, nenhuma lógica nova de
+   * impressão.
+   */
+  useEffect(() => {
+    if (!imprimePedidosDaCabine()) return;
+    let cancelado = false;
+    let filial = null;
+
+    async function verificar() {
+      if (!filial) {
+        const { data } = await supabase.from('filiais').select('nome_fantasia, endereco, cnpj')
+          .eq('id', perfil.filial_id).maybeSingle();
+        filial = data;
+      }
+      const { data: pendentes } = await supabase.from('print_jobs').select('*')
+        .eq('filial_id', perfil.filial_id).eq('status', 'pendente').order('criado_em');
+      for (const job of pendentes || []) {
+        if (cancelado) return;
+        // Reivindica antes de imprimir (update condicional): se por engano
+        // duas abas tiverem a flag ligada, só uma imprime cada pedido.
+        const { data: reivindicado } = await supabase.from('print_jobs')
+          .update({ status: 'impresso', impresso_em: new Date().toISOString() })
+          .eq('id', job.id).eq('status', 'pendente').select().maybeSingle();
+        if (!reivindicado) continue;
+        try {
+          imprimirTicket(job.ticket, filial);
+        } catch (e) {
+          // Não captura "pop-up bloqueado" (imprimirTicket só alerta, não lança) —
+          // só erros inesperados (ex.: ticket malformado).
+          await supabase.from('print_jobs').update({ status: 'erro', erro: e.message }).eq('id', job.id);
+        }
+      }
+    }
+
+    verificar();
+    const id = setInterval(verificar, INTERVALO_VERIFICACAO_MS);
+    return () => { cancelado = true; clearInterval(id); };
+  }, [perfil.filial_id]);
 
   if (!podeAcessar(perfil, location.pathname)) {
     return <Navigate to="/" replace />;

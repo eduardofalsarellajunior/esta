@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { obterTema, aplicarTema } from '../lib/tema.js';
+import { imprimePedidosDaCabine, definirImprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
 import { ehFornecedor } from '../lib/acesso.js';
 
 // Dados do estacionamento (nome/endereço/CNPJ/fiscal). Só o fornecedor altera:
@@ -12,11 +13,17 @@ export default function Configuracoes({ perfil }) {
   const [erro, setErro] = useState('');
   const [salvo, setSalvo] = useState(false);
   const [tema, setTema] = useState(obterTema());
+  const [imprimeCabine, setImprimeCabine] = useState(imprimePedidosDaCabine());
   const podeEditar = ehFornecedor(perfil);
 
   function mudarTema(novoTema) {
     aplicarTema(novoTema);
     setTema(novoTema);
+  }
+
+  function mudarImprimeCabine(ligado) {
+    definirImprimePedidosDaCabine(ligado);
+    setImprimeCabine(ligado);
   }
 
   async function carregar() {
@@ -69,13 +76,23 @@ export default function Configuracoes({ perfil }) {
       <div className="card">
         <h2>Aparência</h2>
         <p className="suave">Preferência pessoal deste navegador — não afeta outros usuários/dispositivos.</p>
-        <div className="campo" style={{ maxWidth: 220 }}>
+        <div className="campo" style={{ maxWidth: 220, marginBottom: 14 }}>
           <label>Tema</label>
           <select value={tema} onChange={(e) => mudarTema(e.target.value)}>
             <option value="escuro">Escuro</option>
             <option value="claro">Claro</option>
           </select>
         </div>
+        <label className="campo-check">
+          <input type="checkbox" checked={imprimeCabine} onChange={(e) => mudarImprimeCabine(e.target.checked)} />
+          Este navegador imprime os pedidos vindos do celular
+        </label>
+        <p className="suave" style={{ fontSize: 11, marginTop: 4 }}>
+          Ligue só no navegador fixo da cabine (o mesmo do <code>pdv-cabine.bat</code>, ver{' '}
+          <code>docs/CABINE.md</code>) — ele passa a checar a cada poucos segundos se algum
+          celular pediu pra imprimir e manda pra impressora daqui, sem passar pelo diálogo do
+          sistema. Recarregue a página depois de mudar esta opção.
+        </p>
       </div>
 
       <div className="card">

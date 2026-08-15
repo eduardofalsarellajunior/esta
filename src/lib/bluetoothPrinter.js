@@ -1,0 +1,52 @@
+// Impressão via Web Bluetooth (BLE) direto do celular, sem diálogo de
+// impressão do sistema. Só funciona em navegadores com Web Bluetooth (Chrome
+// Android/desktop com adaptador Bluetooth) — iPhone/Safari bloqueia por
+// completo, é restrição da Apple, não dá pra contornar. Impressora Bluetooth
+// CLÁSSICA (SPP) também não aparece aqui — a Web Bluetooth só enxerga BLE.
+//
+// UUID de serviço/característica: usa o padrão das impressoras clone baratas
+// (o mesmo chip/firmware genérico "ESC/POS BLE" vendido sob várias marcas).
+// Sem a impressora real em mãos ainda pra confirmar — se a que o Eduardo
+// comprar usar outro UUID, é só trocar as duas constantes abaixo.
+const SERVICO_UUID = '000018f0-0000-1000-8000-00805f9b34fb';
+const CARACTERISTICA_UUID = '00002af1-0000-1000-8000-00805f9b34fb';
+
+const TAMANHO_BLOCO = 180; // GATT não aceita escritas grandes de uma vez
+const INTERVALO_ENTRE_BLOCOS_MS = 20;
+
+function aguardar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Abre o diálogo de pareamento do navegador e conecta na impressora
+ * escolhida. Precisa ser chamado a partir de um clique (gesto do usuário) —
+ * o navegador bloqueia se for chamado sozinho, sem interação de quem usa.
+ */
+export async function conectarImpressoraBluetooth() {
+  const dispositivo = await navigator.bluetooth.requestDevice({
+    acceptAllDevices: true,
+    optionalServices: [SERVICO_UUID],
+  });
+  const servidor = await dispositivo.gatt.connect();
+  const servico = await servidor.getPrimaryService(SERVICO_UUID);
+  const caracteristica = await servico.getCharacteristic(CARACTERISTICA_UUID);
+  // Nem toda impressora aceita "sem resposta" (mais rápido) — usa o que a
+  // característica anunciar suportar.
+  const semResposta = caracteristica.properties?.writeWithoutResponse;
+
+  return {
+    nome: dispositivo.name || 'Impressora Bluetooth',
+    async enviar(bytes) {
+      for (let i = 0; i < bytes.length; i += TAMANHO_BLOCO) {
+        const bloco = bytes.slice(i, i + TAMANHO_BLOCO);
+        if (semResposta) await caracteristica.writeValueWithoutResponse(bloco);
+        else await caracteristica.writeValue(bloco);
+        await aguardar(INTERVALO_ENTRE_BLOCOS_MS);
+      }
+    },
+    desconectar() {
+      dispositivo.gatt.disconnect();
+    },
+  };
+}

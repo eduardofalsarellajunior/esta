@@ -10,7 +10,9 @@
 // (unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/CP850.TXT).
 
 // Bytes 0x80–0xFF -> código Unicode (índice 0 = byte 0x80). 0x00–0x7F é igual ao ASCII.
-const CP850_ALTA: number[] = [
+// Exportada porque src/lib/escpos.js reaproveita (invertida) pra codificar
+// texto pra impressoras térmicas na mesma codepage do sistema legado.
+export const CP850_ALTA: number[] = [
   0x00c7, 0x00fc, 0x00e9, 0x00e2, 0x00e4, 0x00e0, 0x00e5, 0x00e7,
   0x00ea, 0x00eb, 0x00e8, 0x00ef, 0x00ee, 0x00ec, 0x00c4, 0x00c5,
   0x00c9, 0x00e6, 0x00c6, 0x00f4, 0x00f6, 0x00f2, 0x00fb, 0x00f9,

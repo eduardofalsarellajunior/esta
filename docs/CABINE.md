@@ -46,3 +46,25 @@ Daí o perfil separado: sem ele, a flag no atalho normal do Chrome faria
 abre uma janela pequena com o HTML do comprovante, chama `print()` e fecha
 sozinha no `onafterprint`. Com kiosk-printing, o operador vê só um piscar de
 tela e o papel saindo.
+
+## Imprimir puxando do celular
+
+Celular não tem `--kiosk-printing` (é flag de linha de comando do Chrome
+desktop) — todo navegador mobile sempre abre o diálogo de impressão do
+sistema. Em vez de uma ponte nova, esta mesma janela da cabine também serve
+de "escuta": em **Configurações → Aparência**, marque **"Este navegador
+imprime os pedidos vindos do celular"** (só nesta máquina — é preferência de
+navegador, como o tema). A partir daí, o app checa a cada ~4s se algum
+celular pediu impressão (tabela `print_jobs`, ver
+[Layout.jsx](../src/componentes/Layout.jsx)) e chama o mesmo `imprimirTicket`
+de sempre — nenhum processo novo rodando na máquina.
+
+No celular, o botão **"Imprimir na cabine"** do comprovante manda o pedido
+(fire-and-forget: não há confirmação ao vivo de que o papel saiu — se a
+janela da cabine não estiver aberta com a flag ligada, o pedido fica
+pendente até alguém notar).
+
+Tem também **"Imprimir Bluetooth"**, pra uma impressora térmica portátil
+pareada direto no celular (Android/Chrome só — Web Bluetooth não existe no
+iPhone). Ver [src/lib/escpos.js](../src/lib/escpos.js) e
+[src/lib/bluetoothPrinter.js](../src/lib/bluetoothPrinter.js).

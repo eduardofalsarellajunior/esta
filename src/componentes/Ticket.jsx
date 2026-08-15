@@ -5,8 +5,12 @@
 // ticket vem com `modelo` (o texto com tokens) e `dados` (o mapa token→valor),
 // e é ele que manda no layout — nos três destinos: modal, impressão e
 // WhatsApp. Sem modelo, cai no layout fixo de `linhas`, como sempre foi.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { renderizarModelo, modeloParaTexto } from '../lib/modeloTicket.js';
+import { modeloParaEscPos } from '../lib/escpos.js';
+import { conectarImpressoraBluetooth } from '../lib/bluetoothPrinter.js';
+import { MODELOS_PADRAO } from '../lib/modelosPadrao.js';
+import { supabase } from '../lib/supabase.js';
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -93,8 +97,47 @@ export function linkWhatsApp(ticket, celular, filial) {
  *
  * Atalhos de teclado (F/W/I) porque na cabine o fluxo é rápido e quase sempre
  * termina em imprimir — sem precisar tirar a mão do teclado pra pegar o mouse.
+ *
+ * `perfil` (opcional): sem ele, "Imprimir na cabine" não aparece — só quem
+ * chama de dentro do app logado tem perfil pra saber a filial do pedido.
  */
-export function TicketModal({ ticket, filial, celular, onCelular, onFechar }) {
+export function TicketModal({ ticket, filial, perfil, celular, onCelular, onFechar }) {
+  const [impressoraBt, setImpressoraBt] = useState(null);
+  const [statusBt, setStatusBt] = useState('');
+  const [statusCabine, setStatusCabine] = useState('');
+
+  // Sem BLE em iPhone/Safari (Apple bloqueia por completo) e só faz sentido
+  // pra ticket que já tem o mapa de dados montado (ver comModelo() em
+  // Patio.jsx e ticketRecebimentoComModelo() em mensalidade.js).
+  const suportaBluetooth = typeof navigator !== 'undefined' && !!navigator.bluetooth && !!ticket.dados;
+
+  async function imprimirBluetooth() {
+    setStatusBt('conectando');
+    try {
+      let impressora = impressoraBt;
+      if (!impressora) {
+        impressora = await conectarImpressoraBluetooth();
+        setImpressoraBt(impressora);
+      }
+      const modelo = ticket.modelo || MODELOS_PADRAO[ticket.tipo];
+      if (!modelo) { setStatusBt('erro: sem modelo pra este tipo de ticket'); return; }
+      setStatusBt('imprimindo…');
+      await impressora.enviar(modeloParaEscPos(modelo, ticket.dados));
+      setStatusBt('impresso ✓');
+    } catch (e) {
+      setStatusBt(`erro: ${e.message}`);
+    }
+  }
+
+  async function imprimirNaCabine() {
+    setStatusCabine('enviando…');
+    const { error } = await supabase.from('print_jobs').insert({
+      filial_id: perfil.filial_id, criado_por: perfil.id,
+      ticket: { titulo: ticket.titulo, linhas: ticket.linhas, modelo: ticket.modelo, dados: ticket.dados },
+    });
+    setStatusCabine(error ? `erro: ${error.message}` : 'pedido enviado ✓');
+  }
+
   useEffect(() => {
     function aoTeclar(e) {
       // Digitando o celular (ou qualquer campo)? Atalho não vale — senão um
@@ -113,6 +156,12 @@ export function TicketModal({ ticket, filial, celular, onCelular, onFechar }) {
     document.addEventListener('keydown', aoTeclar);
     return () => document.removeEventListener('keydown', aoTeclar);
   }, [ticket, filial, celular, onFechar]);
+
+  // Desconecta a impressora Bluetooth ao fechar o modal — não faz sentido
+  // manter o rádio conectado depois que o comprovante já foi embora.
+  useEffect(() => {
+    return () => impressoraBt?.desconectar();
+  }, [impressoraBt]);
 
   return (
     <div className="modal-bg" onClick={onFechar}>
@@ -133,6 +182,17 @@ export function TicketModal({ ticket, filial, celular, onCelular, onFechar }) {
           <label>Celular para WhatsApp (opcional)</label>
           <input value={celular} onChange={(e) => onCelular(e.target.value)} placeholder="(19) 99999-9999" />
         </div>
+        {/* Sem diálogo do sistema: Bluetooth fala direto com a impressora (só
+            Android/Chrome — iPhone bloqueia Web Bluetooth); "na cabine" manda
+            o pedido pelo Supabase pro navegador fixo da cabine imprimir
+            (ver Layout.jsx e docs/CABINE.md). Os dois são fire-and-forget —
+            não há confirmação ao vivo de que o papel realmente saiu. */}
+        {(suportaBluetooth || perfil) && (
+          <p className="suave" style={{ fontSize: 12, marginTop: 8 }}>
+            {suportaBluetooth && statusBt && <>Bluetooth: {statusBt}. </>}
+            {perfil && statusCabine && <>Cabine: {statusCabine}.</>}
+          </p>
+        )}
         {/* A letra sublinhada é o atalho (ver o useEffect acima). */}
         <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
           <button className="btn-ghost" onClick={onFechar}><u>F</u>echar</button>
@@ -144,6 +204,16 @@ export function TicketModal({ ticket, filial, celular, onCelular, onFechar }) {
           {ticket.ticketRps && (
             <button className="btn-ghost" onClick={() => imprimirTicket(ticket.ticketRps, filial)}>
               Imprimir <u>R</u>PS
+            </button>
+          )}
+          {suportaBluetooth && (
+            <button className="btn-ghost" onClick={imprimirBluetooth} disabled={statusBt === 'conectando' || statusBt === 'imprimindo…'}>
+              Imprimir Bluetooth
+            </button>
+          )}
+          {perfil && (
+            <button className="btn-ghost" onClick={imprimirNaCabine} disabled={statusCabine === 'enviando…'}>
+              Imprimir na cabine
             </button>
           )}
           <button className="btn-primary" onClick={() => imprimirTicket(ticket, filial)}><u>I</u>mprimir</button>

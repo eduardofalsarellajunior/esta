@@ -137,12 +137,18 @@ export default function Patio({ perfil }) {
 
   /**
    * Aplica o layout que a filial cadastrou (tabela `modelos_ticket`) ao ticket.
-   * Sem modelo pro tipo, devolve o ticket como veio — o layout fixo de sempre.
+   * Sem modelo pro tipo, o layout na tela/impressão/WhatsApp continua sendo o
+   * fixo de sempre (`ticket.modelo` fica ausente) — mas `tipo`+`dados` são
+   * anexados de qualquer forma: é o que permite Imprimir Bluetooth/na cabine
+   * (que usam o modelo padrão de fábrica como último recurso, ver escpos.js).
    */
   function comModelo(tipo, ticket, dados) {
     const modelo = modelosTicket[tipo];
-    if (!modelo) return ticket;
-    return { ...ticket, modelo, dados: { ...dadosFilial(filial || {}), ...dados } };
+    return {
+      ...ticket, tipo,
+      ...(modelo ? { modelo } : {}),
+      dados: { ...dadosFilial(filial || {}), ...dados },
+    };
   }
 
   /**
@@ -1002,7 +1008,7 @@ export default function Patio({ perfil }) {
       )}
 
       {ticket && (
-        <TicketModal ticket={ticket} filial={filial} celular={celularTicket}
+        <TicketModal ticket={ticket} filial={filial} perfil={perfil} celular={celularTicket}
           onCelular={setCelularTicket} onFechar={() => { setTicket(null); focarPlaca(); }} />
       )}
 

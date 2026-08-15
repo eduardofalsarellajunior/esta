@@ -48,20 +48,24 @@ export function ticketRecebimento({ mensalista, dtPagamento, valor, proximo, for
  * Mesmo recibo, já com o layout que a filial cadastrou em Modelos de ticket
  * (tipo `mensalidade`). É async porque precisa buscar filial, veículos e o
  * modelo; qualquer problema aí só faz o recibo sair no layout fixo de sempre.
+ *
+ * `dados`+`tipo` sempre são anexados, mesmo sem modelo próprio cadastrado —
+ * é o que permite imprimir esse recibo por Bluetooth/ESC-POS (que usa o
+ * modelo padrão de fábrica como último recurso, ver src/lib/escpos.js).
  */
 export async function ticketRecebimentoComModelo(args) {
   const base = ticketRecebimento(args);
   try {
-    const modelos = await carregarModelosTicket();
-    if (!modelos.mensalidade) return base;
     const { mensalista, dtPagamento, valor, proximo, formaDescricao, operador, recibo } = args;
-    const [fl, vc] = await Promise.all([
+    const [modelos, fl, vc] = await Promise.all([
+      carregarModelosTicket(),
       supabase.from('filiais').select('*').eq('id', mensalista.filial_id).maybeSingle(),
       supabase.from('mensalista_veiculos').select('placa, modelo').eq('mensalista_id', mensalista.id),
     ]);
     return {
       ...base,
-      modelo: modelos.mensalidade,
+      tipo: 'mensalidade',
+      ...(modelos.mensalidade ? { modelo: modelos.mensalidade } : {}),
       dados: {
         ...dadosFilial(fl.data || {}),
         ...dadosMensalista({ mensalista, veiculos: vc.data || [] }),

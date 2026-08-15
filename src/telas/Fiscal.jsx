@@ -239,7 +239,7 @@ export default function Fiscal({ perfil }) {
       </div>
 
       {ticket && (
-        <TicketModal ticket={ticket} filial={filial} celular={celularTicket}
+        <TicketModal ticket={ticket} filial={filial} perfil={perfil} celular={celularTicket}
           onCelular={setCelularTicket} onFechar={() => setTicket(null)} />
       )}
 
