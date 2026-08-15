@@ -11,7 +11,7 @@ import { ehSupervisor } from '../lib/acesso.js';
 /** Colinha por tipo: só os tokens que fazem sentido naquele comprovante. */
 const TOKENS = {
   comuns: [
-    ['@ER@', 'Razão social'], ['@EF@', 'Nome fantasia'], ['@EE@', 'Endereço'],
+    ['@ER@', 'Nome do estacionamento'], ['@EF@', '(sem uso — sempre em branco)'], ['@EE@', 'Endereço'],
     ['@EC@', 'Cidade-UF'], ['@EG@', 'CNPJ'], ['@EI@', 'Inscrição municipal'],
     ['@US@', 'Operador'], ['@ARROBA@', 'Imprime um "@"'],
     ['@P1@…@P9@', 'N linhas em branco'],
@@ -56,7 +56,7 @@ function tokensDoTipo(tipo) {
 
 /** Dados de exemplo pra pré-visualização — nada real, só pro operador ver o formato. */
 const EXEMPLO = {
-  ER: 'ESTACIONAMENTO MODELO LTDA', EF: 'MATRIZ', EE: 'Rua General Osorio, 939',
+  ER: 'ESTACIONAMENTO MODELO', EF: '', EE: 'Rua General Osorio, 939',
   EC: 'Campinas-SP', EG: '00.000.000/0001-00', EI: '123456',
   'C#': 'A1B2C3D4', CC: 'ABC1D23', CV: 'FIESTA', TV: 'P', XBOX: '12',
   DE: '10/08/2026', HE: '10:43', DS: '10/08/2026', HS: '14:20', TH: '03:37',

@@ -8,11 +8,18 @@ import { MODELOS_PADRAO } from './modelosPadrao.js';
 // Token sem equivalente no esta hoje (@CODBARRA@, @CHANCELA@, @TAXA1-3@…)
 // simplesmente não entra no mapa e sai vazio na renderização.
 
-/** Dados do estabelecimento — os "fixos" do legado (analisa_fixo). */
+/**
+ * Dados do estabelecimento — os "fixos" do legado (analisa_fixo). @ER@ é o
+ * nome do estacionamento (nome fantasia; cai pra razão social se não tiver
+ * um definido) — a razão social "oficial" continua disponível em @RAZAORPS@,
+ * pro RPS/DPS. @EF@ fica sempre em branco: nenhum cliente usa nome fantasia
+ * separado do nome do estacionamento — mantido só pra não quebrar um .txt
+ * antigo que ainda tenha o token.
+ */
 export function dadosFilial(filial = {}) {
   return {
-    ER: filial.razao_social || filial.nome_fantasia || '',
-    EF: filial.nome_fantasia || '',
+    ER: filial.nome_fantasia || filial.razao_social || '',
+    EF: '',
     EE: [filial.endereco, filial.numero].filter(Boolean).join(', '),
     EC: [filial.cidade, filial.uf].filter(Boolean).join('-'),
     EG: filial.cnpj || '',
