@@ -634,9 +634,11 @@ export default function Patio({ perfil }) {
    * recebeu a senha do fornecedor por WhatsApp digita ela aqui, sem
    * precisar do fornecedor. O cálculo/comparação roda só no servidor (ver
    * api/cadastrar-senha-mes.js) — esta tela nunca sabe se está certa.
-   * O modal fica aberto entre um cadastro e outro (fila aceita até 6) —
-   * fechar ele mesmo depois da primeira senha era o motivo de só "entrar
-   * uma": cada cadastro exigia reabrir o menu ⋮ de novo.
+   * 6 campos fixos (um por posição da fila): as posições já cadastradas
+   * aparecem travadas (o valor em si não é mostrado — só a contagem, o
+   * endpoint nunca devolve as senhas guardadas), e "Cadastrar" manda de
+   * uma vez só os campos vazios que foram preenchidos — dá pra preencher
+   * só 1 ou os 6 de um cliente semestral.
    */
   async function chamarSenhaMes(body) {
     const { data: sessao } = await supabase.auth.getSession();
@@ -649,20 +651,26 @@ export default function Patio({ perfil }) {
   }
 
   function abrirModalSenhaMes() {
-    setModalSenhaMes({ senha: '', erro: '', ocupado: false, count: null });
+    setModalSenhaMes({ campos: ['', '', '', '', '', ''], erro: '', ocupado: false, count: null });
     chamarSenhaMes({ acao: 'contar' }).then(({ ok, dados }) => {
       if (ok) setModalSenhaMes((m) => (m ? { ...m, count: dados.count } : m));
     });
   }
 
   async function cadastrarSenhaMes() {
+    const pendentes = modalSenhaMes.campos.filter((c) => c.trim());
+    if (pendentes.length === 0) return;
     setModalSenhaMes((m) => ({ ...m, ocupado: true, erro: '' }));
-    const { ok, dados } = await chamarSenhaMes({ senha: modalSenhaMes.senha });
-    if (!ok || dados.erro) {
-      setModalSenhaMes((m) => ({ ...m, ocupado: false, erro: dados.erro || 'Não deu pra cadastrar.' }));
-      return;
+    let count = modalSenhaMes.count;
+    for (const senha of pendentes) {
+      const { ok, dados } = await chamarSenhaMes({ senha });
+      if (!ok || dados.erro) {
+        setModalSenhaMes((m) => ({ ...m, ocupado: false, erro: dados.erro || 'Não deu pra cadastrar.', count }));
+        return;
+      }
+      count = dados.count;
     }
-    setModalSenhaMes({ senha: '', erro: '', ocupado: false, count: dados.count });
+    setModalSenhaMes({ campos: ['', '', '', '', '', ''], erro: '', ocupado: false, count });
   }
 
   async function removerUltimaSenhaMes() {
@@ -1087,24 +1095,39 @@ export default function Patio({ perfil }) {
 
       {modalSenhaMes && (
         <div className="modal-bg" onClick={() => setModalSenhaMes(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(560px, 92vw)' }}>
             <h2>Cadastrar senha do mês</h2>
             <p className="suave">
-              Digite a senha do mês que você recebeu do fornecedor e clique em
-              Cadastrar — o campo limpa sozinho pra você continuar digitando
-              as próximas, sem precisar reabrir este menu. Cabem até 6 (um
-              cliente semestral pode pré-cadastrar as 6 de uma vez).
+              Digite a senha do mês que você recebeu do fornecedor. Preencha só
+              a 1ª pra um mês avulso, ou as 6 de uma vez pra um cliente
+              semestral — cada uma vale pra um mês, na ordem.
             </p>
             <p className="suave" style={{ fontWeight: 600 }}>
               {modalSenhaMes.count == null ? 'Carregando…' : `${modalSenhaMes.count} de 6 já cadastradas.`}
             </p>
-            <div className="campo">
-              <label>Senha</label>
-              <input className="mono" autoFocus value={modalSenhaMes.senha}
-                onChange={(e) => setModalSenhaMes({ ...modalSenhaMes, senha: e.target.value.toUpperCase() })}
-                onKeyDown={(e) => { if (e.key === 'Enter' && modalSenhaMes.senha && !modalSenhaMes.ocupado) cadastrarSenhaMes(); }}
-                disabled={modalSenhaMes.count >= 6}
-                maxLength={5} style={{ textTransform: 'uppercase', letterSpacing: 2 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, margin: '16px 0' }}>
+              {modalSenhaMes.campos.map((valor, i) => {
+                const jaCadastrada = modalSenhaMes.count != null && i < modalSenhaMes.count;
+                return (
+                  <div className="campo" key={i}>
+                    <label>{i + 1}ª</label>
+                    {jaCadastrada ? (
+                      <input className="mono" value="•••••" disabled style={{ letterSpacing: 2 }} />
+                    ) : (
+                      <input className="mono" autoFocus={i === (modalSenhaMes.count || 0)}
+                        value={valor}
+                        onChange={(e) => {
+                          const campos = [...modalSenhaMes.campos];
+                          campos[i] = e.target.value.toUpperCase();
+                          setModalSenhaMes({ ...modalSenhaMes, campos });
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !modalSenhaMes.ocupado) cadastrarSenhaMes(); }}
+                        disabled={modalSenhaMes.count == null}
+                        maxLength={5} style={{ textTransform: 'uppercase', letterSpacing: 2 }} />
+                    )}
+                  </div>
+                );
+              })}
             </div>
             {modalSenhaMes.erro && <p className="aviso">{modalSenhaMes.erro}</p>}
             <div className="linha-form" style={{ justifyContent: 'space-between', marginTop: 12 }}>
@@ -1112,8 +1135,10 @@ export default function Patio({ perfil }) {
                 Remover última
               </button>
               <div className="linha-form" style={{ gap: 8 }}>
-                <button className="btn-ghost" onClick={() => setModalSenhaMes(null)}>Concluído</button>
-                <button className="btn-primary" disabled={modalSenhaMes.ocupado || !modalSenhaMes.senha || modalSenhaMes.count >= 6} onClick={cadastrarSenhaMes}>
+                <button className="btn-ghost" onClick={() => setModalSenhaMes(null)}>Fechar</button>
+                <button className="btn-primary"
+                  disabled={modalSenhaMes.ocupado || !modalSenhaMes.campos.some((c) => c.trim())}
+                  onClick={cadastrarSenhaMes}>
                   {modalSenhaMes.ocupado ? '…' : 'Cadastrar'}
                 </button>
               </div>
