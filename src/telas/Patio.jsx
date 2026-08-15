@@ -55,6 +55,7 @@ export default function Patio({ perfil }) {
   const [servicos, setServicos] = useState([]);
   const [modalServicos, setModalServicos] = useState(null); // { mov, marcados: Set<servico_id> }
   const [movimentosComServico, setMovimentosComServico] = useState(new Set());
+  const [modalValorServico, setModalValorServico] = useState(null); // { servicoId, descricao, valor } — serviço "Pede valor" (ver alternarServico)
   const [modalExclusao, setModalExclusao] = useState(null); // { mov, motivo }
   const [modalDps, setModalDps] = useState(null); // { documento, nome }
   const [modalValor, setModalValor] = useState(null); // { valor } — alteração manual do valor da saída
@@ -444,10 +445,29 @@ export default function Patio({ perfil }) {
     setModalServicos({ mov, marcados: new Set((data || []).map((r) => r.servico_id)) });
   }
 
+  /**
+   * Serviço cuja tabela de preço tem faixa "Pede valor" (ver Precos.jsx):
+   * normalmente é assim que esse tipo de faixa é usado — preço variável por
+   * serviço (ex.: lavagem cujo preço depende do carro) — então pergunta o
+   * valor aqui, ao MARCAR o serviço, em vez de deixar pra saída como as
+   * faixas 'valor' da tabela do próprio veículo/convênio (essas continuam
+   * perguntando na saída — ver abrirValorObrigatorioSePreciso).
+   */
+  function servicoPedeValor(servico) {
+    return !!tabelas[servico?.tabela_tipo]?.faixas?.some((f) => f.tipoCobranca === 'valor');
+  }
+
   async function alternarServico(servicoId) {
     if (!modalServicos) return;
     const { mov, marcados } = modalServicos;
     const jaMarcado = marcados.has(servicoId);
+    if (!jaMarcado) {
+      const servico = servicos.find((s) => s.id === servicoId);
+      if (servicoPedeValor(servico)) {
+        setModalValorServico({ servicoId, descricao: servico.descricao, valor: '' });
+        return;
+      }
+    }
     const acao = jaMarcado
       ? supabase.from('movimento_servicos').delete().eq('movimento_id', mov.id).eq('servico_id', servicoId)
       : supabase.from('movimento_servicos').insert({ filial_id: perfil.filial_id, movimento_id: mov.id, servico_id: servicoId });
@@ -463,10 +483,26 @@ export default function Patio({ perfil }) {
     });
   }
 
+  async function confirmarValorServico() {
+    const valor = Number(modalValorServico.valor);
+    if (!(valor >= 0)) { setErro('Informe um valor válido.'); return; }
+    const { mov, marcados } = modalServicos;
+    const { error } = await supabase.from('movimento_servicos')
+      .insert({ filial_id: perfil.filial_id, movimento_id: mov.id, servico_id: modalValorServico.servicoId, valor });
+    if (error) { setErro(error.message); return; }
+    const novosMarcados = new Set(marcados);
+    novosMarcados.add(modalValorServico.servicoId);
+    setModalServicos({ mov, marcados: novosMarcados });
+    setMovimentosComServico((prev) => new Set(prev).add(mov.id));
+    setModalValorServico(null);
+  }
+
   async function buscarServicosDoMovimento(movimentoId) {
-    const { data } = await supabase.from('movimento_servicos').select('servico_id').eq('movimento_id', movimentoId);
-    const ids = new Set((data || []).map((r) => r.servico_id));
-    return servicos.filter((s) => ids.has(s.id));
+    const { data } = await supabase.from('movimento_servicos').select('servico_id, valor').eq('movimento_id', movimentoId);
+    const valorPorServico = new Map((data || []).map((r) => [r.servico_id, r.valor]));
+    return servicos
+      .filter((s) => valorPorServico.has(s.id))
+      .map((s) => ({ ...s, valorInformado: valorPorServico.get(s.id) }));
   }
 
   // Operador só exclui nos primeiros 5min da entrada; do gerente pra cima, sem limite.
@@ -528,11 +564,28 @@ export default function Patio({ perfil }) {
     setCelularTicket('');
   }
 
-  function calcularResultadoSaida(mov, convenioCodigo, servicosTipos) {
+  function calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados) {
     if (MENSALISTA.has(mov.tipo_mens)) {
       // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
       return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, mensalista: true, tempoDecorrido: 0 };
     }
+
+    // Serviços com valor já informado ao marcar (ver servicoPedeValor) somam
+    // direto, fora do motor — os demais entram na soma por tabela de sempre.
+    const comValor = (servicosSelecionados || []).filter((s) => s.valorInformado != null);
+    const semValor = (servicosSelecionados || []).filter((s) => s.valorInformado == null);
+    const somaServicosComValor = comValor.reduce((t, s) => t + Number(s.valorInformado), 0);
+    const servicosTipos = semValor.map((s) => s.tabela_tipo);
+    // Só serviço(s) com valor, nenhum por tabela: sem isso o motor cairia de
+    // volta na tabela do VEÍCULO (servicosTipos vazio = "nenhum serviço") e
+    // cobraria os dois juntos — mas a regra é sempre "em vez da tabela do
+    // veículo", nunca além dela (ver texto do modal de Serviços).
+    const soServicoComValor = comValor.length > 0 && semValor.length === 0;
+    const comSomaServicos = (resultado) => ({
+      ...resultado,
+      ...(soServicoComValor ? { valorProporcional: 0, valorConvenio: 0, manual: false, pedeValor: false } : {}),
+      valor: Math.round(((soServicoComValor ? 0 : resultado.valor) + somaServicosComValor) * 100) / 100,
+    });
 
     // Entrou fora do dia/turno contratado (ver detectar()): cobra avulso só
     // até o horário guardado em livre_a_partir — dali em diante já está
@@ -544,26 +597,27 @@ export default function Patio({ perfil }) {
     if (!convenioCodigo && mov.livre_a_partir != null && mov.dt_entrada === hojeISO() && agoraHHMM() > Number(mov.livre_a_partir)) {
       const parcial = calcularTarifa({
         tabelas, tipoVeic: mov.tipo_veic,
+        servicosTipos: servicosTipos.length ? servicosTipos : undefined,
         movimento: {
           dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada),
           dtSaida: dataDeISO(mov.dt_entrada), saida: Number(mov.livre_a_partir),
         },
       });
-      return {
+      return comSomaServicos({
         ...parcial,
         // Tempo mostrado ao operador é o real (quanto tempo o carro ficou),
         // mesmo cobrando só a parte fora do horário contratado.
         tempoDecorrido: horasDecorridas({ dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() }),
         restricaoAte: Number(mov.livre_a_partir),
-      };
+      });
     }
 
     const convenio = convenioCodigo ? mapConvenio(convenios[convenioCodigo]) : undefined;
-    return calcularTarifa({
+    return comSomaServicos(calcularTarifa({
       tabelas, tipoVeic: mov.tipo_veic, convenio,
-      servicosTipos: servicosTipos && servicosTipos.length ? servicosTipos : undefined,
+      servicosTipos: servicosTipos.length ? servicosTipos : undefined,
       movimento: { dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() },
-    });
+    }));
   }
 
   /**
@@ -581,11 +635,10 @@ export default function Patio({ perfil }) {
   async function prepararSaida(mov) {
     try {
       const servicosSelecionados = await buscarServicosDoMovimento(mov.id);
-      const servicosTipos = servicosSelecionados.map((s) => s.tabela_tipo);
       const convenioCodigo = mov.convenio_codigo || '';
-      const resultado = calcularResultadoSaida(mov, convenioCodigo, servicosTipos);
+      const resultado = calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados);
       const formaPadrao = formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
-      setSaindo({ mov, convenioCodigo, servicosTipos, servicosSelecionados, resultado, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
+      setSaindo({ mov, convenioCodigo, servicosSelecionados, resultado, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
       abrirValorObrigatorioSePreciso(resultado);
     } catch (e) { setErro(e.message); }
   }
@@ -593,7 +646,7 @@ export default function Patio({ perfil }) {
   function mudarConvenioSaida(codigo) {
     if (!saindo) return;
     try {
-      const resultado = calcularResultadoSaida(saindo.mov, codigo, saindo.servicosTipos);
+      const resultado = calcularResultadoSaida(saindo.mov, codigo, saindo.servicosSelecionados);
       const formaAtual = saindo.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
       setSaindo({ ...saindo, convenioCodigo: codigo, resultado, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
       abrirValorObrigatorioSePreciso(resultado);
@@ -1030,10 +1083,30 @@ export default function Patio({ perfil }) {
                 <input type="checkbox" checked={modalServicos.marcados.has(s.id)}
                   onChange={() => alternarServico(s.id)} />
                 {s.codigo} · {s.descricao}
+                {servicoPedeValor(s) && <span className="suave" style={{ fontSize: 11 }}> (pede valor ao marcar)</span>}
               </label>
             ))}
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-primary" onClick={() => setModalServicos(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalValorServico && (
+        <div className="modal-bg" onClick={() => setModalValorServico(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Valor do serviço — {modalValorServico.descricao}</h2>
+            <p className="suave">Esse serviço não tem valor configurado — digite quanto cobrar.</p>
+            <div className="campo">
+              <label>Valor</label>
+              <input type="number" step="0.01" min="0" autoFocus value={modalValorServico.valor}
+                onChange={(e) => setModalValorServico({ ...modalValorServico, valor: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmarValorServico(); }} />
+            </div>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setModalValorServico(null)}>Cancelar</button>
+              <button className="btn-primary" onClick={confirmarValorServico}>Marcar serviço</button>
             </div>
           </div>
         </div>
@@ -1215,12 +1288,25 @@ export default function Patio({ perfil }) {
                 )}
               </>
             )}
-            {saindo.servicosSelecionados?.length > 0 && (
-              <p className="suave">
-                Cobrando por serviço: {saindo.servicosSelecionados.map((s) => s.descricao).join(', ')}
-                {' '}(em vez da tabela do veículo)
-              </p>
-            )}
+            {saindo.servicosSelecionados?.length > 0 && (() => {
+              const comValor = saindo.servicosSelecionados.filter((s) => s.valorInformado != null);
+              const semValor = saindo.servicosSelecionados.filter((s) => s.valorInformado == null);
+              return (
+                <>
+                  {semValor.length > 0 && (
+                    <p className="suave">
+                      Cobrando por serviço: {semValor.map((s) => s.descricao).join(', ')}
+                      {' '}(em vez da tabela do veículo)
+                    </p>
+                  )}
+                  {comValor.map((s) => (
+                    <p className="suave" key={s.id}>
+                      + {s.descricao}: {fmtBRL(Number(s.valorInformado))} (valor informado ao marcar o serviço)
+                    </p>
+                  ))}
+                </>
+              );
+            })()}
             <div className="grande">{fmtBRL(saindo.resultado.valor)}</div>
             {saindo.valorCalculado != null && saindo.valorCalculado !== saindo.resultado.valor && (
               <p className="suave" style={{ textAlign: 'center' }}>
@@ -1348,7 +1434,10 @@ function rotuloTipo(t) {
 
 /** Tabela que o motor usou: a do convênio (Tabela alt.), se houver, ou a da entrada. */
 function tabelaDaSaida(saindo, convenios) {
-  if (saindo.servicosSelecionados?.length) return saindo.servicosSelecionados.map((s) => s.tabela_tipo).join('+');
+  // Serviço com valor já informado ao marcar não passa pelo motor (ver
+  // calcularResultadoSaida) — só entram aqui os que ainda dependem da tabela.
+  const porTabela = saindo.servicosSelecionados?.filter((s) => s.valorInformado == null) || [];
+  if (porTabela.length) return porTabela.map((s) => s.tabela_tipo).join('+');
   const alt = saindo.convenioCodigo ? convenios[saindo.convenioCodigo]?.tab_conv : null;
   return alt || saindo.mov.tipo_veic;
 }
