@@ -16,6 +16,7 @@ chrome.exe --app=<url> --kiosk-printing --user-data-dir=%LOCALAPPDATA%\esta-pdv
 | `--app=` | Janela de aplicativo: sem barra de endereço, sem abas. |
 | `--kiosk-printing` | `window.print()` vai direto pra impressora padrão, sem diálogo. |
 | `--user-data-dir=` | Perfil separado — é o que confina as duas flags acima a esta janela. |
+| `--disable-popup-blocking` | Sem isso, os pedidos de impressão vindos do celular (que chegam por uma verificação em segundo plano, sem clique) ficam bloqueados pelo Chrome — pop-up sem gesto do usuário é barrado por padrão, mesmo neste perfil. |
 
 Rodar sem argumento abre a produção; passando uma URL (`pdv-cabine.bat
 http://localhost:5174`) dá pra testar o mesmo comportamento no dev.
@@ -32,13 +33,21 @@ Daí o perfil separado: sem ele, a flag no atalho normal do Chrome faria
 ## Checklist da máquina
 
 1. A impressora do ticket precisa estar como **padrão do Windows** — no modo
-   kiosk não há escolha de impressora.
+   kiosk não há escolha de impressora. Em *Configurações → Bluetooth e
+   dispositivos → Impressoras e scanners*, desligue **"Permitir que o Windows
+   gerencie minha impressora padrão"** — com isso ligado, o Windows troca a
+   padrão sozinho pra qualquer impressora usada por outro app, sem avisar
+   (foi exatamente o que aconteceu numa filial: o ticket começou a sair numa
+   HP LaserJet do escritório em vez da térmica).
 2. Faça o login do operador uma vez na janela do PDV; o perfil guarda a sessão.
 3. Se o ticket sair com margens/cabeçalho do navegador, ajuste em
    *Configurações de impressão* daquele perfil (o kiosk usa as últimas
    preferências salvas dali).
 4. Colocar o `.bat` na pasta de inicialização (`shell:startup`) deixa o PDV
    subindo sozinho quando a máquina liga.
+5. Se a janela do PDV já estava aberta quando o `.bat` foi atualizado (ex.:
+   pra ganhar o `--disable-popup-blocking`), feche e abra de novo — flag de
+   linha de comando só vale a partir da próxima vez que o Chrome sobe.
 
 ## Como o app imprime
 

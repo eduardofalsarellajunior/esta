@@ -19,7 +19,17 @@ rem    fechou, acabou, e o Chrome do dia a dia continua pedindo o dialogo de
 rem    impressao normalmente.
 rem
 rem  IMPORTANTE: a impressora do ticket tem que estar como PADRAO do Windows.
-rem  No modo kiosk nao ha escolha de impressora -- vai sempre pra padrao.
+rem  No modo kiosk nao ha escolha de impressora -- vai sempre pra padrao. E
+rem  desligue "Permitir que o Windows gerencie minha impressora padrao" (em
+rem  Configuracoes > Impressoras e scanners), senao ele troca a padrao sozinho
+rem  pra qualquer impressora usada por outro app.
+rem
+rem  Por que --disable-popup-blocking:
+rem  imprimirTicket() abre uma janela nova (window.open) pra imprimir. Isso e
+rem  permitido quando vem de um clique, mas os pedidos vindos do celular (ver
+rem  Layout.jsx) chegam por uma verificacao periodica em segundo plano, sem
+rem  clique nenhum -- e o Chrome bloqueia pop-up sem gesto do usuario por
+rem  padrao. A flag libera isso soh neste perfil dedicado.
 rem ============================================================================
 
 set "URL=%~1"
@@ -50,6 +60,6 @@ if not defined CHROME (
   exit /b 1
 )
 
-start "" "%CHROME%" --app=%URL% --kiosk-printing --user-data-dir="%PERFIL%" --no-first-run --no-default-browser-check
+start "" "%CHROME%" --app=%URL% --kiosk-printing --disable-popup-blocking --user-data-dir="%PERFIL%" --no-first-run --no-default-browser-check
 
 endlocal
