@@ -1,7 +1,9 @@
-// Vercel Function (Node.js) — cadastra (ou desfaz) uma senha na fila de até
-// 6 "senhas do mês" da filial (ver supabase/migrations/0026_senha_mes.sql).
+// Vercel Function (Node.js) — cadastra, remove ou conta a fila de até 6
+// "senhas do mês" da filial (ver supabase/migrations/0026_senha_mes.sql).
 // Qualquer usuário ativo da filial pode usar — quem recebe a senha do
 // Eduardo por WhatsApp digita ela mesma aqui, sem precisar do fornecedor.
+// `{ acao: 'contar' }` devolve quantas já tem na fila; `{ acao: 'remover_ultima' }`
+// desfaz a mais recente (typo); sem `acao`, `{ senha }` cadastra mais uma.
 //
 // Nunca confirma se a senha cadastrada "bate" com o esperado — isso
 // vazaria informação pra quem não deveria ter (ver api/conferir-senha-mes.js
@@ -40,6 +42,13 @@ export default async function handler(req, res) {
 
   const { acao } = req.body || {};
 
+  if (acao === 'contar') {
+    const { count } = await admin.from('senhas_mes_fila')
+      .select('id', { count: 'exact', head: true }).eq('filial_id', filialId);
+    res.status(200).json({ count: count || 0 });
+    return;
+  }
+
   if (acao === 'remover_ultima') {
     const { data: ultima } = await admin.from('senhas_mes_fila')
       .select('id').eq('filial_id', filialId).order('criado_em', { ascending: false }).limit(1).maybeSingle();
@@ -63,5 +72,5 @@ export default async function handler(req, res) {
   }
 
   await admin.from('senhas_mes_fila').insert({ filial_id: filialId, senha });
-  res.status(200).json({ ok: true });
+  res.status(200).json({ ok: true, count: (count || 0) + 1 });
 }
