@@ -154,9 +154,13 @@ export function TicketModal({ ticket, filial, perfil, celular, onCelular, onFech
       if (e.ctrlKey || e.altKey || e.metaKey) return;
 
       const tecla = e.key.toLowerCase();
+      // Imprimir e WhatsApp fecham o ticket sozinhos — na cabine o próximo
+      // carro já está esperando, não faz sentido voltar só pra clicar Fechar.
+      // RPS/Bluetooth/cabine continuam abertos: costumam ser usados JUNTO com
+      // o Imprimir principal, não no lugar dele.
       if (tecla === 'f' || tecla === 'escape') { e.preventDefault(); onFechar(); }
-      else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); }
-      else if (tecla === 'i') { e.preventDefault(); imprimirTicket(ticket, filial); }
+      else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); onFechar(); }
+      else if (tecla === 'i') { e.preventDefault(); imprimirTicket(ticket, filial); onFechar(); }
       else if (tecla === 'r' && ticket.ticketRps) { e.preventDefault(); imprimirTicket(ticket.ticketRps, filial); }
     }
     document.addEventListener('keydown', aoTeclar);
@@ -202,7 +206,10 @@ export function TicketModal({ ticket, filial, perfil, celular, onCelular, onFech
         {/* A letra sublinhada é o atalho (ver o useEffect acima). */}
         <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
           <button className="btn-ghost" onClick={onFechar}><u>F</u>echar</button>
-          <a className="btn-ghost" href={linkWhatsApp(ticket, celular, filial)} target="_blank" rel="noopener noreferrer">
+          {/* Não previne o clique nativo do link — só encadeia o fechamento
+              junto (a nova aba do WhatsApp abre independente do modal). */}
+          <a className="btn-ghost" href={linkWhatsApp(ticket, celular, filial)} target="_blank" rel="noopener noreferrer"
+            onClick={onFechar}>
             Enviar por <u>W</u>hatsApp
           </a>
           {/* Nota fiscal gerada junto com este comprovante: imprime na sequência,
@@ -222,7 +229,7 @@ export function TicketModal({ ticket, filial, perfil, celular, onCelular, onFech
               Imprimir na cabine
             </button>
           )}
-          <button className="btn-primary" onClick={() => imprimirTicket(ticket, filial)}><u>I</u>mprimir</button>
+          <button className="btn-primary" onClick={() => { imprimirTicket(ticket, filial); onFechar(); }}><u>I</u>mprimir</button>
         </div>
       </div>
     </div>
