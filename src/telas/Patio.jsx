@@ -565,6 +565,18 @@ export default function Patio({ perfil }) {
     });
   }
 
+  /**
+   * Faixa "Pede valor" (ver Precos.jsx): sem número configurado, o motor
+   * devolve `pedeValor: true` e o operador precisa informar quanto cobrar
+   * antes de conseguir confirmar a saída — abre o mesmo modal do "Alterar
+   * valor" do menu ⋮, só que obrigatório (vazio, não pré-preenchido, e sem
+   * marcar `valorCalculado`/o "*" — não houve valor calculado pra alterar,
+   * é assim que essa faixa sempre cobra).
+   */
+  function abrirValorObrigatorioSePreciso(resultado) {
+    if (resultado.pedeValor) setModalValor({ valor: '', obrigatorio: true });
+  }
+
   async function prepararSaida(mov) {
     try {
       const servicosSelecionados = await buscarServicosDoMovimento(mov.id);
@@ -573,6 +585,7 @@ export default function Patio({ perfil }) {
       const resultado = calcularResultadoSaida(mov, convenioCodigo, servicosTipos);
       const formaPadrao = formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
       setSaindo({ mov, convenioCodigo, servicosTipos, servicosSelecionados, resultado, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
+      abrirValorObrigatorioSePreciso(resultado);
     } catch (e) { setErro(e.message); }
   }
 
@@ -582,6 +595,7 @@ export default function Patio({ perfil }) {
       const resultado = calcularResultadoSaida(saindo.mov, codigo, saindo.servicosTipos);
       const formaAtual = saindo.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
       setSaindo({ ...saindo, convenioCodigo: codigo, resultado, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
+      abrirValorObrigatorioSePreciso(resultado);
     } catch (e) { setErro(e.message); }
   }
 
@@ -590,22 +604,25 @@ export default function Patio({ perfil }) {
   }
 
   function abrirModalValor() {
-    setModalValor({ valor: String(saindo.resultado.valor) });
+    setModalValor({ valor: String(saindo.resultado.valor), obrigatorio: false });
   }
 
   /**
-   * Sobrescreve o valor calculado pelo motor (cortesia, negociação, erro de
-   * tabela...). Guarda o valor original em `valorCalculado` na primeira
-   * alteração — se alterar de novo, o original continua sendo o do motor, não
-   * o da alteração anterior. O pagamento acompanha o valor novo.
+   * Confirma o valor digitado no modal — serve tanto pro "Alterar valor"
+   * opcional do ⋮ quanto pro obrigatório da faixa "Pede valor"
+   * (`modalValor.obrigatorio` distingue os dois): o opcional guarda o valor
+   * original em `valorCalculado` (pra marcar "*" nas listagens; se alterar de
+   * novo, o original continua sendo o do motor, não o da alteração anterior);
+   * o obrigatório não — não houve valor calculado, é assim que a faixa cobra.
+   * Os dois zeram `pedeValor` e o pagamento acompanha o valor novo.
    */
   function confirmarAlteracaoValor() {
     const novo = Number(modalValor.valor);
     if (!(novo >= 0)) { setErro('Informe um valor válido.'); return; }
     setSaindo((s) => ({
       ...s,
-      valorCalculado: s.valorCalculado ?? s.resultado.valor,
-      resultado: { ...s.resultado, valor: novo },
+      ...(modalValor.obrigatorio ? {} : { valorCalculado: s.valorCalculado ?? s.resultado.valor }),
+      resultado: { ...s.resultado, valor: novo, pedeValor: false },
       pagamentos: [{ forma: s.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D', valor: novo }],
     }));
     setModalValor(null);
@@ -1112,9 +1129,17 @@ export default function Patio({ perfil }) {
             )}
 
             {saindo.resultado.manual && <p className="aviso">Tempo fora das faixas — confira o valor.</p>}
+            {saindo.resultado.pedeValor && (
+              <p className="aviso">
+                Esta faixa pede o valor a cobrar —{' '}
+                <button type="button" className="btn-ghost" onClick={abrirModalValor} style={{ padding: '2px 8px' }}>
+                  informar valor
+                </button>
+              </p>
+            )}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={() => setSaindo(null)}>Cancelar</button>
-              <button className="btn-primary" onClick={() => confirmarSaida()}>Confirmar saída</button>
+              <button className="btn-primary" disabled={saindo.resultado.pedeValor} onClick={() => confirmarSaida()}>Confirmar saída</button>
             </div>
           </div>
         </div>
@@ -1123,16 +1148,18 @@ export default function Patio({ perfil }) {
       {modalValor && (
         <div className="modal-bg" onClick={() => setModalValor(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Alterar valor — <span className="placa mono">{saindo?.mov.placa}</span></h2>
+            <h2>{modalValor.obrigatorio ? 'Valor a cobrar' : 'Alterar valor'} — <span className="placa mono">{saindo?.mov.placa}</span></h2>
             <p className="suave">
-              O cálculo deu {fmtBRL(saindo?.resultado.valor || 0)}
-              {saindo?.valorCalculado != null && ` (original: ${fmtBRL(saindo.valorCalculado)})`}.
-              O valor original fica registrado, e a saída aparece marcada com * nas listagens.
+              {modalValor.obrigatorio
+                ? 'Esta faixa da tabela de preço não tem valor configurado — digite quanto cobrar.'
+                : <>O cálculo deu {fmtBRL(saindo?.resultado.valor || 0)}
+                    {saindo?.valorCalculado != null && ` (original: ${fmtBRL(saindo.valorCalculado)})`}.
+                    O valor original fica registrado, e a saída aparece marcada com * nas listagens.</>}
             </p>
             <div className="campo">
               <label>Valor a cobrar</label>
               <input type="number" step="0.01" min="0" autoFocus value={modalValor.valor}
-                onChange={(e) => setModalValor({ valor: e.target.value })} />
+                onChange={(e) => setModalValor({ ...modalValor, valor: e.target.value })} />
             </div>
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setModalValor(null)}>Cancelar</button>

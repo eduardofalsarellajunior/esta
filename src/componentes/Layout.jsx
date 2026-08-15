@@ -33,6 +33,12 @@ const GRUPOS = [
   ]},
 ];
 
+/** Número do cliente (Configurações → Dados do estacionamento) antes do nome. */
+function rotuloFilial(f) {
+  const nome = f?.nome_fantasia || f?.razao_social || '';
+  return f?.numero_cliente ? `${f.numero_cliente} · ${nome}` : nome;
+}
+
 export default function Layout({ perfil }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [nomeFilial, setNomeFilial] = useState('');
@@ -43,16 +49,16 @@ export default function Layout({ perfil }) {
     // Fornecedor enxerga todas as filiais (é o que alimenta o seletor); os
     // demais enxergam só a própria, então o maybeSingle continua valendo.
     if (ehFornecedor(perfil)) {
-      supabase.from('filiais').select('id, nome_fantasia, razao_social').order('razao_social')
+      supabase.from('filiais').select('id, nome_fantasia, razao_social, numero_cliente').order('razao_social')
         .then(({ data }) => {
           setFiliais(data || []);
           const atual = (data || []).find((f) => f.id === perfil.filial_ativa);
-          setNomeFilial(atual?.nome_fantasia || atual?.razao_social || '');
+          setNomeFilial(atual ? rotuloFilial(atual) : '');
         });
       return;
     }
-    supabase.from('filiais').select('nome_fantasia').maybeSingle()
-      .then(({ data }) => setNomeFilial(data?.nome_fantasia || ''));
+    supabase.from('filiais').select('nome_fantasia, numero_cliente').maybeSingle()
+      .then(({ data }) => setNomeFilial(data ? rotuloFilial(data) : ''));
   }, [perfil]);
 
   /**
@@ -133,7 +139,7 @@ export default function Layout({ perfil }) {
             <select value={perfil.filial_ativa || ''} style={{ padding: '2px 8px', fontSize: 'inherit' }}
               onChange={(e) => trocarFilialAtiva(perfil.id, e.target.value)}>
               {filiais.map((f) => (
-                <option key={f.id} value={f.id}>{f.nome_fantasia || f.razao_social}</option>
+                <option key={f.id} value={f.id}>{rotuloFilial(f)}</option>
               ))}
             </select>
           </div>

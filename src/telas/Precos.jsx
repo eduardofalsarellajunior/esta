@@ -130,7 +130,12 @@ function Faixas({ perfil, tabela }) {
     const ordem = (faixas.at(-1)?.ordem || 0) + 1;
     await supabase.from('tabela_preco_faixas').insert({
       filial_id: perfil.filial_id, tabela_preco_id: tabela.id, ordem,
-      ate: Number(nova.ate), valor_hora: Number(nova.valor_hora), valor_convenio: Number(nova.valor_convenio || 0),
+      ate: Number(nova.ate),
+      // "Pede valor" não tem número configurado — o motor ignora valor_hora
+      // pra esse tipo (ver packages/tarifacao/README.md), manda 0 só porque
+      // a coluna é NOT NULL.
+      valor_hora: nova.tipo_cobranca === 'valor' ? 0 : Number(nova.valor_hora),
+      valor_convenio: Number(nova.valor_convenio || 0),
       tipo_cobranca: nova.tipo_cobranca,
       // Só importa em "por período" — a coluna no banco tem default 1h de qualquer forma.
       periodo: nova.tipo_cobranca === 'hora' ? Number(nova.periodo || 1) : 1,
@@ -145,7 +150,7 @@ function Faixas({ perfil, tabela }) {
     setErro('');
     const { error } = await supabase.from('tabela_preco_faixas').update({
       ate: Number(emEdicao.ate),
-      valor_hora: Number(emEdicao.valor_hora),
+      valor_hora: emEdicao.tipo_cobranca === 'valor' ? 0 : Number(emEdicao.valor_hora),
       valor_convenio: Number(emEdicao.valor_convenio || 0),
       tipo_cobranca: emEdicao.tipo_cobranca,
       periodo: emEdicao.tipo_cobranca === 'hora' ? Number(emEdicao.periodo || 1) : 1,
@@ -161,7 +166,8 @@ function Faixas({ perfil, tabela }) {
       <p className="suave">
         "Fixo": valor cheio da faixa. "Por período": <code>valor_hora</code> vira taxa por período
         (o Período abaixo — 0.30 = 30min, 1 = 1h, padrão, 24 = 24h), cobrada a partir do teto da
-        faixa anterior (fração de período arredonda pra cima).
+        faixa anterior (fração de período arredonda pra cima). "Pede valor": sem número
+        configurado — a saída pergunta ao operador quanto cobrar e usa como se fosse fixo.
       </p>
       {erro && <div className="aviso">{erro}</div>}
       <table>
@@ -178,6 +184,7 @@ function Faixas({ perfil, tabela }) {
                   onChange={(e) => setEmEdicao({ ...emEdicao, tipo_cobranca: e.target.value })}>
                   <option value="fixo">Fixo</option>
                   <option value="hora">Por período</option>
+                  <option value="valor">Pede valor</option>
                 </select>
               </td>
               <td>
@@ -187,8 +194,12 @@ function Faixas({ perfil, tabela }) {
                     onChange={(e) => setEmEdicao({ ...emEdicao, periodo: e.target.value })} />
                 )}
               </td>
-              <td><input type="number" step="0.01" style={{ width: 90 }} value={emEdicao.valor_hora} required
-                onChange={(e) => setEmEdicao({ ...emEdicao, valor_hora: e.target.value })} /></td>
+              <td>
+                {emEdicao.tipo_cobranca !== 'valor' && (
+                  <input type="number" step="0.01" style={{ width: 90 }} value={emEdicao.valor_hora} required
+                    onChange={(e) => setEmEdicao({ ...emEdicao, valor_hora: e.target.value })} />
+                )}
+              </td>
               <td><input type="number" step="0.01" style={{ width: 90 }} value={emEdicao.valor_convenio}
                 onChange={(e) => setEmEdicao({ ...emEdicao, valor_convenio: e.target.value })} /></td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -199,9 +210,12 @@ function Faixas({ perfil, tabela }) {
           ) : (
             <tr key={f.id}>
               <td>{f.ordem}</td><td className="mono">{fmtHora(Number(f.ate))}</td>
-              <td>{f.tipo_cobranca === 'hora' ? 'Por período' : 'Fixo'}</td>
+              <td>{f.tipo_cobranca === 'hora' ? 'Por período' : f.tipo_cobranca === 'valor' ? 'Pede valor' : 'Fixo'}</td>
               <td className="mono">{f.tipo_cobranca === 'hora' ? fmtHora(Number(f.periodo ?? 1)) : '—'}</td>
-              <td>{fmtBRL(Number(f.valor_hora))}{f.tipo_cobranca === 'hora' ? ` / ${fmtHora(Number(f.periodo ?? 1))}` : ''}</td>
+              <td>
+                {f.tipo_cobranca === 'valor' ? '—' : fmtBRL(Number(f.valor_hora))}
+                {f.tipo_cobranca === 'hora' ? ` / ${fmtHora(Number(f.periodo ?? 1))}` : ''}
+              </td>
               <td>{fmtBRL(Number(f.valor_convenio))}</td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                 <button className="btn-ghost" disabled={!!emEdicao} onClick={() => setEmEdicao({
@@ -222,6 +236,7 @@ function Faixas({ perfil, tabela }) {
           <select value={nova.tipo_cobranca} onChange={(e) => setNova({ ...nova, tipo_cobranca: e.target.value, periodo: nova.periodo || PERIODO_PADRAO })}>
             <option value="fixo">Fixo</option>
             <option value="hora">Por período</option>
+            <option value="valor">Pede valor</option>
           </select>
         </div>
         {nova.tipo_cobranca === 'hora' && (
@@ -233,7 +248,9 @@ function Faixas({ perfil, tabela }) {
             <span className="suave" style={{ fontSize: 11 }}>0.30=30min · 1=1h · 24=24h</span>
           </div>
         )}
-        <div className="campo"><label>Valor</label><input type="number" step="0.01" value={nova.valor_hora} onChange={(e) => setNova({ ...nova, valor_hora: e.target.value })} required /></div>
+        {nova.tipo_cobranca !== 'valor' && (
+          <div className="campo"><label>Valor</label><input type="number" step="0.01" value={nova.valor_hora} onChange={(e) => setNova({ ...nova, valor_hora: e.target.value })} required /></div>
+        )}
         <div className="campo"><label>Valor convênio</label><input type="number" step="0.01" value={nova.valor_convenio} onChange={(e) => setNova({ ...nova, valor_convenio: e.target.value })} /></div>
         <button className="btn-primary" type="submit">+ Faixa</button>
       </form>

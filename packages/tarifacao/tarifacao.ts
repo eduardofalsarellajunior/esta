@@ -31,8 +31,11 @@ export interface Faixa {
    * 'fixo': `hor` é o valor cheio da faixa (substitui o total acumulado até aqui).
    * 'hora': `hor` é uma taxa por PERÍODO (ver `periodo`), somada cumulativamente
    * a partir do teto da faixa anterior, com fração de período arredondada pra cima.
+   * 'valor': sem valor pré-configurado — `hor` é ignorado; o operador informa
+   * quanto cobrar na saída (ver `pedeValor` em `ResultadoTarifa`), e esse
+   * valor passa a valer como se a faixa fosse 'fixo'.
    */
-  tipoCobranca: 'fixo' | 'hora';
+  tipoCobranca: 'fixo' | 'hora' | 'valor';
   /**
    * Duração do período de cobrança nas faixas 'hora', em HH.MM (1.00 = 1h,
    * padrão; 0.30 = 30min; 24.00 = 24h). Ignorado em faixas 'fixo'. Ausente ou
@@ -126,6 +129,8 @@ export interface ResultadoTarifa {
   pontos: number;
   /** true se o tempo estourou todas as faixas (o legado pediria valor manual). */
   manual: boolean;
+  /** true se a faixa alcançada é do tipo 'valor' — precisa que o operador informe quanto cobrar. */
+  pedeValor: boolean;
   /** Detalhe dos segmentos, quando a cobrança é em 2 partes (corte de convênio). */
   segmentos?: Array<{ valor: number }>;
 }
@@ -209,6 +214,15 @@ export function selecionaFaixa(
  *    entre a fronteira e (o tempo, se cai nesta faixa; senão o teto desta
  *    faixa), dividido pela duração de `periodo` (padrão 1h) e sempre
  *    arredondado pra cima (fração de período conta como um período cheio).
+ *  - Faixa 'valor' (só na coluna `hor` — a que o cliente paga): não tem valor
+ *    configurado, então curto-circuita e devolve `pedeValor: true` assim que
+ *    o percurso alcança essa faixa — seja ela a que bate (`dentro`) ou uma
+ *    que o tempo já ultrapassou a caminho de uma faixa seguinte. Não dá pra
+ *    saber quanto ela "contribuiria" pro total sem a entrada do operador
+ *    (ver Patio.jsx), então a resposta é sempre perguntar, nunca assumir 0.
+ *    Na coluna `con` (grade de convênio), uma faixa 'valor' vale `0` sem
+ *    perguntar nada — pedir valor de convênio no meio da saída é outra
+ *    frente, fora de escopo por ora.
  * A fronteira avança para o teto da faixa a cada passo, fixo ou hora.
  * Retorna null se o tempo estourar todas as faixas (igual antes).
  */
@@ -216,13 +230,18 @@ export function calcularValorFaixas(
   faixas: Faixa[],
   tempo: HoraComercial,
   coluna: 'hor' | 'con' = 'hor',
-): { valor: number; indice: number } | null {
+): { valor: number; indice: number; pedeValor?: boolean } | null {
   const alvo = Math.round(tempo * 100);
   let fronteira: HoraComercial = 0;
   let total = 0;
   for (let i = 0; i < faixas.length; i++) {
     const f = faixas[i]!;
     const dentro = alvo <= Math.round(f.ate * 100);
+
+    if (f.tipoCobranca === 'valor' && coluna === 'hor') {
+      return { valor: 0, indice: i + 1, pedeValor: true };
+    }
+
     const preco = coluna === 'con' ? f.con : f.hor;
     if (f.tipoCobranca === 'hora') {
       const fimBloco = dentro ? tempo : f.ate;
@@ -233,8 +252,11 @@ export function calcularValorFaixas(
       const periodos = Math.ceil((minuto(fimBloco) - minuto(fronteira)) / periodoMin);
       total += periodos * preco;
     } else {
-      total = preco;
+      // 'fixo', e 'valor' quando coluna==='con' (sem pedido de entrada aqui —
+      // vale 0, não desconta nada nessa faixa pro convênio).
+      total = f.tipoCobranca === 'valor' ? 0 : preco;
     }
+
     if (dentro) return { valor: total, indice: i + 1 };
     fronteira = f.ate;
   }
@@ -248,9 +270,9 @@ export function calcularValorFaixas(
 export function calcularProporcional(
   tbl: TabelaPreco,
   mov: Movimento,
-): { valor: number | null } {
+): { valor: number | null; pedeValor?: boolean } {
   const faixa = calcularValorFaixas(tbl.faixas, horas(mov));
-  return { valor: faixa === null ? null : faixa.valor };
+  return { valor: faixa === null ? null : faixa.valor, pedeValor: faixa?.pedeValor };
 }
 
 /**
@@ -279,6 +301,7 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
 
   let valorProporcional: number;
   let manual: boolean;
+  let pedeValor: boolean;
   let segmentos: ResultadoTarifa['segmentos'];
 
   // Cobrança em DOIS segmentos: convênio com hora de corte + tabela original.
@@ -292,17 +315,20 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     // decorrido), no lugar da tabela do veículo.
     let soma = 0;
     let algumManual = false;
+    let algumPedeValor = false;
     for (const tipoServico of servicosTipos) {
       const tblServico = tabelas[tipoServico];
       if (!tblServico) {
         throw new Error(`Tabela de preço não encontrada: "${tipoServico}"`);
       }
       const r = calcularProporcional(tblServico, movimento);
-      if (r.valor === null) algumManual = true;
+      if (r.pedeValor) algumPedeValor = true;
+      else if (r.valor === null) algumManual = true;
       else soma += r.valor;
     }
     valorProporcional = soma;
     manual = algumManual;
+    pedeValor = algumPedeValor;
   } else if (doisSegmentos) {
     const tblOrig = tabelas[tipoVeic];
     if (!tblOrig) {
@@ -319,12 +345,16 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
       dtSaida: movimento.dtSaida, saida: movimento.saida,
     });
     valorProporcional = (seg1.valor ?? 0) + (seg2.valor ?? 0);
+    // valor só é null quando estourou as faixas (sem pedeValor — esse caso
+    // sempre devolve valor:0, nunca null, ver calcularProporcional).
     manual = seg1.valor === null || seg2.valor === null;
+    pedeValor = !!(seg1.pedeValor || seg2.pedeValor);
     segmentos = [{ valor: seg1.valor ?? 0 }, { valor: seg2.valor ?? 0 }];
   } else {
     const prop = calcularProporcional(tbl, movimento);
     valorProporcional = prop.valor ?? 0;
     manual = prop.valor === null;
+    pedeValor = !!prop.pedeValor;
   }
 
   // Convênio: desconto por grade própria (CON), percentual ou valor fixo.
@@ -371,6 +401,7 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     valor: centavos(valor),
     pontos: tbl.qtePontos ?? 0,
     manual,
+    pedeValor,
     ...(segmentos ? { segmentos } : {}),
   };
 }

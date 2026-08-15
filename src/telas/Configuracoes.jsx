@@ -36,6 +36,7 @@ export default function Configuracoes({ perfil }) {
     e.preventDefault();
     setErro(''); setSalvo(false);
     const { error } = await supabase.from('filiais').update({
+      numero_cliente: filial.numero_cliente || null,
       nome_fantasia: filial.nome_fantasia || null,
       endereco: filial.endereco || null,
       numero: filial.numero || null,
@@ -103,6 +104,12 @@ export default function Configuracoes({ perfil }) {
           <>
             {salvo && <p className="ok-txt">Salvo.</p>}
             <form onSubmit={salvar}>
+              <div className="campo" style={{ marginBottom: 10, maxWidth: 160 }}>
+                <label>Núm. Cliente</label>
+                <input value={filial.numero_cliente || ''} disabled={!podeEditar}
+                  onChange={(e) => setFilial({ ...filial, numero_cliente: e.target.value })} />
+                <span className="suave" style={{ fontSize: 11 }}>Aparece antes do nome no cabeçalho da tela.</span>
+              </div>
               <div className="campo" style={{ marginBottom: 10, maxWidth: 420 }}>
                 <label>Nome</label>
                 <input value={filial.nome_fantasia || ''} disabled={!podeEditar}

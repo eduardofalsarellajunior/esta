@@ -5,7 +5,7 @@ portada de `SISPROC2.PRG` (funções `HORAS`/`MINUTO`) e `ESTALAN2.PRG`
 (caminho de saída/cobrança).
 
 ```bash
-npm test          # node --test via tsx (24 casos)
+npm test          # node --test via tsx (38 casos)
 npm run build     # typecheck (tsc --noEmit)
 ```
 
@@ -63,6 +63,26 @@ até ali — é como se aquele trecho fosse por conta do cliente.
 
 As duas colunas saem sempre da **mesma faixa**, então o que o cliente paga é
 `HOR − CON` com piso em zero, e `CON` é o que fica a pagar pelo convênio.
+
+## Faixa "valor": sem número configurado, pergunta na saída
+
+Uma terceira opção de `tipo_cobranca`: **'valor'**. Sem `hor` pré-configurado
+— quem decide quanto cobrar é o operador, na hora da saída (ver "Alterar
+valor" em `src/telas/Patio.jsx`, que abre sozinho quando isso acontece).
+
+No motor, assim que `calcularValorFaixas` alcança uma faixa `'valor'` **na
+coluna `hor`** — seja ela a que bate ou uma que o tempo decorrido já
+ultrapassou a caminho de uma faixa seguinte — a função curto-circuita e
+devolve `pedeValor: true` (com `valor: 0`, que a UI substitui pelo que o
+operador digitar). Não dá pra saber quanto essa faixa "contribuiria" pro
+total sem essa entrada, então a resposta é sempre perguntar, nunca assumir
+zero silenciosamente. `pedeValor` propaga por `calcularProporcional` e pelos
+três caminhos de `calcularTarifa` (proporcional simples, soma de serviços,
+dois segmentos de convênio) até o `ResultadoTarifa` final.
+
+Na coluna `con` (grade de convênio), uma faixa `'valor'` vale `0` sem pedir
+nada — pedir um valor de convênio no meio do fluxo de saída é outra frente,
+fora de escopo por ora.
 
 ## Serviços: soma de tabelas
 

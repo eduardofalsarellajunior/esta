@@ -13,7 +13,7 @@ import {
 } from './tarifacao.ts';
 
 // Helpers -------------------------------------------------------------------
-const f = (ate: number, hor: number, con = 0, tipoCobranca: 'fixo' | 'hora' = 'fixo', periodo?: number): Faixa =>
+const f = (ate: number, hor: number, con = 0, tipoCobranca: 'fixo' | 'hora' | 'valor' = 'fixo', periodo?: number): Faixa =>
   ({ ate, hor, con, tipoCobranca, periodo });
 const dia = (iso: string): Date => {
   const [y, m, d] = iso.split('-').map(Number) as [number, number, number];
@@ -122,6 +122,74 @@ test('período de 24 horas: cobra em diárias', () => {
 test('período também vale para a coluna CON (grade de convênio)', () => {
   const faixas = [f(99999.0, 10, 3, 'hora', 0.3)]; // cliente R$10/30min, convênio R$3/30min
   assert.deepEqual(calcularValorFaixas(faixas, 0.45, 'con'), { valor: 6, indice: 1 }); // 45min -> 2 blocos
+});
+
+// Faixa "valor" (pede o operador) --------------------------------------------
+test('faixa "valor": é a faixa que bate -> pedeValor, sem tentar calcular', () => {
+  const faixas = [f(1.0, 10), f(99999.0, 0, 0, 'valor')];
+  assert.deepEqual(calcularValorFaixas(faixas, 3.0), { valor: 0, indice: 2, pedeValor: true });
+});
+
+test('faixa "valor": tempo passa por ela a caminho de uma faixa seguinte -> ainda pedeValor', () => {
+  // Fixo até 1h, "valor" até 2h, fixo de novo até 3h — tempo cai na 3ª (2h30),
+  // mas já atravessou a 2ª (valor) no caminho: não dá pra saber quanto ela
+  // "contribuiu", então pede, não pula silenciosamente pra faixa seguinte.
+  const faixas = [f(1.0, 10), f(2.0, 0, 0, 'valor'), f(3.0, 30)];
+  assert.deepEqual(calcularValorFaixas(faixas, 2.3), { valor: 0, indice: 2, pedeValor: true });
+});
+
+test('faixa "valor" na coluna CON (grade de convênio): vale 0, não pede nada', () => {
+  const faixas = [f(99999.0, 10, 0, 'valor')];
+  assert.deepEqual(calcularValorFaixas(faixas, 1.0, 'con'), { valor: 0, indice: 1 });
+});
+
+test('calcularProporcional propaga pedeValor', () => {
+  const tbl: TabelaPreco = { tipo: 'V', faixas: [f(99999.0, 0, 0, 'valor')] };
+  const r = calcularProporcional(tbl, { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 });
+  assert.equal(r.valor, 0);
+  assert.equal(r.pedeValor, true);
+});
+
+test('calcularTarifa (caminho simples): pedeValor:true, valor 0, manual continua false', () => {
+  const V: TabelaPreco = { tipo: 'V', faixas: [f(99999.0, 0, 0, 'valor')] };
+  const r = calcularTarifa({
+    tabelas: { V }, tipoVeic: 'V',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 },
+  });
+  assert.equal(r.valor, 0);
+  assert.equal(r.pedeValor, true);
+  assert.equal(r.manual, false); // motivo diferente de "estourou as faixas"
+});
+
+test('calcularTarifa: faixas normais continuam com pedeValor:false (mudança é aditiva)', () => {
+  const r = calcularProporcional(G, { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 });
+  assert.equal(r.pedeValor, undefined);
+  const t = calcularTarifa({
+    tabelas, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 },
+  });
+  assert.equal(t.pedeValor, false);
+});
+
+test('calcularTarifa: pedeValor propaga pela soma de serviços (servicosTipos)', () => {
+  const V: TabelaPreco = { tipo: 'V', faixas: [f(99999.0, 0, 0, 'valor')] };
+  const r = calcularTarifa({
+    tabelas: { ...tabelas, V }, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 },
+    servicosTipos: ['G', 'V'],
+  });
+  assert.equal(r.pedeValor, true);
+});
+
+test('calcularTarifa: pedeValor propaga pelos 2 segmentos (corte de convênio)', () => {
+  const V: TabelaPreco = { tipo: 'V', faixas: [f(99999.0, 0, 0, 'valor')] };
+  const r = calcularTarifa({
+    tabelas: { ...tabelas, V }, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 16.0 },
+    convenio: { codigo: 'X', tabConv: 'V' },
+    horaConvenio: 13.0,
+  });
+  assert.equal(r.pedeValor, true); // seg1 (V) pede; seg2 (G) não precisa
 });
 
 // Proporcional (avulso) -----------------------------------------------------
