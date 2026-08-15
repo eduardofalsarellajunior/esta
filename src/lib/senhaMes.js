@@ -1,17 +1,24 @@
 // Porta fiel de `PROCEDURE calculosenha` do legado Clipper (C:\bkesta\calculasenha.txt).
-// A "senha do mês" é a que o Eduardo manda pro cliente antes do fim de cada
-// mês, pra confirmar que a mensalidade com ele está em dia — se o operador
-// não souber a senha do mês corrente na primeira entrada do sistema, é sinal
-// de que o cliente não recebeu/não pagou. Depende só do mês/ano corrente
-// (troca uma vez por mês, não por dia) e do "Núm. Cliente" cadastrado em
-// Configurações → Dados do estacionamento.
+// A "senha do mês" é a que o Eduardo (fornecedor) manda pro dono de cada
+// filial antes do fim de cada mês, pra confirmar que a mensalidade dele
+// (com o Eduardo, não com o estacionamento) está em dia — se ninguém souber
+// a senha do mês corrente na primeira entrada do sistema, é sinal de que
+// não pagou. Depende só do mês/ano corrente (troca uma vez por mês, não por
+// dia) e do "Núm. Cliente" cadastrado em Configurações → Dados do
+// estacionamento.
+//
+// IMPORTANTE: este arquivo só pode ser importado por código de servidor
+// (api/*.js) — nunca por uma tela (src/telas/*.jsx). Se entrar no bundle do
+// navegador, qualquer operador com DevTools calcula a senha sozinho (o
+// "Núm. Cliente" já aparece na tela), o que anula o mecanismo. Ver
+// api/conferir-senha-mes.js e api/cadastrar-senha-mes.js.
 //
 // Fidelidade ao Clipper, ponto a ponto:
 // - `CTOD("01/01/1800") - primeiroDiaDoMes` é diferença de dias em calendário
-//   puro, sem fuso/horário de verão — por isso reaproveita `diffDias` do
-//   motor de tarifação (baseado em Date.UTC), em vez de subtrair objetos
-//   Date locais direto, que erraria em anos com mudança de horário de verão
-//   entre 1800 e hoje.
+//   puro, sem fuso/horário de verão — por isso `diasEntre` usa Date.UTC dos
+//   componentes de calendário (ano/mês/dia locais), não subtração direta de
+//   objetos Date locais, que erraria em anos com mudança de horário de
+//   verão entre 1800 e hoje.
 // - `STR(n, largura)`: formata em largura fixa, right-justified, preenchendo
 //   com espaço à esquerda (o sinal "-" ocupa uma posição); `VAL()` de um
 //   único caractere não-dígito (espaço, "-") vale 0 — é assim que os 7
@@ -23,28 +30,35 @@
 // - A senha final embaralha os 10 dígitos em 5 pares simétricos (1,10)(2,9)
 //   (3,8)(4,7)(5,6), cada par vira uma letra A-Z, e a ordem final das 5
 //   letras é embaralhada (índices 3,2,4,1,5 — não é 1,2,3,4,5).
+//
+// Conferido contra um caso real do Eduardo: cliente 703, mês 08/2026 →
+// "CZMCR" (bate exato com o que este código calcula).
 
-import { diffDias } from '../../packages/tarifacao/tarifacao.ts';
+/** Diferença em dias entre duas datas, em calendário puro (sem DST). diasEntre(a,b) = b - a. */
+function diasEntre(a, b) {
+  const dia = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.round((dia(b) - dia(a)) / 86_400_000);
+}
 
-function strClipper(n: number, largura: number): string {
+function strClipper(n, largura) {
   const s = String(Math.trunc(n));
   if (s.length > largura) return '*'.repeat(largura);
   return s.padStart(largura, ' ');
 }
 
-function valChar(c: string): number {
+function valChar(c) {
   return /[0-9]/.test(c) ? Number(c) : 0;
 }
 
 /** Dígito verificador módulo 11: soma ponderada → resto → 11-resto → >=10 vira 0. */
-function dv11(soma: number): number {
+function dv11(soma) {
   const resto = soma % 11;
   const d = 11 - resto;
   return d >= 10 ? 0 : d;
 }
 
 /** VAL() do Clipper aplicado ao "Núm. Cliente": dígitos do início, resto ignorado, inválido = 0. */
-export function numeroClienteComoValor(numeroCliente: string | number | null | undefined): number {
+export function numeroClienteComoValor(numeroCliente) {
   const n = parseInt(String(numeroCliente ?? '').trim(), 10);
   return Number.isFinite(n) ? n : 0;
 }
@@ -54,13 +68,13 @@ export function numeroClienteComoValor(numeroCliente: string | number | null | u
  * `hoje`) pro número de cliente informado. `numeroCliente` é o texto salvo
  * em `filiais.numero_cliente`.
  */
-export function calcularSenhaMes(numeroCliente: string | number | null | undefined, hoje: Date = new Date()): string {
+export function calcularSenhaMes(numeroCliente, hoje = new Date()) {
   const wnumcli = numeroClienteComoValor(numeroCliente);
 
   const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   const base1800 = new Date(1800, 0, 1);
-  // diffDias(a, b) = b - a (em dias); queremos base1800 - primeiroDiaMes.
-  const diffDiasBase = diffDias(primeiroDiaMes, base1800);
+  // diasEntre(a, b) = b - a; queremos base1800 - primeiroDiaMes.
+  const diffDiasBase = diasEntre(primeiroDiaMes, base1800);
 
   const cAux = strClipper(diffDiasBase, 7);
   const nr = [1, 2, 3, 4, 5, 6, 7].map((i) => valChar(cAux[i - 1]));
@@ -94,7 +108,7 @@ export function calcularSenhaMes(numeroCliente: string | number | null | undefin
   const combinado = wnumcli * 1_000_000 + seisDigitos;
   const dez = String(Math.trunc(combinado)).padStart(10, '0');
 
-  const par = (a: number, b: number) => Number(dez[a - 1] + dez[b - 1]);
+  const par = (a, b) => Number(dez[a - 1] + dez[b - 1]);
   const [sn1, sn2, sn3, sn4, sn5] = [par(1, 10), par(2, 9), par(3, 8), par(4, 7), par(5, 6)]
     .map((v) => (v > 90 ? v - 65 : v))
     .map((v) => (v % 26) + 65);

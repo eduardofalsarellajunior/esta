@@ -60,6 +60,7 @@ export default function Patio({ perfil }) {
   const [modalValor, setModalValor] = useState(null); // { valor } — alteração manual do valor da saída
   const [agora, setAgora] = useState(() => Date.now());
   const [abrirRecebimento, setAbrirRecebimento] = useState(false); // fluxo de "Receber mensalidade" (menu ⋮)
+  const [modalSenhaMes, setModalSenhaMes] = useState(null); // { senha, erro, ocupado } — "Cadastrar senha do mês" (menu ⋮)
   const [caixaAberto, setCaixaAberto] = useState(null);
   const placaRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
@@ -628,6 +629,28 @@ export default function Patio({ perfil }) {
     setModalValor(null);
   }
 
+  /**
+   * "Cadastrar senha do mês" (menu ⋮) — qualquer pessoa da filial que
+   * recebeu a senha do fornecedor por WhatsApp digita ela aqui, sem
+   * precisar do fornecedor. O cálculo/comparação roda só no servidor (ver
+   * api/cadastrar-senha-mes.js) — esta tela nunca sabe se está certa.
+   */
+  async function cadastrarSenhaMes() {
+    setModalSenhaMes((m) => ({ ...m, ocupado: true, erro: '' }));
+    const { data: sessao } = await supabase.auth.getSession();
+    const resp = await fetch('/api/cadastrar-senha-mes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessao.session?.access_token}` },
+      body: JSON.stringify({ senha: modalSenhaMes.senha }),
+    });
+    const dados = await resp.json().catch(() => ({}));
+    if (!resp.ok || dados.erro) {
+      setModalSenhaMes((m) => ({ ...m, ocupado: false, erro: dados.erro || 'Não deu pra cadastrar.' }));
+      return;
+    }
+    setModalSenhaMes(null);
+  }
+
   async function confirmarSaida(tomadorDps) {
     const { mov, resultado, pagamentos, convenioCodigo, valorCalculado } = saindo;
     const dtSaida = hojeISO();
@@ -795,7 +818,10 @@ export default function Patio({ perfil }) {
       <div className="card">
         <div className="card-cab">
           <h2>Entrada de veículo</h2>
-          <CardAcoes acoes={[{ label: 'Receber mensalidade', onClick: () => setAbrirRecebimento(true) }]} />
+          <CardAcoes acoes={[
+            { label: 'Receber mensalidade', onClick: () => setAbrirRecebimento(true) },
+            { label: 'Cadastrar senha do mês', onClick: () => setModalSenhaMes({ senha: '', erro: '', ocupado: false }) },
+          ]} />
         </div>
         <form className="linha-form" onSubmit={darEntrada}>
           <div className="campo">
@@ -1033,6 +1059,31 @@ export default function Patio({ perfil }) {
         <ReceberMensalidadeFluxo perfil={perfil} formas={formas} caixaAberto={caixaAberto}
           onConcluido={(t, celularSugerido) => { setTicket(t); setCelularTicket(celularSugerido); setAbrirRecebimento(false); }}
           onFechar={() => setAbrirRecebimento(false)} />
+      )}
+
+      {modalSenhaMes && (
+        <div className="modal-bg" onClick={() => setModalSenhaMes(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Cadastrar senha do mês</h2>
+            <p className="suave">
+              Digite a senha do mês que você recebeu do fornecedor. Ela fica
+              guardada pra liberar o login quando o mês virar.
+            </p>
+            <div className="campo">
+              <label>Senha</label>
+              <input className="mono" autoFocus value={modalSenhaMes.senha}
+                onChange={(e) => setModalSenhaMes({ ...modalSenhaMes, senha: e.target.value.toUpperCase() })}
+                maxLength={5} style={{ textTransform: 'uppercase', letterSpacing: 2 }} />
+            </div>
+            {modalSenhaMes.erro && <p className="aviso">{modalSenhaMes.erro}</p>}
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setModalSenhaMes(null)}>Cancelar</button>
+              <button className="btn-primary" disabled={modalSenhaMes.ocupado || !modalSenhaMes.senha} onClick={cadastrarSenhaMes}>
+                {modalSenhaMes.ocupado ? '…' : 'Cadastrar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {saindo && (

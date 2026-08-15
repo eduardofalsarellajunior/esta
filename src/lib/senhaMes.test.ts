@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcularSenhaMes, numeroClienteComoValor } from './senhaMes.ts';
+import { calcularSenhaMes, numeroClienteComoValor } from './senhaMes.js';
 
 test('numeroClienteComoValor: dígitos viram número, texto inválido vira 0 (igual VAL() do Clipper)', () => {
   assert.equal(numeroClienteComoValor('7'), 7);

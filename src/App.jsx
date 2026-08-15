@@ -15,6 +15,7 @@ import Usuarios from './telas/Usuarios.jsx';
 import ImportarDbf from './telas/ImportarDbf.jsx';
 import ModelosTicket from './telas/ModelosTicket.jsx';
 import EscolherFilial from './telas/EscolherFilial.jsx';
+import SenhaMesGate from './telas/SenhaMesGate.jsx';
 import { ehFornecedor } from './lib/acesso.js';
 
 export default function App() {
@@ -62,6 +63,17 @@ export default function App() {
   // Fornecedor atende vários clientes: escolhe qual acessar antes de entrar.
   if (ehFornecedor(perfil) && !perfil.filial_ativa) return <EscolherFilial perfil={perfil} />;
 
+  // Trava o login até bater a senha do mês (ver SenhaMesGate.jsx) — exceto
+  // pro fornecedor: ele é quem controla esse mecanismo, não pode ficar
+  // trancado fora de uma filial inadimplente e sem conseguir nem ajudar o
+  // cliente a resolver.
+  if (!ehFornecedor(perfil)) {
+    return <SenhaMesGate><Rotas perfil={perfil} /></SenhaMesGate>;
+  }
+  return <Rotas perfil={perfil} />;
+}
+
+function Rotas({ perfil }) {
   return (
     <BrowserRouter>
       <Routes>
