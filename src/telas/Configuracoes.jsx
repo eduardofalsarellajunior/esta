@@ -43,6 +43,10 @@ export default function Configuracoes({ perfil }) {
     if (error) setErro(error.message); else setSalvo(true);
   }
 
+  function setPatio(campo, valor) {
+    setFilial((f) => ({ ...f, config: { ...f.config, patio: { ...(f.config?.patio || {}), [campo]: valor } } }));
+  }
+
   function setNfse(campo, valor) {
     setFilial((f) => ({ ...f, config: { ...f.config, nfse: { ...(f.config?.nfse || {}), [campo]: valor } } }));
   }
@@ -122,6 +126,16 @@ export default function Configuracoes({ perfil }) {
                 <input value={filial.cnpj || ''} disabled={!podeEditar}
                   onChange={(e) => setFilial({ ...filial, cnpj: e.target.value })} />
               </div>
+              <label className="campo-check" style={{ marginBottom: 4 }}>
+                <input type="checkbox" checked={filial.config?.patio?.imprimeTicketMensalista ?? true} disabled={!podeEditar}
+                  onChange={(e) => setPatio('imprimeTicketMensalista', e.target.checked)} />
+                Imprime ticket para mensalista/hóspede?
+              </label>
+              <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+                Desmarcado, a entrada e a saída de mensalistas/hóspedes não param na tela do
+                comprovante. Quem entra/sai cobrado como avulso (fora do vencimento, vaga
+                esgotada, fora do horário contratado) continua sempre mostrando o ticket.
+              </p>
               {podeEditar
                 ? <button className="btn-primary" type="submit">Salvar</button>
                 : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}

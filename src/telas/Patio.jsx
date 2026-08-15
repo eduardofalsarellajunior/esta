@@ -62,6 +62,8 @@ export default function Patio({ perfil }) {
   const [abrirRecebimento, setAbrirRecebimento] = useState(false); // fluxo de "Receber mensalidade" (menu ⋮)
   const [caixaAberto, setCaixaAberto] = useState(null);
   const placaRef = useRef(null);
+  // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
+  const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
 
   /**
    * Volta o cursor pro campo de placa — na cabine o operador encadeia um carro
@@ -331,17 +333,28 @@ export default function Patio({ perfil }) {
     const dtEntrada = hojeISO();
     const hrEntrada = agoraHHMM();
     const nomeMensalista = detectado?.nome || '';
+    const tipoMensFinal = tipoMens ?? detectado?.tipo_mens ?? 'E';
     // `select()` para ter o movimento gravado — é dele que sai o ticket.
     const { data: novo, error } = await inserirComControle({
       filial_id: perfil.filial_id, placa: p, modelo: nomeModelo || null,
       dt_entrada: dtEntrada, hr_entrada: hrEntrada,
       tipo_veic: tipoVeic,
-      tipo_mens: tipoMens ?? detectado?.tipo_mens ?? 'E',
+      tipo_mens: tipoMensFinal,
       convenio_codigo: convenioCodigo ?? detectado?.convenio_codigo ?? null,
       livre_a_partir: livreAPartir ?? null,
       usuario_entrada: perfil.id,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
+    // Mensalista/hóspede de verdade (não o que caiu pra avulso por
+    // vencimento/vaga/restrição — esse continua mostrando, é cobrança real):
+    // respeita a preferência de não parar na tela do ticket.
+    if (MENSALISTA.has(tipoMensFinal) && !imprimeTicketMensalista) {
+      setCelularTicket('');
+      limparFormEntrada();
+      recarregar();
+      focarPlaca(); // sem ticket pra fechar, ninguém mais devolve o foco à placa
+      return;
+    }
     setTicket(comModelo('entrada', {
       titulo: 'Ticket de entrada',
       linhas: [
@@ -667,9 +680,15 @@ export default function Patio({ perfil }) {
       }),
       MOEDA: formaTexto,
     });
-    setTicket({ ...ticketSaida, ticketRps });
-    setCelularTicket('');
+    // Mensalista/hóspede de verdade (sem cobrança) respeita a preferência de
+    // não parar na tela do ticket — quem foi cobrado (mesmo um mensalista
+    // fora do horário/vencido) sempre vê o comprovante, é dinheiro de verdade.
+    if (!(resultado.mensalista && !imprimeTicketMensalista)) {
+      setTicket({ ...ticketSaida, ticketRps });
+      setCelularTicket('');
+    }
     setSaindo(null); recarregar();
+    if (resultado.mensalista && !imprimeTicketMensalista) focarPlaca(); // sem ticket pra fechar, idem
   }
 
   async function reimprimirSaida(mov) {
