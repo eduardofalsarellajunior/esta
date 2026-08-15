@@ -633,12 +633,12 @@ export default function Patio({ perfil }) {
    * "Cadastrar senha do mês" (menu ⋮) — qualquer pessoa da filial que
    * recebeu a senha do fornecedor por WhatsApp digita ela aqui, sem
    * precisar do fornecedor. O cálculo/comparação roda só no servidor (ver
-   * api/cadastrar-senha-mes.js) — esta tela nunca sabe se está certa.
-   * 6 campos fixos (um por posição da fila): as posições já cadastradas
-   * aparecem travadas (o valor em si não é mostrado — só a contagem, o
-   * endpoint nunca devolve as senhas guardadas), e "Cadastrar" manda de
-   * uma vez só os campos vazios que foram preenchidos — dá pra preencher
-   * só 1 ou os 6 de um cliente semestral.
+   * api/cadastrar-senha-mes.js) — esta tela nunca sabe se está certa, o
+   * cadastro aceita qualquer coisa, só é conferido no 1º acesso do mês.
+   * 6 campos fixos (um por posição da fila): os já cadastrados aparecem em
+   * texto normal (travados) — quem cadastra já tinha esse valor em mãos, não
+   * tem problema mostrar de volta — e "Cadastrar" manda de uma vez só os
+   * campos vazios que foram preenchidos.
    */
   async function chamarSenhaMes(body) {
     const { data: sessao } = await supabase.auth.getSession();
@@ -650,27 +650,34 @@ export default function Patio({ perfil }) {
     return { ok: resp.ok, dados: await resp.json().catch(() => ({})) };
   }
 
+  async function atualizarListaSenhaMes() {
+    const { ok, dados } = await chamarSenhaMes({ acao: 'listar' });
+    const travadas = ok ? (dados.senhas || []) : [];
+    setModalSenhaMes((m) => ({
+      ...(m || {}),
+      ocupado: false,
+      travadas,
+      campos: Array.from({ length: 6 - travadas.length }, () => ''),
+    }));
+  }
+
   function abrirModalSenhaMes() {
-    setModalSenhaMes({ campos: ['', '', '', '', '', ''], erro: '', ocupado: false, count: null });
-    chamarSenhaMes({ acao: 'contar' }).then(({ ok, dados }) => {
-      if (ok) setModalSenhaMes((m) => (m ? { ...m, count: dados.count } : m));
-    });
+    setModalSenhaMes({ travadas: null, campos: [], erro: '', ocupado: false });
+    atualizarListaSenhaMes();
   }
 
   async function cadastrarSenhaMes() {
     const pendentes = modalSenhaMes.campos.filter((c) => c.trim());
     if (pendentes.length === 0) return;
     setModalSenhaMes((m) => ({ ...m, ocupado: true, erro: '' }));
-    let count = modalSenhaMes.count;
     for (const senha of pendentes) {
       const { ok, dados } = await chamarSenhaMes({ senha });
       if (!ok || dados.erro) {
-        setModalSenhaMes((m) => ({ ...m, ocupado: false, erro: dados.erro || 'Não deu pra cadastrar.', count }));
+        setModalSenhaMes((m) => ({ ...m, ocupado: false, erro: dados.erro || 'Não deu pra cadastrar.' }));
         return;
       }
-      count = dados.count;
     }
-    setModalSenhaMes({ campos: ['', '', '', '', '', ''], erro: '', ocupado: false, count });
+    await atualizarListaSenhaMes();
   }
 
   async function removerUltimaSenhaMes() {
@@ -680,7 +687,7 @@ export default function Patio({ perfil }) {
       setModalSenhaMes((m) => ({ ...m, ocupado: false, erro: dados.erro || 'Não deu pra remover.' }));
       return;
     }
-    setModalSenhaMes((m) => ({ ...m, ocupado: false, count: Math.max(0, (m.count || 1) - 1) }));
+    await atualizarListaSenhaMes();
   }
 
   async function confirmarSaida(tomadorDps) {
@@ -1095,7 +1102,7 @@ export default function Patio({ perfil }) {
 
       {modalSenhaMes && (
         <div className="modal-bg" onClick={() => setModalSenhaMes(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(560px, 92vw)' }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(480px, 92vw)' }}>
             <h2>Cadastrar senha do mês</h2>
             <p className="suave">
               Digite a senha do mês que você recebeu do fornecedor. Preencha só
@@ -1103,27 +1110,28 @@ export default function Patio({ perfil }) {
               semestral — cada uma vale pra um mês, na ordem.
             </p>
             <p className="suave" style={{ fontWeight: 600 }}>
-              {modalSenhaMes.count == null ? 'Carregando…' : `${modalSenhaMes.count} de 6 já cadastradas.`}
+              {modalSenhaMes.travadas == null ? 'Carregando…' : `${modalSenhaMes.travadas.length} de 6 já cadastradas.`}
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, margin: '16px 0' }}>
-              {modalSenhaMes.campos.map((valor, i) => {
-                const jaCadastrada = modalSenhaMes.count != null && i < modalSenhaMes.count;
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '16px 0' }}>
+              {Array.from({ length: 6 }, (_, i) => {
+                const travada = modalSenhaMes.travadas?.[i];
                 return (
-                  <div className="campo" key={i}>
-                    <label>{i + 1}ª</label>
-                    {jaCadastrada ? (
-                      <input className="mono" value="•••••" disabled style={{ letterSpacing: 2 }} />
+                  <div className="campo" key={i} style={{ width: 62 }}>
+                    <label style={{ fontSize: 11 }}>{i + 1}ª</label>
+                    {travada != null ? (
+                      <input className="mono" value={travada} disabled style={{ width: '100%', padding: '6px 4px', textAlign: 'center' }} />
                     ) : (
-                      <input className="mono" autoFocus={i === (modalSenhaMes.count || 0)}
-                        value={valor}
+                      <input className="mono" autoFocus={i === (modalSenhaMes.travadas?.length || 0)}
+                        value={modalSenhaMes.campos[i - (modalSenhaMes.travadas?.length || 0)] || ''}
                         onChange={(e) => {
+                          const idx = i - (modalSenhaMes.travadas?.length || 0);
                           const campos = [...modalSenhaMes.campos];
-                          campos[i] = e.target.value.toUpperCase();
+                          campos[idx] = e.target.value.toUpperCase();
                           setModalSenhaMes({ ...modalSenhaMes, campos });
                         }}
                         onKeyDown={(e) => { if (e.key === 'Enter' && !modalSenhaMes.ocupado) cadastrarSenhaMes(); }}
-                        disabled={modalSenhaMes.count == null}
-                        maxLength={5} style={{ textTransform: 'uppercase', letterSpacing: 2 }} />
+                        disabled={modalSenhaMes.travadas == null}
+                        maxLength={5} style={{ width: '100%', padding: '6px 4px', textTransform: 'uppercase', textAlign: 'center' }} />
                     )}
                   </div>
                 );
@@ -1131,7 +1139,7 @@ export default function Patio({ perfil }) {
             </div>
             {modalSenhaMes.erro && <p className="aviso">{modalSenhaMes.erro}</p>}
             <div className="linha-form" style={{ justifyContent: 'space-between', marginTop: 12 }}>
-              <button className="btn-ghost" disabled={modalSenhaMes.ocupado || !modalSenhaMes.count} onClick={removerUltimaSenhaMes}>
+              <button className="btn-ghost" disabled={modalSenhaMes.ocupado || !modalSenhaMes.travadas?.length} onClick={removerUltimaSenhaMes}>
                 Remover última
               </button>
               <div className="linha-form" style={{ gap: 8 }}>

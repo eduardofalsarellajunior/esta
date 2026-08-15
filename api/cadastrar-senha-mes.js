@@ -2,12 +2,15 @@
 // "senhas do mês" da filial (ver supabase/migrations/0026_senha_mes.sql).
 // Qualquer usuário ativo da filial pode usar — quem recebe a senha do
 // Eduardo por WhatsApp digita ela mesma aqui, sem precisar do fornecedor.
-// `{ acao: 'contar' }` devolve quantas já tem na fila; `{ acao: 'remover_ultima' }`
-// desfaz a mais recente (typo); sem `acao`, `{ senha }` cadastra mais uma.
+// `{ acao: 'listar' }` devolve as senhas já cadastradas, na ordem;
+// `{ acao: 'remover_ultima' }` desfaz a mais recente (typo); sem `acao`,
+// `{ senha }` cadastra mais uma.
 //
-// Nunca confirma se a senha cadastrada "bate" com o esperado — isso
-// vazaria informação pra quem não deveria ter (ver api/conferir-senha-mes.js
-// e o comentário no topo de src/lib/senhaMes.js).
+// Cadastra sem checar se a senha "bate" com o esperado — quem cadastra pode
+// errar, e só vai dar erro mesmo na conferência do primeiro acesso do mês
+// (api/conferir-senha-mes.js). Diferente daquela function, aqui dá pra
+// devolver as senhas já guardadas — quem cadastra já tinha esse valor em
+// mãos (recebeu do fornecedor), não é informação nova sendo vazada.
 import { createClient } from '@supabase/supabase-js';
 
 const MAX_FILA = 6;
@@ -42,10 +45,10 @@ export default async function handler(req, res) {
 
   const { acao } = req.body || {};
 
-  if (acao === 'contar') {
-    const { count } = await admin.from('senhas_mes_fila')
-      .select('id', { count: 'exact', head: true }).eq('filial_id', filialId);
-    res.status(200).json({ count: count || 0 });
+  if (acao === 'listar') {
+    const { data } = await admin.from('senhas_mes_fila')
+      .select('senha').eq('filial_id', filialId).order('criado_em', { ascending: true });
+    res.status(200).json({ senhas: (data || []).map((r) => r.senha) });
     return;
   }
 
