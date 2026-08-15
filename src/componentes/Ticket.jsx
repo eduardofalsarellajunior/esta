@@ -53,7 +53,13 @@ export function imprimirTicket(ticket, filial) {
       + ticket.linhas.map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(ticket.titulo)}</title>
     <style>
-      body { font-family: system-ui, Arial, sans-serif; color: #000; padding: 16px; max-width: 320px; }
+      /* Bobina de 58mm (a impressora de hoje) — ajustar aqui se algum outro
+         cliente tiver bobina de outra largura (80mm é o outro padrão comum).
+         "auto" na altura é o que evita a impressora saltar um monte de linha
+         em branco no fim: sem isso o navegador imprimia em tamanho de folha
+         cheia (Carta/A4) e a impressora "completava a página" com bobina. */
+      @page { size: 58mm auto; margin: 0; }
+      body { font-family: system-ui, Arial, sans-serif; color: #000; margin: 0; padding: 2mm 3mm; box-sizing: border-box; }
       .nome { font-size: 16px; font-weight: 800; margin-bottom: 2px; }
       .linha-end { font-size: 11px; color: #333; margin-bottom: 2px; }
       hr { border: none; border-top: 1px dashed #999; margin: 10px 0; }
