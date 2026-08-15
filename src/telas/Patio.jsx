@@ -180,11 +180,7 @@ export default function Patio({ perfil }) {
         .select('modelo').eq('placa', p).not('dt_saida', 'is', null)
         .order('dt_saida', { ascending: false }).order('hr_saida', { ascending: false })
         .limit(1).maybeSingle();
-      if (anterior?.modelo) {
-        const match = modelos.find((m) => normalizar(m.nome) === normalizar(anterior.modelo));
-        if (match) selecionarModelo(match);
-        else setBuscaModelo(anterior.modelo);
-      }
+      preencherModeloConhecido(anterior?.modelo);
     }
 
     const { data: mv } = await supabase.from('mensalista_veiculos').select('mensalista_id, modelo, tipo_veic').eq('placa', p).maybeSingle();
@@ -196,6 +192,7 @@ export default function Patio({ perfil }) {
     if (!dentroDoVencimento(m.proximo_pagamento, m.tolerancia_dias)) {
       setMensalistaVencido(m.razao);
       if (mv.tipo_veic) await registrarEntrada(mv.tipo_veic, mv.modelo, 'E', null);
+      else preencherModeloConhecido(mv.modelo);
       return;
     }
 
@@ -210,6 +207,7 @@ export default function Patio({ perfil }) {
     }
     if (ocupadas >= (m.qte_vagas || 1)) {
       setVagaEsgotada(m.razao);
+      preencherModeloConhecido(mv.modelo);
       return;
     }
 
@@ -223,6 +221,7 @@ export default function Patio({ perfil }) {
       setRestricaoHorario({ nome: m.razao, livreAPartir: restricao.livreAPartir });
       setLivreAPartirEntrada(restricao.livreAPartir);
       if (mv.tipo_veic) await registrarEntrada(mv.tipo_veic, mv.modelo, 'E', null);
+      else preencherModeloConhecido(mv.modelo);
       return;
     }
 
@@ -238,7 +237,22 @@ export default function Patio({ perfil }) {
       return;
     }
 
+    preencherModeloConhecido(mv.modelo);
     setDetectado({ nome: m.razao, tipo_mens: m.tipo_mens, convenio_codigo: convCod });
+  }
+
+  /**
+   * Pré-preenche o campo Carro com um modelo já conhecido (do catálogo, se
+   * bater o nome; senão texto livre) — usado quando a entrada não se
+   * completa sozinha (vaga esgotada, restrição de horário, mensalista sem
+   * tabela cadastrada…) e o operador precisa terminar o formulário à mão.
+   * Não sobrescreve o que o operador já tiver digitado.
+   */
+  function preencherModeloConhecido(nomeModelo) {
+    if (!nomeModelo || buscaModelo.trim()) return;
+    const match = modelos.find((m) => normalizar(m.nome) === normalizar(nomeModelo));
+    if (match) selecionarModelo(match);
+    else setBuscaModelo(nomeModelo);
   }
 
   function onBuscaModeloChange(valorDigitado) {
