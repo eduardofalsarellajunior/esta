@@ -60,18 +60,18 @@ test('paraData: só aceita ISO já pronto (como o lerDbf devolve pra campo tipo 
 
 test('converterLinha: valor da mensalidade e próximo pagamento (campos antes fora do mapeamento)', () => {
   const colunas = DESTINOS.mensalistas.colunas;
-  const mapeamento = sugerirMapeamento(colunas, ['NOMECAR', 'RAZAO', 'VALOR', 'DIA']);
+  const mapeamento = sugerirMapeamento(colunas, ['VEICULO', 'RAZAO', 'VALOR', 'DIA']);
   // DIA aqui simula um campo tipo D do dbf, já normalizado pelo lerDbf pra ISO.
-  const linha = converterLinha({ NOMECAR: '12', RAZAO: 'Fulano', VALOR: 250.5, DIA: '2026-08-10' }, colunas, mapeamento);
+  const linha = converterLinha({ VEICULO: 'ABC1234', RAZAO: 'Fulano', VALOR: 250.5, DIA: '2026-08-10' }, colunas, mapeamento);
   assert.equal(linha.valor_mensalidade, 250.5);
   assert.equal(linha.proximo_pagamento, '2026-08-10');
 });
 
 test('converterLinha: aplica mapeamento, tipos e valor padrão (coluna NOT NULL sem valor no dbf)', () => {
   const colunas = DESTINOS.mensalistas.colunas;
-  const mapeamento = sugerirMapeamento(colunas, ['NOMECAR', 'RAZAO', 'QTEVAGAS']);
-  const linha = converterLinha({ NOMECAR: '12', RAZAO: 'Fulano de Tal', QTEVAGAS: 2 }, colunas, mapeamento);
-  assert.equal(linha.codigo, '12');
+  const mapeamento = sugerirMapeamento(colunas, ['VEICULO', 'RAZAO', 'QTEVAGAS']);
+  const linha = converterLinha({ VEICULO: 'ABC1234', RAZAO: 'Fulano de Tal', QTEVAGAS: 2 }, colunas, mapeamento);
+  assert.equal(linha.codigo, 'ABC1234');
   assert.equal(linha.razao, 'Fulano de Tal');
   assert.equal(linha.qte_vagas, 2);
   // tolerancia_dias não veio do dbf (sem mapeamento) -> cai no padrão (0), não fica null (coluna NOT NULL no banco)
@@ -79,4 +79,17 @@ test('converterLinha: aplica mapeamento, tipos e valor padrão (coluna NOT NULL 
   assert.equal(linha.ativo, true);
   // sem valor e sem padrão -> null
   assert.equal(linha.dia_venc, null);
+});
+
+test('ESTASUBS: sugerirMapeamento + converterLinha (CARMESTRE/CARSUBST/NOMECAR)', () => {
+  const colunas = DESTINOS.mensalista_veiculos_extra.colunas;
+  const mapa = sugerirMapeamento(colunas, ['CARMESTRE', 'CARSUBST', 'NOMECAR']);
+  assert.equal(mapa.codigo_mestre, 'CARMESTRE');
+  assert.equal(mapa.placa, 'CARSUBST');
+  assert.equal(mapa.modelo, 'NOMECAR');
+
+  const linha = converterLinha({ CARMESTRE: 'ABC1234', CARSUBST: 'XYZ9876', NOMECAR: 'GOL' }, colunas, mapa);
+  assert.equal(linha.codigo_mestre, 'ABC1234');
+  assert.equal(linha.placa, 'XYZ9876');
+  assert.equal(linha.modelo, 'GOL');
 });

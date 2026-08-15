@@ -16,7 +16,13 @@ export type Destino = {
   rotulo: string;
   tabela: string;
   colunas: ColunaDestino[];
-  placas: ColunaDestino[]; // só usado no destino "mensalistas" (placas inline do legado -> mensalista_veiculos)
+  /**
+   * 'cadastro' (padrão): cria registro novo em `tabela`, ignorando código já
+   * existente. 'veiculos_extra': não cria nada em `tabela` — cada linha vira
+   * um veículo (mensalista_veiculos) de um mensalista que JÁ existe, achado
+   * pelo campo `codigo_mestre` (ver ESTASUBS.dbf, CARMESTRE/CARSUBST/NOMECAR).
+   */
+  tipoImportacao?: 'cadastro' | 'veiculos_extra';
 };
 
 export const DESTINOS: Record<string, Destino> = {
@@ -24,7 +30,10 @@ export const DESTINOS: Record<string, Destino> = {
     rotulo: 'Mensalistas',
     tabela: 'mensalistas',
     colunas: [
-      { campo: 'codigo', rotulo: 'Código', obrigatorio: true, palpites: ['VEICULO', 'NOMECAR', 'CODIGO'] },
+      // NOMECAR não entra aqui: no ESTAEMPR o código do mensalista é o VEICULO
+      // (a placa do carro principal dele); NOMECAR é campo do ESTASUBS (modelo
+      // de um veículo extra) — ver destino mensalista_veiculos_extra abaixo.
+      { campo: 'codigo', rotulo: 'Código (= placa do veículo principal)', obrigatorio: true, palpites: ['VEICULO', 'CODIGO'] },
       { campo: 'razao', rotulo: 'Nome', obrigatorio: true, palpites: ['RAZAO', 'NOME'] },
       { campo: 'tipo_mens', rotulo: 'Tipo (I/P/H)', palpites: ['TIPOMENS'], padrao: 'I' },
       { campo: 'cpf_cnpj', rotulo: 'CPF/CNPJ', palpites: ['CPF', 'CGC', 'CNPJ'] },
@@ -54,11 +63,19 @@ export const DESTINOS: Record<string, Destino> = {
       { campo: 'hora_extra', rotulo: 'Hora extra', tipo: 'bool', palpites: ['HORAEXTRA'], padrao: false },
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
     ],
-    placas: [
-      // "VEICULO" (sem sufixo) é o código do mensalista (mapeado acima), não uma placa.
-      { campo: 'placa1', rotulo: 'Placa 1', palpites: ['PLACA', 'PLACA1'] },
-      { campo: 'placa2', rotulo: 'Placa 2', palpites: ['VEICULO1', 'PLACA2'] },
-      { campo: 'placa3', rotulo: 'Placa 3', palpites: ['VEICULO2', 'PLACA3'] },
+  },
+  // ESTASUBS.dbf: 1 linha por veículo além do principal (sem o limite de
+  // 2 placas inline do ESTAEMPR). CARMESTRE liga ao mensalista pelo código
+  // dele (o veículo principal — ver `mensalistas.codigo` acima); o mensalista
+  // já precisa existir, então importar ESTAEMPR antes deste.
+  mensalista_veiculos_extra: {
+    rotulo: 'Veículos extras dos mensalistas (ESTASUBS)',
+    tabela: 'mensalista_veiculos',
+    tipoImportacao: 'veiculos_extra',
+    colunas: [
+      { campo: 'codigo_mestre', rotulo: 'Código do mensalista (carro mestre)', obrigatorio: true, palpites: ['CARMESTRE'] },
+      { campo: 'placa', rotulo: 'Placa', obrigatorio: true, palpites: ['CARSUBST'] },
+      { campo: 'modelo', rotulo: 'Modelo', palpites: ['NOMECAR'] },
     ],
   },
   modelos_veiculo: {
@@ -70,7 +87,6 @@ export const DESTINOS: Record<string, Destino> = {
       { campo: 'tabela_tipo', rotulo: 'Tabela padrão', palpites: ['TABELA'] },
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
     ],
-    placas: [],
   },
   formas_pagamento: {
     rotulo: 'Formas de pagamento',
@@ -83,7 +99,6 @@ export const DESTINOS: Record<string, Destino> = {
       { campo: 'rps_sempre', rotulo: 'Sempre gera RPS/NFS-e', tipo: 'bool', palpites: ['RPSSEMPRE'], padrao: false },
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
     ],
-    placas: [],
   },
 };
 

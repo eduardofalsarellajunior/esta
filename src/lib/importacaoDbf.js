@@ -12,26 +12,32 @@ function emLotes(array, tamanho) {
   return lotes;
 }
 
-/**
- * `linhas`: já convertidas pelas colunas de destino (ver packages/dbf/mapeamento.ts
- * `converterLinha`), uma por registro do .dbf. `placasPorLinha` (só mensalistas):
- * array paralelo a `linhas`, cada item uma lista de placas (strings) daquele
- * mensalista, já extraídas dos campos placa1/placa2/placa3 mapeados.
- */
-export async function importarDestino({ perfil, destino, colunas, linhas, placasPorLinha }) {
-  const resultado = { criados: 0, ignorados: 0, erros: [] };
-
-  // Linhas sem os campos obrigatórios (ex.: código ou nome vazios) nem tentam ir pro banco.
+/** Linhas sem os campos obrigatórios nem tentam ir pro banco. */
+function separarValidas(colunas, linhas) {
   const obrigatorias = colunas.filter((c) => c.obrigatorio).map((c) => c.campo);
   const validas = [];
+  const erros = [];
   linhas.forEach((linha, i) => {
     const faltando = obrigatorias.filter((campo) => linha[campo] == null || linha[campo] === '');
-    if (faltando.length) {
-      resultado.erros.push({ linha: i + 1, motivo: `Sem ${faltando.join(', ')} — linha ignorada.` });
-      return;
-    }
-    validas.push({ linha, placas: placasPorLinha?.[i] || [] });
+    if (faltando.length) erros.push({ linha: i + 1, motivo: `Sem ${faltando.join(', ')} — linha ignorada.` });
+    else validas.push(linha);
   });
+  return { validas, erros };
+}
+
+/**
+ * Importação "de cadastro": cria registro novo em `destino.tabela` por linha,
+ * ignorando código já existente. `linhas`: já convertidas pelas colunas de
+ * destino (ver packages/dbf/mapeamento.ts `converterLinha`).
+ *
+ * `codigoEhPlacaPrincipal` (só importa pra mensalistas): no ESTAEMPR do
+ * legado, o "código" do mensalista É a placa do veículo principal dele — sem
+ * cadastrar esse veículo em `mensalista_veiculos`, o mensalista não seria
+ * reconhecido entrando no pátio com o carro principal (só com os extras).
+ */
+export async function importarDestino({ perfil, destino, colunas, linhas, codigoEhPlacaPrincipal = false }) {
+  const { validas, erros } = separarValidas(colunas, linhas);
+  const resultado = { criados: 0, ignorados: 0, erros };
 
   const { data: existentesData, error: errExistentes } = await supabase
     .from(destino.tabela).select('codigo').eq('filial_id', perfil.filial_id);
@@ -39,53 +45,91 @@ export async function importarDestino({ perfil, destino, colunas, linhas, placas
   const codigosExistentes = new Set((existentesData || []).map((r) => r.codigo));
 
   const novas = [];
-  for (const { linha, placas } of validas) {
+  for (const linha of validas) {
     if (codigosExistentes.has(linha.codigo)) { resultado.ignorados++; continue; }
-    novas.push({ linha, placas });
+    novas.push(linha);
     codigosExistentes.add(linha.codigo); // protege contra códigos duplicados dentro do próprio arquivo
   }
 
   for (const lote of emLotes(novas, TAMANHO_LOTE)) {
-    const payload = lote.map(({ linha }) => ({ ...linha, filial_id: perfil.filial_id }));
+    const payload = lote.map((linha) => ({ ...linha, filial_id: perfil.filial_id }));
     const { data: inseridos, error } = await supabase.from(destino.tabela).insert(payload).select('id, codigo');
     if (error) {
-      lote.forEach(({ linha }) => resultado.erros.push({ linha: linha.codigo, motivo: error.message }));
+      lote.forEach((linha) => resultado.erros.push({ linha: linha.codigo, motivo: error.message }));
       continue;
     }
     resultado.criados += inseridos.length;
 
-    if (destino.tabela === 'mensalistas') {
-      await importarPlacas({ perfil, lote, inseridos, resultado });
+    if (destino.tabela === 'mensalistas' && codigoEhPlacaPrincipal) {
+      await importarVeiculoPrincipal({ perfil, inseridos, resultado });
     }
   }
 
   return resultado;
 }
 
-async function importarPlacas({ perfil, lote, inseridos, resultado }) {
-  const idPorCodigo = new Map(inseridos.map((r) => [r.codigo, r.id]));
-  const candidatas = [];
-  for (const { linha, placas } of lote) {
-    const mensalistaId = idPorCodigo.get(linha.codigo);
-    if (!mensalistaId) continue;
-    for (const placa of placas) {
-      const p = String(placa || '').trim().toUpperCase();
-      if (p) candidatas.push({ mensalista_id: mensalistaId, placa: p });
-    }
-  }
+/** Cadastra o próprio código do mensalista (= placa do veículo principal) em mensalista_veiculos. */
+async function importarVeiculoPrincipal({ perfil, inseridos, resultado }) {
+  const candidatas = inseridos
+    .map((r) => ({ mensalista_id: r.id, placa: String(r.codigo || '').trim().toUpperCase() }))
+    .filter((c) => c.placa);
   if (!candidatas.length) return;
 
   const { data: jaExistem } = await supabase.from('mensalista_veiculos').select('placa').eq('filial_id', perfil.filial_id);
   const placasExistentes = new Set((jaExistem || []).map((r) => r.placa));
 
-  const novas = candidatas.filter((c) => {
-    if (placasExistentes.has(c.placa)) { resultado.erros.push({ linha: c.placa, motivo: 'Placa já cadastrada (nesta ou noutra filial) — não importada.' }); return false; }
+  const payload = [];
+  for (const c of candidatas) {
+    if (placasExistentes.has(c.placa)) {
+      resultado.erros.push({ linha: c.placa, motivo: 'Veículo principal: placa já cadastrada (nesta ou noutra filial) — cadastre manualmente se for o caso.' });
+      continue;
+    }
     placasExistentes.add(c.placa);
-    return true;
-  });
-  if (!novas.length) return;
+    payload.push({ filial_id: perfil.filial_id, mensalista_id: c.mensalista_id, placa: c.placa });
+  }
+  if (!payload.length) return;
 
-  const payload = novas.map((c) => ({ filial_id: perfil.filial_id, mensalista_id: c.mensalista_id, placa: c.placa }));
   const { error } = await supabase.from('mensalista_veiculos').insert(payload);
-  if (error) resultado.erros.push({ linha: 0, motivo: `Placas: ${error.message}` });
+  if (error) resultado.erros.push({ linha: 0, motivo: `Veículo principal: ${error.message}` });
+}
+
+/**
+ * Importação "veículos extra" (ESTASUBS): não cria mensalista — cada linha
+ * vira um veículo de um mensalista que JÁ existe, achado por `codigo_mestre`
+ * (CARMESTRE, o código/placa principal dele). Sem o mensalista já cadastrado,
+ * a linha vira erro (não tem onde pendurar o veículo).
+ */
+export async function importarVeiculosExtras({ perfil, linhas, colunas }) {
+  const { validas, erros } = separarValidas(colunas, linhas);
+  const resultado = { criados: 0, ignorados: 0, erros };
+  if (!validas.length) return resultado;
+
+  const { data: mensalistasData, error: errMens } = await supabase
+    .from('mensalistas').select('id, codigo').eq('filial_id', perfil.filial_id);
+  if (errMens) { resultado.erros.push({ linha: 0, motivo: `Erro ao consultar mensalistas: ${errMens.message}` }); return resultado; }
+  const idPorCodigo = new Map((mensalistasData || []).map((m) => [m.codigo, m.id]));
+
+  const { data: jaExistem } = await supabase.from('mensalista_veiculos').select('placa').eq('filial_id', perfil.filial_id);
+  const placasExistentes = new Set((jaExistem || []).map((r) => r.placa));
+
+  const payload = [];
+  for (const linha of validas) {
+    const p = String(linha.placa || '').trim().toUpperCase();
+    const mensalistaId = idPorCodigo.get(linha.codigo_mestre);
+    if (!mensalistaId) {
+      resultado.erros.push({ linha: linha.codigo_mestre, motivo: `Mensalista "${linha.codigo_mestre}" não encontrado — importe os mensalistas (ESTAEMPR) primeiro.` });
+      continue;
+    }
+    if (placasExistentes.has(p)) { resultado.ignorados++; continue; }
+    placasExistentes.add(p);
+    payload.push({ filial_id: perfil.filial_id, mensalista_id: mensalistaId, placa: p, modelo: linha.modelo || null });
+  }
+
+  for (const lote of emLotes(payload, TAMANHO_LOTE)) {
+    const { error } = await supabase.from('mensalista_veiculos').insert(lote);
+    if (error) { lote.forEach((l) => resultado.erros.push({ linha: l.placa, motivo: error.message })); continue; }
+    resultado.criados += lote.length;
+  }
+
+  return resultado;
 }

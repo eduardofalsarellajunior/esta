@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { lerDbf } from '../../packages/dbf/dbf.ts';
 import { DESTINOS, sugerirMapeamento, converterLinha } from '../../packages/dbf/mapeamento.ts';
-import { importarDestino } from '../lib/importacaoDbf.js';
+import { importarDestino, importarVeiculosExtras } from '../lib/importacaoDbf.js';
 
 const LIMITE_PREVIA = 5;
 
@@ -13,12 +13,13 @@ export default function ImportarDbf({ perfil }) {
   const [destino, setDestino] = useState('mensalistas');
   const [dbf, setDbf] = useState(null); // { nomeArquivo, campos, registros }
   const [mapeamento, setMapeamento] = useState({});
-  const [mapeamentoPlacas, setMapeamentoPlacas] = useState({});
+  const [codigoEhPlacaPrincipal, setCodigoEhPlacaPrincipal] = useState(true);
   const [erro, setErro] = useState('');
   const [importando, setImportando] = useState(false);
   const [resultado, setResultado] = useState(null);
 
   const destinoAtual = DESTINOS[destino];
+  const ehVeiculosExtra = destinoAtual.tipoImportacao === 'veiculos_extra';
 
   function mudarDestino(novo) {
     setDestino(novo);
@@ -26,7 +27,6 @@ export default function ImportarDbf({ perfil }) {
     if (dbf) {
       const nomes = dbf.campos.map((c) => c.nome);
       setMapeamento(sugerirMapeamento(DESTINOS[novo].colunas, nomes));
-      setMapeamentoPlacas(sugerirMapeamento(DESTINOS[novo].placas, nomes));
     }
   }
 
@@ -41,7 +41,6 @@ export default function ImportarDbf({ perfil }) {
       const nomes = campos.map((c) => c.nome);
       setDbf({ nomeArquivo: file.name, campos, registros });
       setMapeamento(sugerirMapeamento(destinoAtual.colunas, nomes));
-      setMapeamentoPlacas(sugerirMapeamento(destinoAtual.placas, nomes));
     } catch (err) {
       setErro(`Não foi possível ler esse arquivo como .dbf: ${err.message}`);
       setDbf(null);
@@ -58,12 +57,12 @@ export default function ImportarDbf({ perfil }) {
     setImportando(true); setErro(''); setResultado(null);
     try {
       const linhas = dbf.registros.map((r) => converterLinha(r, destinoAtual.colunas, mapeamento));
-      const placasPorLinha = destinoAtual.placas.length
-        ? dbf.registros.map((r) => destinoAtual.placas
-            .map((p) => (mapeamentoPlacas[p.campo] ? r[mapeamentoPlacas[p.campo]] : null))
-            .filter(Boolean))
-        : undefined;
-      const res = await importarDestino({ perfil, destino: destinoAtual, colunas: destinoAtual.colunas, linhas, placasPorLinha });
+      const res = ehVeiculosExtra
+        ? await importarVeiculosExtras({ perfil, linhas, colunas: destinoAtual.colunas })
+        : await importarDestino({
+            perfil, destino: destinoAtual, colunas: destinoAtual.colunas, linhas,
+            codigoEhPlacaPrincipal: destino === 'mensalistas' && codigoEhPlacaPrincipal,
+          });
       setResultado(res);
     } catch (err) {
       setErro(err.message);
@@ -93,6 +92,25 @@ export default function ImportarDbf({ perfil }) {
             <input type="file" accept=".dbf" onChange={onArquivo} />
           </div>
         </div>
+        {destino === 'mensalistas' && (
+          <label className="campo-check" style={{ marginTop: 10 }}>
+            <input type="checkbox" checked={codigoEhPlacaPrincipal}
+              onChange={(e) => setCodigoEhPlacaPrincipal(e.target.checked)} />
+            O código é a placa do veículo principal — cadastrar esse veículo também
+          </label>
+        )}
+        {destino === 'mensalistas' && codigoEhPlacaPrincipal && (
+          <p className="suave" style={{ fontSize: 12 }}>
+            Comum no ESTAEMPR do legado (campo VEICULO). Sem isso, o mensalista só seria
+            reconhecido na entrada do pátio com os veículos extras — não com o principal.
+          </p>
+        )}
+        {ehVeiculosExtra && (
+          <p className="suave" style={{ fontSize: 12, marginTop: 10 }}>
+            Cada linha vira um veículo de um mensalista que já existe (achado pelo código
+            dele) — importe os Mensalistas primeiro. Corresponde ao ESTASUBS.dbf do legado.
+          </p>
+        )}
         {erro && <div className="aviso" style={{ marginTop: 10 }}>{erro}</div>}
         {dbf && (
           <p className="suave" style={{ marginTop: 10 }}>
@@ -117,17 +135,6 @@ export default function ImportarDbf({ perfil }) {
                     <td>{c.rotulo}{c.obrigatorio ? ' *' : ''}</td>
                     <td>
                       <select value={mapeamento[c.campo] ?? ''} onChange={(e) => setMapeamento((m) => ({ ...m, [c.campo]: e.target.value || null }))}>
-                        <option value="">— não importar —</option>
-                        {dbf.campos.map((f) => <option key={f.nome} value={f.nome}>{f.nome} ({f.tipo}, {f.tamanho})</option>)}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-                {destinoAtual.placas.map((c) => (
-                  <tr key={c.campo}>
-                    <td>{c.rotulo} <span className="suave">(placa do veículo)</span></td>
-                    <td>
-                      <select value={mapeamentoPlacas[c.campo] ?? ''} onChange={(e) => setMapeamentoPlacas((m) => ({ ...m, [c.campo]: e.target.value || null }))}>
                         <option value="">— não importar —</option>
                         {dbf.campos.map((f) => <option key={f.nome} value={f.nome}>{f.nome} ({f.tipo}, {f.tamanho})</option>)}
                       </select>
@@ -163,7 +170,10 @@ export default function ImportarDbf({ perfil }) {
       {resultado && (
         <div className="card">
           <h2>Resultado</h2>
-          <p><strong>{resultado.criados}</strong> criado(s), <strong>{resultado.ignorados}</strong> ignorado(s) (código já existia).</p>
+          <p>
+            <strong>{resultado.criados}</strong> criado(s), <strong>{resultado.ignorados}</strong> ignorado(s)
+            {' '}({ehVeiculosExtra ? 'placa já cadastrada' : 'código já existia'}).
+          </p>
           {resultado.erros.length > 0 && (
             <>
               <p className="aviso">{resultado.erros.length} problema(s):</p>

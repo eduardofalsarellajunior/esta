@@ -194,7 +194,7 @@ comment on table convenios is 'Convênios e vales (ESTACONV). Regras de desconto
 create table mensalistas (
   id            uuid primary key default gen_random_uuid(),
   filial_id     uuid not null references filiais (id),
-  codigo        text not null,          -- NOMECAR (chave legada)
+  codigo        text not null,          -- VEICULO no legado (placa do veículo principal, dobra de código)
   razao         text not null,
   tipo_mens     char(1) not null default 'I', -- TIPOMENS (I/P/H...)
   convenio_id   uuid references convenios (id),
