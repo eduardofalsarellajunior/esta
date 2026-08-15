@@ -197,12 +197,17 @@ export default function Patio({ perfil }) {
     }
 
     // Vagas contratadas já ocupadas por OUTROS veículos dele? Entra como avulso.
+    // Só conta quem está de fato usando a vaga como mensalista (I/P/H) — um
+    // carro irmão que entrou avulso (por vaga esgotada, vencimento, restrição
+    // de horário…) não "toma" a vaga; senão, uma vez que um deles caísse pra
+    // avulso, a vaga ficaria travada mesmo depois do titular sair.
     const { data: veiculosDele } = await supabase.from('mensalista_veiculos').select('placa').eq('mensalista_id', m.id);
     const outrasPlacas = (veiculosDele || []).map((v) => v.placa).filter((pl) => pl !== p);
     let ocupadas = 0;
     if (outrasPlacas.length) {
       const { count } = await supabase.from('movimentos')
-        .select('id', { count: 'exact', head: true }).in('placa', outrasPlacas).is('dt_saida', null).is('excluido_em', null);
+        .select('id', { count: 'exact', head: true }).in('placa', outrasPlacas).in('tipo_mens', [...MENSALISTA])
+        .is('dt_saida', null).is('excluido_em', null);
       ocupadas = count || 0;
     }
     if (ocupadas >= (m.qte_vagas || 1)) {
