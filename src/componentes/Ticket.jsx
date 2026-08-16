@@ -106,11 +106,28 @@ export function linkWhatsApp(ticket, celular, filial) {
  *
  * `perfil` (opcional): sem ele, "Imprimir na cabine" não aparece — só quem
  * chama de dentro do app logado tem perfil pra saber a filial do pedido.
+ *
+ * `placa` (opcional): quando informada (junto com `perfil`), o celular
+ * digitado é salvo em `clientes.telefone` ao mandar pelo WhatsApp de
+ * verdade — próxima entrada/saída da mesma placa já vem preenchido.
  */
-export function TicketModal({ ticket, filial, perfil, celular, onCelular, onFechar }) {
+export function TicketModal({ ticket, filial, perfil, celular, placa, onCelular, onFechar }) {
   const [impressoraBt, setImpressoraBt] = useState(null);
   const [statusBt, setStatusBt] = useState('');
   const [statusCabine, setStatusCabine] = useState('');
+
+  async function salvarCelularDoCliente() {
+    if (!placa || !perfil || !celular?.trim()) return;
+    try {
+      const p = placa.trim().toUpperCase();
+      const { data: c } = await supabase.from('clientes').select('id, telefone').eq('placa', p).maybeSingle();
+      if (c) {
+        if (c.telefone !== celular) await supabase.from('clientes').update({ telefone: celular }).eq('id', c.id);
+      } else {
+        await supabase.from('clientes').insert({ filial_id: perfil.filial_id, placa: p, telefone: celular });
+      }
+    } catch { /* best-effort, não trava o envio */ }
+  }
 
   // Sem BLE em iPhone/Safari (Apple bloqueia por completo) e só faz sentido
   // pra ticket que já tem o mapa de dados montado (ver comModelo() em
@@ -159,13 +176,13 @@ export function TicketModal({ ticket, filial, perfil, celular, onCelular, onFech
       // RPS/Bluetooth/cabine continuam abertos: costumam ser usados JUNTO com
       // o Imprimir principal, não no lugar dele.
       if (tecla === 'f' || tecla === 'escape') { e.preventDefault(); onFechar(); }
-      else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); onFechar(); }
+      else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); salvarCelularDoCliente(); onFechar(); }
       else if (tecla === 'i') { e.preventDefault(); imprimirTicket(ticket, filial); onFechar(); }
       else if (tecla === 'r' && ticket.ticketRps) { e.preventDefault(); imprimirTicket(ticket.ticketRps, filial); }
     }
     document.addEventListener('keydown', aoTeclar);
     return () => document.removeEventListener('keydown', aoTeclar);
-  }, [ticket, filial, celular, onFechar]);
+  }, [ticket, filial, celular, placa, perfil, onFechar]);
 
   // Desconecta a impressora Bluetooth ao fechar o modal — não faz sentido
   // manter o rádio conectado depois que o comprovante já foi embora.
@@ -209,7 +226,7 @@ export function TicketModal({ ticket, filial, perfil, celular, onCelular, onFech
           {/* Não previne o clique nativo do link — só encadeia o fechamento
               junto (a nova aba do WhatsApp abre independente do modal). */}
           <a className="btn-ghost" href={linkWhatsApp(ticket, celular, filial)} target="_blank" rel="noopener noreferrer"
-            onClick={onFechar}>
+            onClick={() => { salvarCelularDoCliente(); onFechar(); }}>
             Enviar por <u>W</u>hatsApp
           </a>
           {/* Nota fiscal gerada junto com este comprovante: imprime na sequência,

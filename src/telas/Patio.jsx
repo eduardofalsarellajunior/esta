@@ -49,6 +49,7 @@ export default function Patio({ perfil }) {
   const [confirmPlaca, setConfirmPlaca] = useState(null); // placa digitada, fora do formato esperado
   const [ticket, setTicket] = useState(null); // { titulo, linhas: [[rotulo, valor], ...] }
   const [celularTicket, setCelularTicket] = useState('');
+  const [placaTicket, setPlacaTicket] = useState(''); // placa do ticket atual — pra TicketModal saber onde salvar o celular
   const [filial, setFilial] = useState(null); // dados do estabelecimento — cabeçalho/tokens do ticket
   const [modelosTicket, setModelosTicket] = useState({}); // tipo -> layout com tokens (vazio = layout fixo)
   const [saidasRecentes, setSaidasRecentes] = useState([]);
@@ -358,6 +359,7 @@ export default function Patio({ perfil }) {
     // respeita a preferência de não parar na tela do ticket.
     if (MENSALISTA.has(tipoMensFinal) && !imprimeTicketMensalista) {
       setCelularTicket('');
+      setPlacaTicket('');
       limparFormEntrada();
       recarregar();
       focarPlaca(); // sem ticket pra fechar, ninguém mais devolve o foco à placa
@@ -377,7 +379,8 @@ export default function Patio({ perfil }) {
       ...dadosMovimento({ movimento: novo, operador: perfil.nome }),
       MENSALISTA: nomeMensalista,
     }));
-    setCelularTicket('');
+    setPlacaTicket(novo?.placa || p);
+    setCelularTicket(await celularSalvo(novo?.placa || p));
     limparFormEntrada();
     recarregar();
   }
@@ -543,6 +546,7 @@ export default function Patio({ perfil }) {
       ],
     });
     setCelularTicket('');
+    setPlacaTicket('');
     setModalExclusao(null);
     recarregar();
   }
@@ -562,6 +566,7 @@ export default function Patio({ perfil }) {
       ],
     });
     setCelularTicket('');
+    setPlacaTicket('');
   }
 
   function calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados) {
@@ -836,7 +841,8 @@ export default function Patio({ perfil }) {
     // fora do horário/vencido) sempre vê o comprovante, é dinheiro de verdade.
     if (!(resultado.mensalista && !imprimeTicketMensalista)) {
       setTicket({ ...ticketSaida, ticketRps });
-      setCelularTicket('');
+      setPlacaTicket(mov.placa);
+      setCelularTicket(await celularSalvo(mov.placa));
     }
     setSaindo(null); recarregar();
     if (resultado.mensalista && !imprimeTicketMensalista) focarPlaca(); // sem ticket pra fechar, idem
@@ -876,7 +882,8 @@ export default function Patio({ perfil }) {
       }),
       MOEDA: formaTexto,
     }));
-    setCelularTicket('');
+    setPlacaTicket(mov.placa);
+    setCelularTicket(await celularSalvo(mov.placa));
   }
 
   /**
@@ -884,7 +891,7 @@ export default function Patio({ perfil }) {
    * ainda está no pátio. O modelo padrão traz o termo de retirada com
    * assinatura, como no TICKET2 do sistema antigo.
    */
-  function segundaVia(mov) {
+  async function segundaVia(mov) {
     setTicket(comModelo('segunda_via', {
       titulo: 'Ticket de entrada (2ª via)',
       linhas: [
@@ -896,7 +903,21 @@ export default function Patio({ perfil }) {
         ['Reimpresso por', perfil.nome],
       ],
     }, dadosMovimento({ movimento: mov, operador: perfil.nome })));
-    setCelularTicket('');
+    setPlacaTicket(mov.placa);
+    setCelularTicket(await celularSalvo(mov.placa));
+  }
+
+  /**
+   * Celular salvo pra essa placa (cadastro em `clientes`, o mesmo da
+   * fidelidade) — pra pré-preencher o campo de WhatsApp em vez de vir em
+   * branco de novo a cada entrada/saída do mesmo carro.
+   */
+  async function celularSalvo(placa) {
+    try {
+      const { data } = await supabase.from('clientes').select('telefone')
+        .eq('placa', placa.trim().toUpperCase()).maybeSingle();
+      return data?.telefone || '';
+    } catch { return ''; }
   }
 
   async function atualizarFidelidade(placa, pontos) {
@@ -1176,7 +1197,7 @@ export default function Patio({ perfil }) {
       )}
 
       {ticket && (
-        <TicketModal ticket={ticket} filial={filial} perfil={perfil} celular={celularTicket}
+        <TicketModal ticket={ticket} filial={filial} perfil={perfil} celular={celularTicket} placa={placaTicket}
           onCelular={setCelularTicket} onFechar={() => { setTicket(null); focarPlaca(); }} />
       )}
 
