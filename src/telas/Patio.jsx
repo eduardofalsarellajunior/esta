@@ -581,9 +581,13 @@ export default function Patio({ perfil }) {
     // cobraria os dois juntos — mas a regra é sempre "em vez da tabela do
     // veículo", nunca além dela (ver texto do modal de Serviços).
     const soServicoComValor = comValor.length > 0 && semValor.length === 0;
+    // Soma nos dois: valorProporcional (o "cheio") e valor (o cobrado) andam
+    // juntos aqui, sem desconto de convênio — sem isso o BI via a diferença
+    // entre os dois como se fosse desconto de convênio, o que não é.
     const comSomaServicos = (resultado) => ({
       ...resultado,
-      ...(soServicoComValor ? { valorProporcional: 0, valorConvenio: 0, manual: false, pedeValor: false } : {}),
+      ...(soServicoComValor ? { valorConvenio: 0, manual: false, pedeValor: false } : {}),
+      valorProporcional: Math.round(((soServicoComValor ? 0 : resultado.valorProporcional) + somaServicosComValor) * 100) / 100,
       valor: Math.round(((soServicoComValor ? 0 : resultado.valor) + somaServicosComValor) * 100) / 100,
     });
 
@@ -676,7 +680,16 @@ export default function Patio({ perfil }) {
     setSaindo((s) => ({
       ...s,
       ...(modalValor.obrigatorio ? {} : { valorCalculado: s.valorCalculado ?? s.resultado.valor }),
-      resultado: { ...s.resultado, valor: novo, pedeValor: false },
+      resultado: {
+        ...s.resultado,
+        valor: novo,
+        // "Pede valor" não tinha cálculo nenhum — o "cheio" é o que foi
+        // digitado. "Alterar valor" só sobe o cheio se o novo valor passar
+        // do que a tabela tinha calculado (senão o BI mostraria desconto
+        // negativo — Faturamento nunca pode ficar abaixo do que foi cobrado).
+        valorProporcional: modalValor.obrigatorio ? novo : Math.max(s.resultado.valorProporcional, novo),
+        pedeValor: false,
+      },
       pagamentos: [{ forma: s.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D', valor: novo }],
     }));
     setModalValor(null);

@@ -18,11 +18,12 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
 
   const kpis = [
     ['Saídas', dados.totalVeic],
-    ['Faturamento', fmtBRL(dados.faturamento)],
+    ['Faturamento (valor cheio)', fmtBRL(dados.faturamento)],
+    ['Serviços', fmtBRL(dados.valorServicos)],
     ['Descontos (conv.)', fmtBRL(dados.descontos)],
     ['Tempo médio', fmtHora(dados.tempoMedio)],
     ['Mensalidades recebidas', `${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`],
-    ['Total recebido (saídas + mensalidades)', fmtBRL(dados.faturamento + dados.mensalidadesTotal)],
+    ['Total recebido (faturamento − descontos + mensalidades)', fmtBRL(dados.recebidoSaidas + dados.mensalidadesTotal)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
   const porTipo = Object.entries(dados.porTipo)
@@ -49,7 +50,7 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
   const veiculosHtml = veiculosDetalhe != null ? `
       <h2>Veículos (${veiculosDetalhe.length})</h2>
       <table><thead><tr>
-        <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th><th>Tempo</th><th>Pagto</th><th>Valor</th><th>Status</th>
+        <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th><th>Tempo</th><th>Pagto</th><th>Valor</th><th>Desc. conv.</th><th>Status</th>
       </tr></thead><tbody>${veiculosDetalhe.map((v) => `<tr>
         <td>${escapeHtml(v.placa)}</td>
         <td>${escapeHtml(v.modelo || '—')}</td>
@@ -59,8 +60,9 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
         <td>${v.tempo != null ? escapeHtml(fmtHora(v.tempo)) : '—'}</td>
         <td>${escapeHtml(v.pagamento)}</td>
         <td>${v.cancelado ? '—' : escapeHtml(fmtBRL(v.valor) + (v.valorCalculado != null ? ' *' : ''))}</td>
+        <td>${v.cancelado || !v.descontoConvenio ? '—' : escapeHtml(fmtBRL(v.descontoConvenio))}</td>
         <td>${v.cancelado ? '<strong>Cancelado</strong>' : ''}</td>
-      </tr>`).join('') || '<tr><td colspan="9">Nenhum veículo no período.</td></tr>'}</tbody></table>${
+      </tr>`).join('') || '<tr><td colspan="10">Nenhum veículo no período.</td></tr>'}</tbody></table>${
         veiculosDetalhe.some((v) => v.valorCalculado != null)
           ? '<p style="font-size:11px">* valor alterado na saída (diferente do calculado pela tabela).</p>' : ''
       }` : '';
@@ -111,7 +113,8 @@ function textoRelatorio(dados, de, ate, filial) {
   linhas.push(`Período: ${de.split('-').reverse().join('/')} a ${ate.split('-').reverse().join('/')}`);
   linhas.push('');
   linhas.push(`Saídas: ${dados.totalVeic}`);
-  linhas.push(`Faturamento: ${fmtBRL(dados.faturamento)}`);
+  linhas.push(`Faturamento (valor cheio): ${fmtBRL(dados.faturamento)}`);
+  linhas.push(`Serviços: ${fmtBRL(dados.valorServicos)}`);
   linhas.push(`Descontos (conv.): ${fmtBRL(dados.descontos)}`);
   linhas.push(`Tempo médio: ${fmtHora(dados.tempoMedio)}`);
   linhas.push('');
@@ -134,7 +137,7 @@ function textoRelatorio(dados, de, ate, filial) {
   }
   if (!dados.mensalidades.length) linhas.push('  Nenhuma mensalidade recebida no período.');
   linhas.push('');
-  linhas.push(`Total recebido (saídas + mensalidades): ${fmtBRL(dados.faturamento + dados.mensalidadesTotal)}`);
+  linhas.push(`Total recebido (faturamento − descontos + mensalidades): ${fmtBRL(dados.recebidoSaidas + dados.mensalidadesTotal)}`);
   return linhas.join('\n');
 }
 
@@ -174,9 +177,15 @@ export default function BI({ perfil }) {
     if (errCanc) { setErro(errCanc.message); return; }
     const ids = movs.map((m) => m.id);
     let pagtos = [];
+    let movsComServico = new Set();
     if (ids.length) {
       const { data } = await supabase.from('movimento_pagamentos').select('*').in('movimento_id', ids);
       pagtos = data || [];
+      // Serviço sempre substitui a tabela do veículo (nunca soma às duas —
+      // ver Patio.jsx), então "quanto veio de serviço" é o valor inteiro dos
+      // movimentos com pelo menos um serviço marcado, não uma fração.
+      const { data: ms } = await supabase.from('movimento_servicos').select('movimento_id').in('movimento_id', ids);
+      movsComServico = new Set((ms || []).map((r) => r.movimento_id));
     }
     const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao');
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
@@ -189,11 +198,12 @@ export default function BI({ perfil }) {
     if (errMens) { setErro(errMens.message); return; }
 
     const porTipo = {};
-    let faturamento = 0, tabelaCheia = 0, minutosTotal = 0, saidasComTempo = 0;
+    let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, minutosTotal = 0, saidasComTempo = 0;
     for (const m of movs) {
       porTipo[m.tipo_mens] = (porTipo[m.tipo_mens] || 0) + 1;
-      faturamento += Number(m.valor || 0);
+      recebidoSaidas += Number(m.valor || 0);
       tabelaCheia += Number(m.valor_proporcional || 0);
+      if (movsComServico.has(m.id)) valorServicos += Number(m.valor || 0);
       if (m.hr_saida != null && m.hr_entrada != null) {
         const decorrido = horas({
           dtEntrada: dataDeISO(m.dt_entrada), entrada: Number(m.hr_entrada),
@@ -223,8 +233,13 @@ export default function BI({ perfil }) {
     const mensalidadesPorForma = {};
     for (const p of mensalidades) mensalidadesPorForma[p.forma] = (mensalidadesPorForma[p.forma] || 0) + p.valor;
 
+    // "Faturamento" é o valor cheio (antes do desconto de convênio) — o
+    // Eduardo confirmou que faturamento deve incluir o que o convênio
+    // descontou, não só o que sobrou pra receber. "Recebido de saídas" é o
+    // que efetivamente entra no caixa; a diferença é o desconto de convênio.
+    const descontos = tabelaCheia - recebidoSaidas;
     setDados({
-      totalVeic: movs.length, faturamento, tabelaCheia, descontos: tabelaCheia - faturamento,
+      totalVeic: movs.length, faturamento: tabelaCheia, recebidoSaidas, descontos, valorServicos,
       porTipo, porForma, porTipoCancelado, tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
       mensalidades, mensalidadesTotal, mensalidadesPorForma,
     });
@@ -233,6 +248,9 @@ export default function BI({ perfil }) {
       id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: m.tipo_veic,
       dt_entrada: m.dt_entrada, hr_entrada: m.hr_entrada, dt_saida: m.dt_saida, hr_saida: m.hr_saida,
       valor: Number(m.valor || 0),
+      // Desconto de convênio desta saída (0 quando não teve convênio, ou
+      // quando o operador alterou o valor manualmente — ver valorCalculado).
+      descontoConvenio: Math.max(0, Number(m.valor_proporcional || 0) - Number(m.valor || 0)),
       // Null quando o valor cobrado é o que o motor calculou; preenchido com o
       // valor original quando o operador alterou na saída (vira "*" na lista).
       valorCalculado: m.valor_calculado != null ? Number(m.valor_calculado) : null,
@@ -288,11 +306,15 @@ export default function BI({ perfil }) {
           <div className="kpis">
             <Kpi rotulo="Saídas" valor={dados.totalVeic} />
             <Kpi rotulo="Faturamento" valor={fmtBRL(dados.faturamento)} destaque />
+            <Kpi rotulo="Serviços" valor={fmtBRL(dados.valorServicos)} />
             <Kpi rotulo="Descontos (conv.)" valor={fmtBRL(dados.descontos)} />
             <Kpi rotulo="Tempo médio" valor={fmtHora(dados.tempoMedio)} />
             <Kpi rotulo="Mensalidades" valor={fmtBRL(dados.mensalidadesTotal)} />
-            <Kpi rotulo="Total recebido" valor={fmtBRL(dados.faturamento + dados.mensalidadesTotal)} />
+            <Kpi rotulo="Total recebido" valor={fmtBRL(dados.recebidoSaidas + dados.mensalidadesTotal)} />
           </div>
+          <p className="suave" style={{ marginTop: -4 }}>
+            Faturamento é o valor cheio da tabela (antes do desconto de convênio); Total recebido já desconta.
+          </p>
 
           <div className="card">
             <h2>Por tipo</h2>
@@ -365,7 +387,7 @@ export default function BI({ perfil }) {
                 <table>
                   <thead><tr>
                     <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th>
-                    <th>Tempo</th><th>Pagamento</th><th>Valor</th><th>Status</th>
+                    <th>Tempo</th><th>Pagamento</th><th>Valor</th><th>Desc. convênio</th><th>Status</th>
                   </tr></thead>
                   <tbody>
                     {veiculos.map((v) => (
@@ -387,10 +409,11 @@ export default function BI({ perfil }) {
                             </>
                           )}
                         </td>
+                        <td>{v.cancelado || !v.descontoConvenio ? '—' : fmtBRL(v.descontoConvenio)}</td>
                         <td>{v.cancelado && <span className="status status-cancelada">Cancelado</span>}</td>
                       </tr>
                     ))}
-                    {veiculos.length === 0 && <tr><td colSpan={9} className="suave">Nenhum veículo no período.</td></tr>}
+                    {veiculos.length === 0 && <tr><td colSpan={10} className="suave">Nenhum veículo no período.</td></tr>}
                   </tbody>
                 </table>
               </div>
