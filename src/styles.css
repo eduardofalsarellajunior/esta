@@ -81,8 +81,9 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 
 /* auto-fill (não auto-fit): mantém as colunas do tamanho normal quando a
    última linha tem menos itens, em vez de esticar o item sozinho pra
-   preencher a linha inteira — ficava desalinhado com a grade de cima. */
-.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+   preencher a linha inteira. minmax mais estreito (130px, não 160px) pra
+   os 7 KPIs do BI caberem numa linha só em telas normais de desktop. */
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .kpi { background: var(--panel); border: 1px solid var(--linha); border-radius: 10px; padding: 14px 16px; }
 .kpi.destaque { border-color: var(--ambar); }
 .kpi-rotulo { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--suave); }

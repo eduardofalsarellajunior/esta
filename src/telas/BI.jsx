@@ -23,7 +23,7 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     ['Descontos (conv.)', fmtBRL(dados.descontos)],
     ['Tempo médio', fmtHora(dados.tempoMedio)],
     ['Mensalidades recebidas', `${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`],
-    ['Faturado (avulso + convênio + serviços + mensalidades)', fmtBRL(dados.faturado)],
+    ['Faturado (avulso + desconto conv. + serviços + mensalidades)', fmtBRL(dados.faturado)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
   const porTipo = Object.entries(dados.porTipo)
@@ -137,7 +137,7 @@ function textoRelatorio(dados, de, ate, filial) {
   }
   if (!dados.mensalidades.length) linhas.push('  Nenhuma mensalidade recebida no período.');
   linhas.push('');
-  linhas.push(`Faturado (avulso + convênio + serviços + mensalidades): ${fmtBRL(dados.faturado)}`);
+  linhas.push(`Faturado (avulso + desconto conv. + serviços + mensalidades): ${fmtBRL(dados.faturado)}`);
   return linhas.join('\n');
 }
 
@@ -243,10 +243,11 @@ export default function BI({ perfil }) {
     for (const p of mensalidades) recebidoPorForma[p.forma] = (recebidoPorForma[p.forma] || 0) + p.valor;
 
     // "Descontos (conv.)" é o quanto o convênio tirou do valor cheio da
-    // tabela — informativo, não entra direto nos KPIs de Avulso/Faturado.
+    // tabela — entra na conta do Faturado (que é o valor cheio, sem
+    // desconto: Avulso + Descontos + Serviços + Mensalidades).
     const descontos = tabelaCheia - recebidoSaidas;
     setDados({
-      totalVeic: movs.length, valorAvulso, faturado: recebidoSaidas + mensalidadesTotal,
+      totalVeic: movs.length, valorAvulso, faturado: valorAvulso + descontos + valorServicos + mensalidadesTotal,
       recebidoSaidas, descontos, valorServicos,
       porTipo, porTipoCancelado, recebidoPorForma,
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
@@ -322,7 +323,7 @@ export default function BI({ perfil }) {
             <Kpi rotulo="Faturado" valor={fmtBRL(dados.faturado)} destaque />
           </div>
           <p className="suave" style={{ marginTop: -4 }}>
-            Faturado = avulso + convênio + serviços + mensalidades (tudo somado). Avulso já inclui o desconto do convênio.
+            Faturado = Avulso + Descontos (conv.) + Serviços + Mensalidades — o valor cheio, antes do desconto de convênio.
           </p>
 
           <div className="card">
