@@ -18,17 +18,17 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
 
   const kpis = [
     ['Saídas', dados.totalVeic],
-    ['Faturamento (valor cheio)', fmtBRL(dados.faturamento)],
+    ['Avulso', fmtBRL(dados.valorAvulso)],
     ['Serviços', fmtBRL(dados.valorServicos)],
     ['Descontos (conv.)', fmtBRL(dados.descontos)],
     ['Tempo médio', fmtHora(dados.tempoMedio)],
     ['Mensalidades recebidas', `${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`],
-    ['Total recebido (faturamento − descontos + mensalidades)', fmtBRL(dados.recebidoSaidas + dados.mensalidadesTotal)],
+    ['Faturado (avulso + convênio + serviços + mensalidades)', fmtBRL(dados.faturado)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
   const porTipo = Object.entries(dados.porTipo)
     .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
-  const porForma = Object.entries(dados.porForma)
+  const porForma = Object.entries(dados.recebidoPorForma)
     .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${escapeHtml(fmtBRL(v))}</td></tr>`).join('');
   const porTipoCancelado = Object.entries(dados.porTipoCancelado)
     .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
@@ -113,7 +113,7 @@ function textoRelatorio(dados, de, ate, filial) {
   linhas.push(`Período: ${de.split('-').reverse().join('/')} a ${ate.split('-').reverse().join('/')}`);
   linhas.push('');
   linhas.push(`Saídas: ${dados.totalVeic}`);
-  linhas.push(`Faturamento (valor cheio): ${fmtBRL(dados.faturamento)}`);
+  linhas.push(`Avulso: ${fmtBRL(dados.valorAvulso)}`);
   linhas.push(`Serviços: ${fmtBRL(dados.valorServicos)}`);
   linhas.push(`Descontos (conv.): ${fmtBRL(dados.descontos)}`);
   linhas.push(`Tempo médio: ${fmtHora(dados.tempoMedio)}`);
@@ -126,8 +126,8 @@ function textoRelatorio(dados, de, ate, filial) {
   if (cancelados.length) for (const [k, v] of cancelados) linhas.push(`  ${rotuloTipo(k)}: ${v}`);
   else linhas.push('  Nenhum cancelamento no período.');
   linhas.push('');
-  linhas.push('Por forma de pagamento:');
-  const formas = Object.entries(dados.porForma);
+  linhas.push('Recebido por forma de pagamento:');
+  const formas = Object.entries(dados.recebidoPorForma);
   if (formas.length) for (const [k, v] of formas) linhas.push(`  ${k}: ${fmtBRL(v)}`);
   else linhas.push('  Sem pagamentos no período.');
   linhas.push('');
@@ -137,7 +137,7 @@ function textoRelatorio(dados, de, ate, filial) {
   }
   if (!dados.mensalidades.length) linhas.push('  Nenhuma mensalidade recebida no período.');
   linhas.push('');
-  linhas.push(`Total recebido (faturamento − descontos + mensalidades): ${fmtBRL(dados.recebidoSaidas + dados.mensalidadesTotal)}`);
+  linhas.push(`Faturado (avulso + convênio + serviços + mensalidades): ${fmtBRL(dados.faturado)}`);
   return linhas.join('\n');
 }
 
@@ -198,12 +198,17 @@ export default function BI({ perfil }) {
     if (errMens) { setErro(errMens.message); return; }
 
     const porTipo = {};
-    let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, minutosTotal = 0, saidasComTempo = 0;
+    let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, valorAvulso = 0, minutosTotal = 0, saidasComTempo = 0;
     for (const m of movs) {
       porTipo[m.tipo_mens] = (porTipo[m.tipo_mens] || 0) + 1;
       recebidoSaidas += Number(m.valor || 0);
       tabelaCheia += Number(m.valor_proporcional || 0);
       if (movsComServico.has(m.id)) valorServicos += Number(m.valor || 0);
+      // Avulso: o carro que passa pela balança normal (com convênio ou sem —
+      // convênio é só um desconto em cima do avulso, não outra categoria).
+      // Fora daqui: mensalista/pacote/hóspede (0 nesta fase) e serviço (soma
+      // à parte, sempre substitui a tabela do veículo — ver Patio.jsx).
+      else if (!MENSALISTA.has(m.tipo_mens)) valorAvulso += Number(m.valor || 0);
       if (m.hr_saida != null && m.hr_entrada != null) {
         const decorrido = horas({
           dtEntrada: dataDeISO(m.dt_entrada), entrada: Number(m.hr_entrada),
@@ -230,18 +235,22 @@ export default function BI({ perfil }) {
       forma: descForma[p.forma_pagamento] || p.forma_pagamento,
     }));
     const mensalidadesTotal = mensalidades.reduce((s, p) => s + p.valor, 0);
-    const mensalidadesPorForma = {};
-    for (const p of mensalidades) mensalidadesPorForma[p.forma] = (mensalidadesPorForma[p.forma] || 0) + p.valor;
 
-    // "Faturamento" é o valor cheio (antes do desconto de convênio) — o
-    // Eduardo confirmou que faturamento deve incluir o que o convênio
-    // descontou, não só o que sobrou pra receber. "Recebido de saídas" é o
-    // que efetivamente entra no caixa; a diferença é o desconto de convênio.
+    // Recebido por forma de pagamento, somando saídas (avulso+convênio+
+    // serviço, via movimento_pagamentos) e mensalidades juntos — é o mesmo
+    // "soma tudo" do KPI Faturado, só que quebrado por forma.
+    const recebidoPorForma = { ...porForma };
+    for (const p of mensalidades) recebidoPorForma[p.forma] = (recebidoPorForma[p.forma] || 0) + p.valor;
+
+    // "Descontos (conv.)" é o quanto o convênio tirou do valor cheio da
+    // tabela — informativo, não entra direto nos KPIs de Avulso/Faturado.
     const descontos = tabelaCheia - recebidoSaidas;
     setDados({
-      totalVeic: movs.length, faturamento: tabelaCheia, recebidoSaidas, descontos, valorServicos,
-      porTipo, porForma, porTipoCancelado, tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
-      mensalidades, mensalidadesTotal, mensalidadesPorForma,
+      totalVeic: movs.length, valorAvulso, faturado: recebidoSaidas + mensalidadesTotal,
+      recebidoSaidas, descontos, valorServicos,
+      porTipo, porTipoCancelado, recebidoPorForma,
+      tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
+      mensalidades, mensalidadesTotal,
     });
 
     const detalheNormal = movs.map((m) => ({
@@ -305,15 +314,15 @@ export default function BI({ perfil }) {
         <>
           <div className="kpis">
             <Kpi rotulo="Saídas" valor={dados.totalVeic} />
-            <Kpi rotulo="Faturamento" valor={fmtBRL(dados.faturamento)} destaque />
+            <Kpi rotulo="Avulso" valor={fmtBRL(dados.valorAvulso)} />
             <Kpi rotulo="Serviços" valor={fmtBRL(dados.valorServicos)} />
             <Kpi rotulo="Descontos (conv.)" valor={fmtBRL(dados.descontos)} />
             <Kpi rotulo="Tempo médio" valor={fmtHora(dados.tempoMedio)} />
             <Kpi rotulo="Mensalidades" valor={fmtBRL(dados.mensalidadesTotal)} />
-            <Kpi rotulo="Total recebido" valor={fmtBRL(dados.recebidoSaidas + dados.mensalidadesTotal)} />
+            <Kpi rotulo="Faturado" valor={fmtBRL(dados.faturado)} destaque />
           </div>
           <p className="suave" style={{ marginTop: -4 }}>
-            Faturamento é o valor cheio da tabela (antes do desconto de convênio); Total recebido já desconta.
+            Faturado = avulso + convênio + serviços + mensalidades (tudo somado). Avulso já inclui o desconto do convênio.
           </p>
 
           <div className="card">
@@ -336,12 +345,13 @@ export default function BI({ perfil }) {
           </div>
 
           <div className="card">
-            <h2>Por forma de pagamento</h2>
+            <h2>Recebido por forma de pagamento</h2>
+            <p className="suave">Saídas (avulso, convênio, serviços) + mensalidades, somados por forma.</p>
             <table><tbody>
-              {Object.entries(dados.porForma).map(([k, v]) => (
+              {Object.entries(dados.recebidoPorForma).map(([k, v]) => (
                 <tr key={k}><td>{k}</td><td style={{ textAlign: 'right' }}>{fmtBRL(v)}</td></tr>
               ))}
-              {Object.keys(dados.porForma).length === 0 && <tr><td className="suave">Sem pagamentos no período.</td></tr>}
+              {Object.keys(dados.recebidoPorForma).length === 0 && <tr><td className="suave">Sem pagamentos no período.</td></tr>}
             </tbody></table>
           </div>
 
@@ -371,13 +381,6 @@ export default function BI({ perfil }) {
                 )}
               </table>
             </div>
-            {Object.keys(dados.mensalidadesPorForma).length > 0 && (
-              <table style={{ marginTop: 10 }}><tbody>
-                {Object.entries(dados.mensalidadesPorForma).map(([k, v]) => (
-                  <tr key={k}><td>{k}</td><td style={{ textAlign: 'right' }}>{fmtBRL(v)}</td></tr>
-                ))}
-              </tbody></table>
-            )}
           </div>
 
           {verVeiculos && (
