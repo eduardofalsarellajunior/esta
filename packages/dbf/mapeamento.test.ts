@@ -17,6 +17,16 @@ test('sugerirMapeamento: sem campo correspondente -> null (não trava, fica pra 
   assert.equal(mapa.nome, null);
 });
 
+// Regressão: CPF/CNPJ do mensalista tem palpites ['CPF', 'CGC', 'CNPJ'] nessa
+// ordem de preferência — um .dbf que tenha um campo CGC (não relacionado ao
+// CPF do mensalista) ANTES do campo CPF de verdade não pode fazer a sugestão
+// pegar o CGC só por vir primeiro no arquivo.
+test('sugerirMapeamento: respeita a ordem de prioridade dos palpites, não a ordem do dbf', () => {
+  const colunas = DESTINOS.mensalistas.colunas;
+  const mapa = sugerirMapeamento(colunas, ['VEICULO', 'RAZAO', 'CGC', 'CPF']);
+  assert.equal(mapa.cpf_cnpj, 'CPF');
+});
+
 test('sugerirMapeamento + converterLinha: formas de pagamento (ESTAPGTO)', () => {
   const colunas = DESTINOS.formas_pagamento.colunas;
   const mapa = sugerirMapeamento(colunas, ['CODIGO', 'DESCRICAO', 'PERCPGTO', 'RPSSEMPRE']);

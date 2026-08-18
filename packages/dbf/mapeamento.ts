@@ -102,13 +102,23 @@ export const DESTINOS: Record<string, Destino> = {
   },
 };
 
-/** Mapeamento automático: pra cada coluna de destino, acha o primeiro campo do dbf cujo nome bate com um dos palpites (case-insensitive). */
+/**
+ * Mapeamento automático: pra cada coluna de destino, tenta os palpites NA
+ * ORDEM declarada (ex.: CPF antes de CGC) — não na ordem em que os campos
+ * aparecem no .dbf. Sem isso, um .dbf com um campo tipo CGC (não relacionado
+ * ao CPF do mensalista) *antes* do campo CPF de verdade fazia a sugestão
+ * pegar o CGC errado, só por vir primeiro no arquivo.
+ */
 export function sugerirMapeamento(colunas: ColunaDestino[], camposDbf: string[]): Record<string, string | null> {
+  const porNome = new Map(camposDbf.map((c) => [c.toUpperCase(), c]));
   const mapeamento: Record<string, string | null> = {};
   for (const col of colunas) {
-    const alvo = (col.palpites || []).map((p) => p.toUpperCase());
-    const achado = camposDbf.find((c) => alvo.includes(c.toUpperCase()));
-    mapeamento[col.campo] = achado ?? null;
+    let achado: string | null = null;
+    for (const palpite of col.palpites || []) {
+      const c = porNome.get(palpite.toUpperCase());
+      if (c) { achado = c; break; }
+    }
+    mapeamento[col.campo] = achado;
   }
   return mapeamento;
 }
