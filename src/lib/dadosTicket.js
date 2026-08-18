@@ -45,7 +45,10 @@ export function permanenciaDe(movimento) {
 export function dadosMovimento({ movimento = {}, resultado, operador, servicos = [], convenio } = {}) {
   const temSaida = !!movimento.dt_saida;
   const valor = Number(resultado?.valor ?? movimento.valor ?? 0);
-  const valorServicos = servicos.reduce((s, x) => s + Number(x.valor || 0), 0);
+  // valorInformado: serviço "Pede valor" (ver Patio.jsx/servicoPedeValor) —
+  // os demais não têm preço próprio (a tabela do serviço já vira o valor
+  // final da saída via o motor, não uma soma por item aqui).
+  const valorServicos = servicos.reduce((s, x) => s + Number(x.valorInformado || 0), 0);
 
   return {
     // Número de controle do ticket: curto de propósito, é ditado na saída.

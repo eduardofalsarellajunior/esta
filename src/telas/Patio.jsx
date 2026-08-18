@@ -57,6 +57,9 @@ export default function Patio({ perfil }) {
   const [modalServicos, setModalServicos] = useState(null); // { mov, marcados: Set<servico_id> }
   const [movimentosComServico, setMovimentosComServico] = useState(new Set());
   const [modalValorServico, setModalValorServico] = useState(null); // { servicoId, descricao, valor } — serviço "Pede valor" (ver alternarServico)
+  const [servicosEntrada, setServicosEntrada] = useState([]); // [{servico_id, descricao, valorInformado}] — marcados ANTES de registrar a entrada (ver botão "Serviços" na Entrada)
+  const [modalServicosEntrada, setModalServicosEntrada] = useState(false);
+  const [modalValorServicoEntrada, setModalValorServicoEntrada] = useState(null); // { servicoId, descricao, valor }
   const [modalExclusao, setModalExclusao] = useState(null); // { mov, motivo }
   const [modalDps, setModalDps] = useState(null); // { documento, nome }
   const [modalValor, setModalValor] = useState(null); // { valor } — alteração manual do valor da saída
@@ -297,6 +300,7 @@ export default function Patio({ perfil }) {
     setRestricaoHorario(null); setLivreAPartirEntrada(null);
     setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
+    setServicosEntrada([]);
   }
 
   /**
@@ -354,6 +358,16 @@ export default function Patio({ perfil }) {
       usuario_entrada: perfil.id,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
+    // Serviços marcados antes de dar entrada (ver alternarServicoEntrada) —
+    // grava agora que o movimento já existe (é o mesmo movimento_servicos
+    // que o botão "Serviço" da lista usa, só que preenchido de antemão).
+    if (servicosEntrada.length) {
+      await supabase.from('movimento_servicos').insert(
+        servicosEntrada.map((s) => ({
+          filial_id: perfil.filial_id, movimento_id: novo.id, servico_id: s.servico_id, valor: s.valorInformado,
+        }))
+      );
+    }
     // Mensalista/hóspede de verdade (não o que caiu pra avulso por
     // vencimento/vaga/restrição — esse continua mostrando, é cobrança real):
     // respeita a preferência de não parar na tela do ticket.
@@ -372,11 +386,12 @@ export default function Patio({ perfil }) {
         ['Placa', novo?.placa || p],
         ['Carro', nomeModelo || '—'],
         ['Tabela', tipoVeic],
+        ...(servicosEntrada.length ? [['Serviços', servicosEntrada.map((s) => s.descricao).join(', ')]] : []),
         ['Entrada', `${dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(hrEntrada))}`],
         ['Operador', perfil.nome],
       ],
     }, {
-      ...dadosMovimento({ movimento: novo, operador: perfil.nome }),
+      ...dadosMovimento({ movimento: novo, operador: perfil.nome, servicos: servicosEntrada }),
       MENSALISTA: nomeMensalista,
     }));
     setPlacaTicket(novo?.placa || p);
@@ -498,6 +513,34 @@ export default function Patio({ perfil }) {
     setModalServicos({ mov, marcados: novosMarcados });
     setMovimentosComServico((prev) => new Set(prev).add(mov.id));
     setModalValorServico(null);
+  }
+
+  /**
+   * Serviços marcados ANTES de dar entrada (ver botão "Serviços" no card
+   * de Entrada) — pro cliente que é só lava-rápido, onde o serviço já é
+   * sabido no momento em que o carro chega, não depois. Fica em memória
+   * até a entrada ser confirmada de verdade (registrarEntrada grava tudo
+   * de uma vez, junto com o movimento) — mesmo motivo pelo qual não dá pra
+   * usar movimento_servicos aqui ainda: o movimento nem existe.
+   */
+  function alternarServicoEntrada(servicoId) {
+    const jaMarcado = servicosEntrada.some((s) => s.servico_id === servicoId);
+    if (jaMarcado) { setServicosEntrada((prev) => prev.filter((s) => s.servico_id !== servicoId)); return; }
+    const servico = servicos.find((s) => s.id === servicoId);
+    if (servicoPedeValor(servico)) {
+      setModalValorServicoEntrada({ servicoId, descricao: servico.descricao, valor: '' });
+      return;
+    }
+    setServicosEntrada((prev) => [...prev, { servico_id: servicoId, descricao: servico.descricao, valorInformado: null }]);
+  }
+
+  function confirmarValorServicoEntrada() {
+    const valor = Number(modalValorServicoEntrada.valor);
+    if (!(valor >= 0)) { setErro('Informe um valor válido.'); return; }
+    setServicosEntrada((prev) => [...prev, {
+      servico_id: modalValorServicoEntrada.servicoId, descricao: modalValorServicoEntrada.descricao, valorInformado: valor,
+    }]);
+    setModalValorServicoEntrada(null);
   }
 
   async function buscarServicosDoMovimento(movimentoId) {
@@ -996,6 +1039,10 @@ export default function Patio({ perfil }) {
               </div>
             </>
           )}
+          <button type="button" className={servicosEntrada.length ? 'btn-servico-ativo' : 'btn-ghost'}
+            onClick={() => setModalServicosEntrada(true)}>
+            Serviços{servicosEntrada.length ? ` (${servicosEntrada.length})` : ''}
+          </button>
           <button className="btn-primary" type="submit">Registrar entrada</button>
           {detectado && (
             <span className="badge-mens">
@@ -1141,6 +1188,49 @@ export default function Patio({ perfil }) {
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setModalValorServico(null)}>Cancelar</button>
               <button className="btn-primary" onClick={confirmarValorServico}>Marcar serviço</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalServicosEntrada && (
+        <div className="modal-bg" onClick={() => setModalServicosEntrada(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Serviços — entrada</h2>
+            <p className="suave">
+              Marque os serviços já sabidos nesta entrada (ex.: lava-rápido). Vão pro ticket
+              de entrada e já saem gravados junto com o movimento.
+            </p>
+            {servicos.length === 0 && <p className="suave">Nenhum serviço cadastrado — cadastre em Cadastros → Serviços.</p>}
+            {servicos.map((s) => (
+              <label className="campo-check" key={s.id} style={{ marginBottom: 8 }}>
+                <input type="checkbox" checked={servicosEntrada.some((x) => x.servico_id === s.id)}
+                  onChange={() => alternarServicoEntrada(s.id)} />
+                {s.codigo} · {s.descricao}
+                {servicoPedeValor(s) && <span className="suave" style={{ fontSize: 11 }}> (pede valor ao marcar)</span>}
+              </label>
+            ))}
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-primary" onClick={() => setModalServicosEntrada(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalValorServicoEntrada && (
+        <div className="modal-bg" onClick={() => setModalValorServicoEntrada(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Valor do serviço — {modalValorServicoEntrada.descricao}</h2>
+            <p className="suave">Esse serviço não tem valor configurado — digite quanto cobrar.</p>
+            <div className="campo">
+              <label>Valor</label>
+              <input type="number" step="0.01" min="0" autoFocus value={modalValorServicoEntrada.valor}
+                onChange={(e) => setModalValorServicoEntrada({ ...modalValorServicoEntrada, valor: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmarValorServicoEntrada(); }} />
+            </div>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setModalValorServicoEntrada(null)}>Cancelar</button>
+              <button className="btn-primary" onClick={confirmarValorServicoEntrada}>Marcar serviço</button>
             </div>
           </div>
         </div>
