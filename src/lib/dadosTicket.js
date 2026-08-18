@@ -23,11 +23,11 @@ export function dadosFilial(filial = {}) {
     EE: [filial.endereco, filial.numero].filter(Boolean).join(', '),
     EC: [filial.cidade, filial.uf].filter(Boolean).join('-'),
     EG: filial.cnpj || '',
-    EI: filial.inscricao_mun || '',
-    // @FONE@: telefone do estacionamento. Reaproveita a coluna inscricao_est
-    // (Inscrição Estadual) — não usada em nenhum lugar do app (parking lot
-    // não tem, e o RPS/DPS usa inscricao_mun/@EI@, não esta) — mesma ideia
-    // que o Eduardo já usava no sistema antigo.
+    // @EI@ NÃO é a inscrição municipal (esse é o @IMRPS@, logo abaixo) — no
+    // legado do Eduardo, @EI@ já era usado pra imprimir o telefone do
+    // estacionamento. @FONE@ é o mesmo dado com um nome mais claro pra quem
+    // for montar um modelo novo do zero; os dois ficam sempre iguais.
+    EI: filial.inscricao_est || '',
     FONE: filial.inscricao_est || '',
     RAZAORPS: filial.razao_social || '',
     IMRPS: filial.inscricao_mun || '',
