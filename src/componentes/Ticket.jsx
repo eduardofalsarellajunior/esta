@@ -65,8 +65,9 @@ export function imprimirTicket(ticket, filial) {
       hr { border: none; border-top: 1px dashed #999; margin: 10px 0; }
       h2 { font-size: 14px; margin: 0 0 8px; }
       p { font-size: 13px; margin: 4px 0; }
-      /* Modelo com tokens: monoespaçado, porque os layouts alinham por coluna. */
-      .linha { font-family: "Courier New", monospace; font-size: 12px; white-space: pre-wrap; line-height: 1.35; }
+      /* Modelo com tokens: mesma fonte do padrão (body) — só a formatação
+         (negrito/tamanho) vem dos estilos do modelo, sem trocar de fonte. */
+      .linha { font-size: 12px; white-space: pre-wrap; line-height: 1.35; }
       .t-grande { font-size: 17px; font-weight: 700; }
       .t-pequeno { font-size: 10px; }
       .t-negrito { font-weight: 700; }
