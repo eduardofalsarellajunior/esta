@@ -24,6 +24,11 @@ export function dadosFilial(filial = {}) {
     EC: [filial.cidade, filial.uf].filter(Boolean).join('-'),
     EG: filial.cnpj || '',
     EI: filial.inscricao_mun || '',
+    // @FONE@: telefone do estacionamento. Reaproveita a coluna inscricao_est
+    // (Inscrição Estadual) — não usada em nenhum lugar do app (parking lot
+    // não tem, e o RPS/DPS usa inscricao_mun/@EI@, não esta) — mesma ideia
+    // que o Eduardo já usava no sistema antigo.
+    FONE: filial.inscricao_est || '',
     RAZAORPS: filial.razao_social || '',
     IMRPS: filial.inscricao_mun || '',
   };

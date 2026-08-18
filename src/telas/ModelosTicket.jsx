@@ -12,7 +12,7 @@ import { ehSupervisor } from '../lib/acesso.js';
 const TOKENS = {
   comuns: [
     ['@ER@', 'Nome do estacionamento'], ['@EF@', '(sem uso — sempre em branco)'], ['@EE@', 'Endereço'],
-    ['@EC@', 'Cidade-UF'], ['@EG@', 'CNPJ'], ['@EI@', 'Inscrição municipal'],
+    ['@EC@', 'Cidade-UF'], ['@EG@', 'CNPJ'], ['@EI@', 'Inscrição municipal'], ['@FONE@', 'Telefone do estacionamento'],
     ['@US@', 'Operador'], ['@ARROBA@', 'Imprime um "@"'],
     ['@P1@…@P9@', 'N linhas em branco'],
   ],
@@ -24,7 +24,7 @@ const TOKENS = {
     ['@V@', 'Valor'], ['@CO@', 'Convênio'], ['@VC@', 'Valor do convênio'],
     ['@SERVICOS@', 'Serviços'], ['@VALORSERVICOS@', 'Valor dos serviços'],
     ['@BONUS@', 'Bônus fidelidade'], ['@VD@', 'Saldo devedor'],
-    ['@MENSALISTA@', 'Nome do mensalista'],
+    ['@MENSALISTA@', 'Nome do mensalista'], ['@AVARIAS@', 'Avarias registradas na entrada'],
   ],
   mensalidade: [
     ['@MENSALISTA@', 'Nome'], ['@MCPF@', 'CPF/CNPJ'], ['@MEND@', 'Endereço'],
@@ -57,12 +57,12 @@ function tokensDoTipo(tipo) {
 /** Dados de exemplo pra pré-visualização — nada real, só pro operador ver o formato. */
 const EXEMPLO = {
   ER: 'ESTACIONAMENTO MODELO', EF: '', EE: 'Rua General Osorio, 939',
-  EC: 'Campinas-SP', EG: '00.000.000/0001-00', EI: '123456',
+  EC: 'Campinas-SP', EG: '00.000.000/0001-00', EI: '123456', FONE: '(19) 3241-4920',
   'C#': 'A1B2C3D4', CC: 'ABC1D23', CV: 'FIESTA', TV: 'P', XBOX: '12',
   DE: '10/08/2026', HE: '10:43', DS: '10/08/2026', HS: '14:20', TH: '03:37',
   V: 'R$ 15,00', V_NUM: 15, CO: 'CONV01', VC: 'R$ 5,00', VC_NUM: 5,
   SERVICOS: 'LAVAGEM', VALORSERVICOS: 'R$ 30,00', VALORSERVICOS_NUM: 30,
-  BONUS: '', BONUS_NUM: 0, VD: '', VD_NUM: 0, AVISO: '',
+  BONUS: '', BONUS_NUM: 0, VD: '', VD_NUM: 0, AVISO: '', AVARIAS: 'Risco na porta direita',
   MENSALISTA: 'JOSE DA SILVA', MCPF: '529.982.247-25', MEND: 'Rua das Flores, 100',
   MCEP: '13010-111', MCID: 'Campinas-SP', MTR: '(19) 3241-4920', MCEL: '(19) 99999-9999',
   MEMAIL: 'jose@exemplo.com.br', VAGAS: '2', CC01: 'ABC1D23', CV01: 'FIESTA',

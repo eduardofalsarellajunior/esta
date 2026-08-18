@@ -47,6 +47,7 @@ export default function Configuracoes({ perfil }) {
       cep: filial.cep || null,
       cnpj: filial.cnpj || null,
       inscricao_mun: filial.inscricao_mun || null,
+      inscricao_est: filial.inscricao_est || null,
       cod_ibge: filial.cod_ibge || null,
       config: filial.config || {},
     }).eq('id', filial.id);
@@ -147,10 +148,18 @@ export default function Configuracoes({ perfil }) {
                     onChange={(e) => setFilial({ ...filial, cep: e.target.value })} />
                 </div>
               </div>
-              <div className="campo" style={{ marginBottom: 10, maxWidth: 420 }}>
-                <label>CNPJ</label>
-                <input value={filial.cnpj || ''} disabled={!podeEditar}
-                  onChange={(e) => setFilial({ ...filial, cnpj: e.target.value })} />
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ flex: 2, maxWidth: 300 }}>
+                  <label>CNPJ</label>
+                  <input value={filial.cnpj || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, cnpj: e.target.value })} />
+                </div>
+                <div className="campo" style={{ maxWidth: 200 }}>
+                  <label>Fone</label>
+                  <input value={filial.inscricao_est || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, inscricao_est: e.target.value })} />
+                  <span className="suave" style={{ fontSize: 11 }}>Aparece no cabeçalho impresso (token @FONE@).</span>
+                </div>
               </div>
               <label className="campo-check" style={{ marginBottom: 4 }}>
                 <input type="checkbox" checked={filial.config?.patio?.imprimeTicketMensalista ?? true} disabled={!podeEditar}
