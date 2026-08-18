@@ -13,7 +13,7 @@ import { normalizar } from '../lib/texto.js';
  * por import() (não estático): ~300kB que só quem abre uma destas 3 telas
  * precisa baixar, não todo mundo que abre o Pátio no dia a dia.
  */
-export default function CidadeBusca({ valor, onSelecionar, placeholder, disabled }) {
+export default function CidadeBusca({ valor, onSelecionar, placeholder, disabled, label = 'Cidade' }) {
   const [busca, setBusca] = useState(valor || '');
   const [mostrar, setMostrar] = useState(false);
   const [municipios, setMunicipios] = useState(null);
@@ -40,6 +40,7 @@ export default function CidadeBusca({ valor, onSelecionar, placeholder, disabled
 
   return (
     <div className="campo campo-busca">
+      {label && <label>{label}</label>}
       <input value={busca} disabled={disabled}
         onChange={(e) => setBusca(e.target.value)}
         onFocus={() => setMostrar(true)}

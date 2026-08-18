@@ -309,7 +309,6 @@ export default function Fiscal({ perfil }) {
                     onChange={(e) => setAlterando({ ...alterando, bairro: e.target.value })} />
                 </div>
                 <div style={{ flex: 2 }}>
-                  <label>Cidade</label>
                   <CidadeBusca
                     valor={alterando.cidade && alterando.uf ? `${alterando.cidade} - ${alterando.uf}` : (alterando.cidade || '')}
                     onSelecionar={(mun) => setAlterando({ ...alterando, cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo })}

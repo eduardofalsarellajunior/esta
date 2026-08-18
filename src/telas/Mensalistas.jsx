@@ -287,13 +287,12 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
               <input value={m.bairro || ''} onChange={(e) => set('bairro', e.target.value)} />
             </div>
             <div style={{ flex: 2 }}>
-              <label>Cidade</label>
               <CidadeBusca
                 valor={m.cidade && m.uf ? `${m.cidade} - ${m.uf}` : (m.cidade || '')}
                 onSelecionar={(mun) => { set('cidade', mun.nome); set('uf', mun.uf); set('cod_ibge', mun.codigo); }}
               />
               {!m.cod_ibge && <p className="suave" style={{ fontSize: 11, marginTop: 2 }}>
-                Sem código IBGE — busque e selecione a cidade na lista pra o RPS/DPS sair certo.
+                {m.cidade ? 'Cadastro antigo, sem código IBGE — busque e selecione a cidade de novo na lista.' : 'Busque e selecione a cidade na lista pra o RPS/DPS sair certo.'}
               </p>}
             </div>
             <div className="campo" style={{ width: 110 }}>

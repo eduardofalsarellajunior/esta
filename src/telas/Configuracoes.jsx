@@ -185,8 +185,7 @@ export default function Configuracoes({ perfil }) {
                   onChange={(e) => setFilial({ ...filial, inscricao_mun: e.target.value })} />
               </div>
               <div style={{ maxWidth: 260 }}>
-                <label>Cidade (código IBGE)</label>
-                <CidadeBusca disabled={!podeEditar}
+                <CidadeBusca disabled={!podeEditar} label="Cidade (código IBGE)"
                   valor={filial.cidade && filial.uf ? `${filial.cidade} - ${filial.uf}` : (filial.cod_ibge || '')}
                   onSelecionar={(mun) => setFilial({ ...filial, cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo })} />
               </div>
