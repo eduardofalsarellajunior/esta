@@ -303,6 +303,11 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
   let manual: boolean;
   let pedeValor: boolean;
   let segmentos: ResultadoTarifa['segmentos'];
+  // Pontos de fidelidade: por padrão os da tabela do VEÍCULO — mas quando a
+  // cobrança vem de serviços (servicosTipos), os pontos são das tabelas dos
+  // serviços, não do veículo (senão um cliente que só usa lava-rápido nunca
+  // acumula ponto nenhum, mesmo a tabela do serviço tendo qte_pontos > 0).
+  let pontos = tbl.qtePontos ?? 0;
 
   // Cobrança em DOIS segmentos: convênio com hora de corte + tabela original.
   const doisSegmentos =
@@ -316,6 +321,7 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     let soma = 0;
     let algumManual = false;
     let algumPedeValor = false;
+    let pontosServicos = 0;
     for (const tipoServico of servicosTipos) {
       const tblServico = tabelas[tipoServico];
       if (!tblServico) {
@@ -325,10 +331,12 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
       if (r.pedeValor) algumPedeValor = true;
       else if (r.valor === null) algumManual = true;
       else soma += r.valor;
+      pontosServicos += tblServico.qtePontos ?? 0;
     }
     valorProporcional = soma;
     manual = algumManual;
     pedeValor = algumPedeValor;
+    pontos = pontosServicos;
   } else if (doisSegmentos) {
     const tblOrig = tabelas[tipoVeic];
     if (!tblOrig) {
@@ -399,7 +407,7 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     valorSelos: centavos(valorSelos),
     valorVales: centavos(valorVales),
     valor: centavos(valor),
-    pontos: tbl.qtePontos ?? 0,
+    pontos,
     manual,
     pedeValor,
     ...(segmentos ? { segmentos } : {}),

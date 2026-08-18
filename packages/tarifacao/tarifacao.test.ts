@@ -213,6 +213,23 @@ test('servicosTipos: soma G (R$17) + P (R$10) no lugar da tabela do veículo', (
   assert.equal(r.valorProporcional, 27);
   assert.equal(r.valor, 27);
   assert.equal(r.manual, false);
+  // Pontos são a soma das tabelas dos serviços (G=0 + P=10), não da tabela
+  // do veículo (ver teste seguinte pra isolar isso melhor).
+  assert.equal(r.pontos, 10);
+});
+
+test('servicosTipos: pontos vêm das tabelas dos serviços, não da tabela do veículo', () => {
+  // Regressão: um cliente que só usa lava-rápido (cobrado por serviço, não
+  // pela tabela de entrada do carro) nunca acumulava ponto nenhum, porque o
+  // motor sempre devolvia os pontos da tabela do VEÍCULO — mesmo ela não
+  // tendo nada a ver com a cobrança real da saída.
+  const tabelasComVeiculoDePontos = { ...tabelas, V: { tipo: 'V', qtePontos: 999, faixas: G.faixas } };
+  const r = calcularTarifa({
+    tabelas: tabelasComVeiculoDePontos, tipoVeic: 'V', // 999 pontos — não deve aparecer no resultado
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 },
+    servicosTipos: ['P'], // 10 pontos
+  });
+  assert.equal(r.pontos, 10);
 });
 
 // Convênio ------------------------------------------------------------------

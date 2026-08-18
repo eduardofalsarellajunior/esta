@@ -662,12 +662,20 @@ export default function Patio({ perfil }) {
     // cobraria os dois juntos — mas a regra é sempre "em vez da tabela do
     // veículo", nunca além dela (ver texto do modal de Serviços).
     const soServicoComValor = comValor.length > 0 && semValor.length === 0;
+    // Pontos de fidelidade: quando tem serviço marcado, são sempre a soma
+    // das tabelas dos serviços (comValor + semValor juntos) — o motor só
+    // soma os de `servicosTipos` (semValor), então o de comValor (ex.: um
+    // serviço "Pede valor" com qte_pontos configurado) ficaria de fora se
+    // não somar aqui também.
+    const pontosServicos = (servicosSelecionados || [])
+      .reduce((t, s) => t + Number(tabelas[s.tabela_tipo]?.qtePontos || 0), 0);
     // Soma nos dois: valorProporcional (o "cheio") e valor (o cobrado) andam
     // juntos aqui, sem desconto de convênio — sem isso o BI via a diferença
     // entre os dois como se fosse desconto de convênio, o que não é.
     const comSomaServicos = (resultado) => ({
       ...resultado,
       ...(soServicoComValor ? { valorConvenio: 0, manual: false, pedeValor: false } : {}),
+      ...((servicosSelecionados || []).length ? { pontos: pontosServicos } : {}),
       valorProporcional: Math.round(((soServicoComValor ? 0 : resultado.valorProporcional) + somaServicosComValor) * 100) / 100,
       valor: Math.round(((soServicoComValor ? 0 : resultado.valor) + somaServicosComValor) * 100) / 100,
     });
