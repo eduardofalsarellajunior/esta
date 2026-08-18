@@ -6,6 +6,7 @@ import { erroCpfCnpj } from '../lib/documento.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
+import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
 export default function Fiscal({ perfil }) {
   const [notas, setNotas] = useState([]);
@@ -108,7 +109,8 @@ export default function Fiscal({ perfil }) {
       id: n.id, numero_rps: n.numero_rps,
       competencia: n.competencia || '', valor: String(n.valor ?? ''), descricao: n.descricao || '',
       cpf_cnpj: t.cpf_cnpj || '', nome: t.nome || '', endereco: t.endereco || '', numero: t.numero || '',
-      bairro: t.bairro || '', uf: t.uf || '', cep: t.cep || '', email: t.email || '', telefone: t.telefone || '',
+      bairro: t.bairro || '', cidade: t.cidade || '', uf: t.uf || '', cod_ibge: t.cod_ibge || '',
+      cep: t.cep || '', email: t.email || '', telefone: t.telefone || '',
     });
   }
 
@@ -120,7 +122,8 @@ export default function Fiscal({ perfil }) {
       competencia: a.competencia, valor: a.valor, descricao: a.descricao,
       tomador: {
         cpf_cnpj: a.cpf_cnpj, nome: a.nome, endereco: a.endereco, numero: a.numero,
-        bairro: a.bairro, uf: a.uf, cep: a.cep, email: a.email, telefone: a.telefone,
+        bairro: a.bairro, cidade: a.cidade, uf: a.uf, cod_ibge: a.cod_ibge,
+        cep: a.cep, email: a.email, telefone: a.telefone,
       },
     });
     setSalvando(false);
@@ -305,10 +308,12 @@ export default function Fiscal({ perfil }) {
                   <input value={alterando.bairro}
                     onChange={(e) => setAlterando({ ...alterando, bairro: e.target.value })} />
                 </div>
-                <div className="campo" style={{ width: 70 }}>
-                  <label>UF</label>
-                  <input className="mono" maxLength={2} style={{ textTransform: 'uppercase' }} value={alterando.uf}
-                    onChange={(e) => setAlterando({ ...alterando, uf: e.target.value.toUpperCase() })} />
+                <div style={{ flex: 2 }}>
+                  <label>Cidade</label>
+                  <CidadeBusca
+                    valor={alterando.cidade && alterando.uf ? `${alterando.cidade} - ${alterando.uf}` : (alterando.cidade || '')}
+                    onSelecionar={(mun) => setAlterando({ ...alterando, cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo })}
+                  />
                 </div>
                 <div className="campo" style={{ width: 120 }}>
                   <label>CEP</label>

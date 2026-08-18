@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js';
 import { obterTema, aplicarTema } from '../lib/tema.js';
 import { imprimePedidosDaCabine, definirImprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
 import { ehFornecedor } from '../lib/acesso.js';
+import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
 // Dados do estacionamento (nome/endereço/CNPJ/fiscal). Só o fornecedor altera:
 // são dados com efeito legal e fiscal, e mexer neles é chamado de suporte. A
@@ -41,6 +42,7 @@ export default function Configuracoes({ perfil }) {
       endereco: filial.endereco || null,
       numero: filial.numero || null,
       bairro: filial.bairro || null,
+      cidade: filial.cidade || null,
       uf: filial.uf || null,
       cep: filial.cep || null,
       cnpj: filial.cnpj || null,
@@ -182,10 +184,11 @@ export default function Configuracoes({ perfil }) {
                 <input value={filial.inscricao_mun || ''} disabled={!podeEditar}
                   onChange={(e) => setFilial({ ...filial, inscricao_mun: e.target.value })} />
               </div>
-              <div className="campo" style={{ maxWidth: 160 }}>
-                <label>Código do município (IBGE)</label>
-                <input value={filial.cod_ibge || ''} disabled={!podeEditar}
-                  onChange={(e) => setFilial({ ...filial, cod_ibge: e.target.value })} />
+              <div style={{ maxWidth: 260 }}>
+                <label>Cidade (código IBGE)</label>
+                <CidadeBusca disabled={!podeEditar}
+                  valor={filial.cidade && filial.uf ? `${filial.cidade} - ${filial.uf}` : (filial.cod_ibge || '')}
+                  onSelecionar={(mun) => setFilial({ ...filial, cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo })} />
               </div>
               <div className="campo" style={{ maxWidth: 120 }}>
                 <label>Série do DPS</label>

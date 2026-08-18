@@ -172,6 +172,11 @@ export function gerarXmlAbrasfLoteRps({ nota, filial }) {
   const tomador = nota.tomador || {};
   const docTomador = (tomador.cpf_cnpj || '').replace(/\D/g, '');
   const tagTomador = docTomador.length > 11 ? 'Cnpj' : 'Cpf';
+  // Município do endereço do TOMADOR — prefere o dele (cadastro do
+  // mensalista, ver Mensalistas.jsx); sem isso, o XML mandava sempre o
+  // município da filial pro tomador também, mesmo quando ele é de outra
+  // cidade (bug real: rejeição silenciosa/dado fiscal errado na prefeitura).
+  const municipioTomador = pad(tomador.cod_ibge || filial.cod_ibge, 7);
   const valorServicos = Number(nota.valor || 0);
   // Prefere o que já veio calculado em `nota` (mesma fonte que grava em
   // notas_fiscais, pra XML e banco nunca divergirem); cfg é só fallback.
@@ -219,7 +224,7 @@ export function gerarXmlAbrasfLoteRps({ nota, filial }) {
     `<Endereco>${esc(tomador.endereco || '')}</Endereco>`,
     `<Numero>${esc(tomador.numero || '')}</Numero>`,
     `<Bairro>${esc(tomador.bairro || '')}</Bairro>`,
-    `<CodigoMunicipio>${esc(municipio)}</CodigoMunicipio>`,
+    `<CodigoMunicipio>${esc(municipioTomador)}</CodigoMunicipio>`,
     `<Uf>${esc(tomador.uf || filial.uf || '')}</Uf>`,
     `<Cep>${esc(pad(tomador.cep, 8))}</Cep>`,
     '</Endereco>',

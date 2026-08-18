@@ -219,7 +219,8 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
           descricao: 'Recebimento de Mensalista',
           tomador: {
             cpf_cnpj: m.cpf_cnpj, nome: m.razao, endereco: m.endereco, numero: m.numero,
-            bairro: m.bairro, uf: m.uf, cep: m.cep, telefone: m.telefone, email: m.email,
+            bairro: m.bairro, cidade: m.cidade, uf: m.uf, cep: m.cep, cod_ibge: m.cod_ibge,
+            telefone: m.telefone, email: m.email,
           },
         });
         if (nota) {

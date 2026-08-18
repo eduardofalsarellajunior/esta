@@ -8,6 +8,7 @@ import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '
 import { TicketModal } from '../componentes/Ticket.jsx';
 import { ReceberModal } from '../componentes/ReceberMensalidade.jsx';
 import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
+import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
 // Mensalistas/hóspedes + os veículos de cada um (1:N) e a quantidade de vagas
 // contratadas simultâneas. Se mais veículos do que isso estiverem no pátio ao
@@ -59,7 +60,7 @@ export default function Mensalistas({ perfil }) {
       tipo_mens: m.tipo_mens || 'I', telefone: m.telefone || null, celular: m.celular || null,
       email: m.email || null, box: m.box || null, cpf_cnpj: m.cpf_cnpj || null,
       endereco: m.endereco || null, numero: m.numero || null, bairro: m.bairro || null,
-      cidade: m.cidade || null, uf: m.uf || null, cep: m.cep || null,
+      cidade: m.cidade || null, uf: m.uf || null, cep: m.cep || null, cod_ibge: m.cod_ibge || null,
       dia_venc: m.dia_venc ? Number(m.dia_venc) : null,
       tolerancia_dias: Number(m.tolerancia_dias || 0), qte_vagas: Number(m.qte_vagas || 1),
       valor_mensalidade: Number(m.valor_mensalidade || 0),
@@ -285,14 +286,15 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
               <label>Bairro</label>
               <input value={m.bairro || ''} onChange={(e) => set('bairro', e.target.value)} />
             </div>
-            <div className="campo" style={{ flex: 2 }}>
+            <div style={{ flex: 2 }}>
               <label>Cidade</label>
-              <input value={m.cidade || ''} onChange={(e) => set('cidade', e.target.value)} />
-            </div>
-            <div className="campo" style={{ width: 70 }}>
-              <label>UF</label>
-              <input className="mono" style={{ textTransform: 'uppercase' }} maxLength={2}
-                value={m.uf || ''} onChange={(e) => set('uf', e.target.value.toUpperCase())} />
+              <CidadeBusca
+                valor={m.cidade && m.uf ? `${m.cidade} - ${m.uf}` : (m.cidade || '')}
+                onSelecionar={(mun) => { set('cidade', mun.nome); set('uf', mun.uf); set('cod_ibge', mun.codigo); }}
+              />
+              {!m.cod_ibge && <p className="suave" style={{ fontSize: 11, marginTop: 2 }}>
+                Sem código IBGE — busque e selecione a cidade na lista pra o RPS/DPS sair certo.
+              </p>}
             </div>
             <div className="campo" style={{ width: 110 }}>
               <label>CEP</label>
