@@ -15,7 +15,7 @@ export const TIPOS_TICKET = [
 ];
 
 const CABECALHO = [
-  '@ER@',
+  '@PG+@@ER@@PG-@',
   '@EE@',
   '@EC@',
   '@EG@-@EI@',
