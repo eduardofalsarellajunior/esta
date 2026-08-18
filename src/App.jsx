@@ -16,6 +16,7 @@ import ImportarDbf from './telas/ImportarDbf.jsx';
 import ModelosTicket from './telas/ModelosTicket.jsx';
 import EscolherFilial from './telas/EscolherFilial.jsx';
 import SenhaMesGate from './telas/SenhaMesGate.jsx';
+import SessoesGate from './telas/SessoesGate.jsx';
 import { ehFornecedor } from './lib/acesso.js';
 
 export default function App() {
@@ -68,7 +69,7 @@ export default function App() {
   // trancado fora de uma filial inadimplente e sem conseguir nem ajudar o
   // cliente a resolver.
   if (!ehFornecedor(perfil)) {
-    return <SenhaMesGate><Rotas perfil={perfil} /></SenhaMesGate>;
+    return <SenhaMesGate><SessoesGate><Rotas perfil={perfil} /></SessoesGate></SenhaMesGate>;
   }
   return <Rotas perfil={perfil} />;
 }

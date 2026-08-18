@@ -38,6 +38,7 @@ export default function Configuracoes({ perfil }) {
     setErro(''); setSalvo(false);
     const { error } = await supabase.from('filiais').update({
       numero_cliente: filial.numero_cliente || null,
+      limite_usuarios_simultaneos: filial.limite_usuarios_simultaneos || null,
       nome_fantasia: filial.nome_fantasia || null,
       endereco: filial.endereco || null,
       numero: filial.numero || null,
@@ -107,11 +108,19 @@ export default function Configuracoes({ perfil }) {
           <>
             {salvo && <p className="ok-txt">Salvo.</p>}
             <form onSubmit={salvar}>
-              <div className="campo" style={{ marginBottom: 10, maxWidth: 160 }}>
-                <label>Núm. Cliente</label>
-                <input value={filial.numero_cliente || ''} disabled={!podeEditar}
-                  onChange={(e) => setFilial({ ...filial, numero_cliente: e.target.value })} />
-                <span className="suave" style={{ fontSize: 11 }}>Aparece antes do nome no cabeçalho da tela.</span>
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ maxWidth: 160 }}>
+                  <label>Núm. Cliente</label>
+                  <input value={filial.numero_cliente || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, numero_cliente: e.target.value })} />
+                  <span className="suave" style={{ fontSize: 11 }}>Aparece antes do nome no cabeçalho da tela.</span>
+                </div>
+                <div className="campo" style={{ maxWidth: 220 }}>
+                  <label>Limite de usuários simultâneos</label>
+                  <input type="number" min="1" value={filial.limite_usuarios_simultaneos || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, limite_usuarios_simultaneos: e.target.value ? Number(e.target.value) : null })} />
+                  <span className="suave" style={{ fontSize: 11 }}>Em branco = sem limite. Login extra fica bloqueado até alguém sair.</span>
+                </div>
               </div>
               <div className="campo" style={{ marginBottom: 10, maxWidth: 420 }}>
                 <label>Nome</label>
