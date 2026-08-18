@@ -315,12 +315,12 @@ export default function BI({ perfil }) {
         <>
           <div className="kpis">
             <Kpi rotulo="Saídas" valor={dados.totalVeic} />
-            <Kpi rotulo="Avulso" valor={fmtBRL(dados.valorAvulso)} />
-            <Kpi rotulo="Serviços" valor={fmtBRL(dados.valorServicos)} />
-            <Kpi rotulo="Descontos (conv.)" valor={fmtBRL(dados.descontos)} />
+            <Kpi rotulo="Avulso" valor={fmtBRL(dados.valorAvulso)} moeda />
+            <Kpi rotulo="Serviços" valor={fmtBRL(dados.valorServicos)} moeda />
+            <Kpi rotulo="Descontos (conv.)" valor={fmtBRL(dados.descontos)} moeda />
             <Kpi rotulo="Tempo médio" valor={fmtHora(dados.tempoMedio)} />
-            <Kpi rotulo="Mensalidades" valor={fmtBRL(dados.mensalidadesTotal)} />
-            <Kpi rotulo="Faturado" valor={fmtBRL(dados.faturado)} destaque />
+            <Kpi rotulo="Mensalidades" valor={fmtBRL(dados.mensalidadesTotal)} moeda />
+            <Kpi rotulo="Faturado" valor={fmtBRL(dados.faturado)} destaque moeda />
           </div>
           <p className="suave" style={{ marginTop: -4 }}>
             Faturado = Avulso + Descontos (conv.) + Serviços + Mensalidades — o valor cheio, antes do desconto de convênio.
@@ -429,8 +429,19 @@ export default function BI({ perfil }) {
   );
 }
 
-function Kpi({ rotulo, valor, destaque }) {
-  return <div className={'kpi' + (destaque ? ' destaque' : '')}><div className="kpi-rotulo">{rotulo}</div><div className="kpi-valor">{valor}</div></div>;
+/**
+ * `moeda`: tira o "R$" do valor (fica só o número) e mostra "(R$)" junto do
+ * rótulo — com valor grande, "R$ 9.994,00" não cabia na largura do cartão;
+ * o número sozinho cabe bem mais.
+ */
+function Kpi({ rotulo, valor, destaque, moeda }) {
+  const texto = moeda ? String(valor).replace('R$', '').trim() : valor;
+  return (
+    <div className={'kpi' + (destaque ? ' destaque' : '')}>
+      <div className="kpi-rotulo">{rotulo}{moeda ? ' (R$)' : ''}</div>
+      <div className="kpi-valor">{texto}</div>
+    </div>
+  );
 }
 function rotuloTipo(t) {
   return { E: 'Avulso', I: 'Mensalista', P: 'Pacote', H: 'Hóspede', C: 'Convênio' }[t] || t || '—';
