@@ -54,6 +54,8 @@ export default function Patio({ perfil }) {
   const [modelosTicket, setModelosTicket] = useState({}); // tipo -> layout com tokens (vazio = layout fixo)
   const [saidasRecentes, setSaidasRecentes] = useState([]);
   const [servicos, setServicos] = useState([]);
+  const [bonusFaixas, setBonusFaixas] = useState([]); // ordenadas da maior pontuação pra menor
+  const [modalBonus, setModalBonus] = useState(null); // { faixa, pontosAtual, pontosProjetados }
   const [modalServicos, setModalServicos] = useState(null); // { mov, marcados: Set<servico_id> }
   const [movimentosComServico, setMovimentosComServico] = useState(new Set());
   const [modalValorServico, setModalValorServico] = useState(null); // { servicoId, descricao, valor } — serviço "Pede valor" (ver alternarServico)
@@ -109,7 +111,7 @@ export default function Patio({ perfil }) {
     try {
       const hoje = hojeISO();
       const { inicio: inicioHoje, fim: fimHoje } = limitesDiaLocal(hoje, hoje);
-      const [t, p, cv, fp, md, tm, sr, fl, sv, mt] = await Promise.all([
+      const [t, p, cv, fp, md, tm, sr, fl, sv, mt, bf] = await Promise.all([
         carregarTabelasPreco(), carregarPatio(),
         supabase.from('convenios').select('*'),
         supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo'),
@@ -120,6 +122,7 @@ export default function Patio({ perfil }) {
         supabase.from('filiais').select('*').eq('id', perfil.filial_id).maybeSingle(),
         supabase.from('servicos').select('*').eq('ativo', true).order('codigo'),
         carregarModelosTicket(),
+        supabase.from('bonus_faixas').select('*').order('pontos_necessarios', { ascending: false }),
       ]);
       setTabelas(t); setPatio(p);
       setConvenios(Object.fromEntries((cv.data || []).map((c) => [c.codigo, c])));
@@ -133,6 +136,7 @@ export default function Patio({ perfil }) {
       setFilial(fl.data || null);
       setServicos(sv.data || []);
       setModelosTicket(mt);
+      setBonusFaixas(bf.data || []);
       const idsPatio = p.map((m) => m.id);
       if (idsPatio.length > 0) {
         const { data: ms } = await supabase.from('movimento_servicos').select('movimento_id').in('movimento_id', idsPatio);
@@ -641,7 +645,7 @@ export default function Patio({ perfil }) {
     setPlacaTicket('');
   }
 
-  function calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados) {
+  function calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados, bonusFidelidade = 0) {
     if (MENSALISTA.has(mov.tipo_mens)) {
       // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
       return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, mensalista: true, tempoDecorrido: 0 };
@@ -667,6 +671,17 @@ export default function Patio({ perfil }) {
       valorProporcional: Math.round(((soServicoComValor ? 0 : resultado.valorProporcional) + somaServicosComValor) * 100) / 100,
       valor: Math.round(((soServicoComValor ? 0 : resultado.valor) + somaServicosComValor) * 100) / 100,
     });
+    // Desconto de faixa de bônus (ver Cadastros → Faixas de bônus): aplicado
+    // por cima do total já pronto (tabela + convênio + serviços) — precisa
+    // ser DEPOIS do comSomaServicos, não dentro do motor, senão o desconto
+    // some no caso "só serviço com valor" (ali o motor descarta o próprio
+    // valor calculado, ver comSomaServicos acima). Piso em zero, igual ao
+    // resto do pipeline.
+    const comBonus = (resultado) => (
+      bonusFidelidade > 0
+        ? { ...resultado, valor: Math.max(0, Math.round((resultado.valor - bonusFidelidade) * 100) / 100) }
+        : resultado
+    );
 
     // Entrou fora do dia/turno contratado (ver detectar()): cobra avulso só
     // até o horário guardado em livre_a_partir — dali em diante já está
@@ -684,21 +699,21 @@ export default function Patio({ perfil }) {
           dtSaida: dataDeISO(mov.dt_entrada), saida: Number(mov.livre_a_partir),
         },
       });
-      return comSomaServicos({
+      return comBonus(comSomaServicos({
         ...parcial,
         // Tempo mostrado ao operador é o real (quanto tempo o carro ficou),
         // mesmo cobrando só a parte fora do horário contratado.
         tempoDecorrido: horasDecorridas({ dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() }),
         restricaoAte: Number(mov.livre_a_partir),
-      });
+      }));
     }
 
     const convenio = convenioCodigo ? mapConvenio(convenios[convenioCodigo]) : undefined;
-    return comSomaServicos(calcularTarifa({
+    return comBonus(comSomaServicos(calcularTarifa({
       tabelas, tipoVeic: mov.tipo_veic, convenio,
       servicosTipos: servicosTipos.length ? servicosTipos : undefined,
       movimento: { dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() },
-    }));
+    })));
   }
 
   /**
@@ -713,14 +728,39 @@ export default function Patio({ perfil }) {
     if (resultado.pedeValor) setModalValor({ valor: '', obrigatorio: true });
   }
 
+  async function pontosAcumulados(placa) {
+    try {
+      const { data } = await supabase.from('clientes').select('qte_pontos')
+        .eq('placa', placa.trim().toUpperCase()).maybeSingle();
+      return Number(data?.qte_pontos || 0);
+    } catch { return 0; }
+  }
+
+  /**
+   * Faixas de bônus (Cadastros → Faixas de bônus, mantidas pelo cliente do
+   * Eduardo): se os pontos já acumulados + os que esta saída vai render
+   * alcançam alguma faixa, oferece a MAIOR faixa alcançada (bonusFaixas já
+   * vem ordenada da maior pra menor) — o operador decide usar agora ou
+   * seguir acumulando pra próxima.
+   */
+  async function avaliarBonus(resultado, placa) {
+    if (!bonusFaixas.length || resultado.mensalista) return null;
+    const pontosAtual = await pontosAcumulados(placa);
+    const pontosProjetados = pontosAtual + Number(resultado.pontos || 0);
+    const faixa = bonusFaixas.find((f) => Number(f.pontos_necessarios) <= pontosProjetados);
+    return faixa ? { faixa, pontosAtual, pontosProjetados } : null;
+  }
+
   async function prepararSaida(mov) {
     try {
       const servicosSelecionados = await buscarServicosDoMovimento(mov.id);
       const convenioCodigo = mov.convenio_codigo || '';
       const resultado = calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados);
       const formaPadrao = formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
-      setSaindo({ mov, convenioCodigo, servicosSelecionados, resultado, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
+      setSaindo({ mov, convenioCodigo, servicosSelecionados, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
       abrirValorObrigatorioSePreciso(resultado);
+      const bonus = await avaliarBonus(resultado, mov.placa);
+      if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); }
     } catch (e) { setErro(e.message); }
   }
 
@@ -729,9 +769,27 @@ export default function Patio({ perfil }) {
     try {
       const resultado = calcularResultadoSaida(saindo.mov, codigo, saindo.servicosSelecionados);
       const formaAtual = saindo.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
-      setSaindo({ ...saindo, convenioCodigo: codigo, resultado, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
+      // Convênio pode trocar a tabela (Tabela alt.), o que muda os pontos —
+      // reavalia o bônus do zero, descarta o que tinha sido aplicado antes.
+      setSaindo({ ...saindo, convenioCodigo: codigo, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
       abrirValorObrigatorioSePreciso(resultado);
+      avaliarBonus(resultado, saindo.mov.placa).then((bonus) => {
+        if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); }
+      });
     } catch (e) { setErro(e.message); }
+  }
+
+  /** Aplica a faixa de bônus oferecida — desconta valor_desconto e consome os pontos dela. */
+  function confirmarBonus() {
+    if (!modalBonus || !saindo) return;
+    const resultado = calcularResultadoSaida(
+      saindo.mov, saindo.convenioCodigo, saindo.servicosSelecionados, modalBonus.faixa.valor_desconto
+    );
+    setSaindo((s) => ({
+      ...s, resultado, bonusAplicado: modalBonus.faixa,
+      pagamentos: [{ forma: s.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D', valor: resultado.valor }],
+    }));
+    setModalBonus(null);
   }
 
   function abrirModalDps() {
@@ -834,7 +892,7 @@ export default function Patio({ perfil }) {
   }
 
   async function confirmarSaida(tomadorDps) {
-    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado } = saindo;
+    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado } = saindo;
     const dtSaida = hojeISO();
     const hrSaida = agoraHHMM();
     // Liga ao caixa aberto do operador (se houver), para o fechamento.
@@ -846,6 +904,7 @@ export default function Patio({ perfil }) {
       convenio_codigo: convenioCodigo || null,
       valor: resultado.valor, valor_proporcional: resultado.valorProporcional,
       valor_convenio: resultado.valorConvenio, pontos_ganhos: resultado.pontos,
+      bonus_fidelidade: bonusAplicado?.valor_desconto || 0,
       caixa_id: cx?.id ?? null, usuario_saida: perfil.id,
       // Só marca alteração se o valor final ficou mesmo diferente do calculado
       // (dá pra abrir o modal e confirmar o mesmo valor — isso não é alteração).
@@ -860,8 +919,11 @@ export default function Patio({ perfil }) {
     const linhasPag = pagos.map((p) => ({ filial_id: perfil.filial_id, movimento_id: mov.id, forma_pagamento: p.forma, valor: Number(p.valor) }));
     if (linhasPag.length) await supabase.from('movimento_pagamentos').insert(linhasPag);
 
-    // Fidelidade (best-effort).
-    if (!resultado.mensalista) await atualizarFidelidade(mov.placa, resultado.pontos);
+    // Fidelidade (best-effort) — desconta os pontos da faixa de bônus usada,
+    // se algum foi aplicado nesta saída (ver confirmarBonus).
+    if (!resultado.mensalista) {
+      await atualizarFidelidade(mov.placa, resultado.pontos - (bonusAplicado?.pontos_necessarios || 0));
+    }
 
     let ticketRps = null;
     if (tomadorDps) {
@@ -895,6 +957,7 @@ export default function Patio({ perfil }) {
         ...(convenioCodigo && resultado.valorConvenio > 0
           ? [['Convênio', convenioCodigo], ['Valor convênio', `-${fmtBRL(resultado.valorConvenio)}`]]
           : []),
+        ...(bonusAplicado ? [['Bônus fidelidade', `-${fmtBRL(bonusAplicado.valor_desconto)}`]] : []),
         ['Valor', fmtBRL(resultado.valor)],
         ['Pagamento', formaTexto],
         ['Saída', `${dtSaida.split('-').reverse().join('/')} ${fmtHora(Number(hrSaida))}`],
@@ -902,7 +965,7 @@ export default function Patio({ perfil }) {
       ],
     }, {
       ...dadosMovimento({
-        movimento: { ...mov, dt_saida: dtSaida, hr_saida: hrSaida, valor: resultado.valor },
+        movimento: { ...mov, dt_saida: dtSaida, hr_saida: hrSaida, valor: resultado.valor, bonus_fidelidade: bonusAplicado?.valor_desconto || 0 },
         resultado, operador: perfil.nome,
         servicos: servicosSelecionados, convenio: convenios[convenioCodigo],
       }),
@@ -1499,6 +1562,11 @@ export default function Patio({ perfil }) {
                 </>
               );
             })()}
+            {saindo.bonusAplicado && (
+              <p className="suave" style={{ textAlign: 'center' }}>
+                Bônus fidelidade: -{fmtBRL(saindo.bonusAplicado.valor_desconto)} ({saindo.bonusAplicado.pontos_necessarios} pontos)
+              </p>
+            )}
             <div className="grande">{fmtBRL(saindo.resultado.valor)}</div>
             {saindo.valorCalculado != null && saindo.valorCalculado !== saindo.resultado.valor && (
               <p className="suave" style={{ textAlign: 'center' }}>
@@ -1535,9 +1603,36 @@ export default function Patio({ perfil }) {
                 </button>
               </p>
             )}
+            {saindo.bonusDisponivel && !saindo.bonusAplicado && (
+              <p className="suave">
+                Cliente atingiu {saindo.bonusDisponivel.faixa.pontos_necessarios} pontos —{' '}
+                <button type="button" className="btn-ghost" onClick={() => setModalBonus(saindo.bonusDisponivel)} style={{ padding: '2px 8px' }}>
+                  usar bônus de {fmtBRL(saindo.bonusDisponivel.faixa.valor_desconto)}
+                </button>
+              </p>
+            )}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={() => setSaindo(null)}>Cancelar</button>
               <button className="btn-primary" disabled={saindo.resultado.pedeValor} onClick={() => confirmarSaida()}>Confirmar saída</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalBonus && (
+        <div className="modal-bg" onClick={() => setModalBonus(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Bônus de fidelidade disponível</h2>
+            <p className="suave">
+              Este cliente tem {modalBonus.pontosProjetados} pontos acumulados (com esta saída) —
+              atingiu a faixa de {modalBonus.faixa.pontos_necessarios} pontos, que dá{' '}
+              <strong>{fmtBRL(modalBonus.faixa.valor_desconto)}</strong> de desconto. Aplicar agora
+              consome {modalBonus.faixa.pontos_necessarios} pontos do acumulado; se não usar agora,
+              os pontos continuam guardados pra próxima vez.
+            </p>
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setModalBonus(null)}>Não, continuar acumulando</button>
+              <button className="btn-primary" onClick={confirmarBonus}>Usar desconto</button>
             </div>
           </div>
         </div>

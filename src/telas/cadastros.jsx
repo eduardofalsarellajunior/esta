@@ -93,3 +93,12 @@ export function Servicos({ perfil }) {
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
     ]} />;
 }
+
+export function Bonus({ perfil }) {
+  return <Crud perfil={perfil} titulo="Faixas de bônus" tabela="bonus_faixas" ordem="pontos_necessarios"
+    subtitulo="Escada de desconto por pontos de fidelidade acumulados (o mesmo pontos que a tabela de preço e os serviços já dão). Ex.: 1000 pontos = R$50, 2000 pontos = R$110 — na saída, o sistema oferece a maior faixa que o cliente já alcançou."
+    colunas={[
+      { campo: 'pontos_necessarios', rotulo: 'Pontos necessários', tipo: 'number', obrigatorio: true },
+      { campo: 'valor_desconto', rotulo: 'Desconto (R$)', tipo: 'number', obrigatorio: true },
+    ]} />;
+}

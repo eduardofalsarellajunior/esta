@@ -21,6 +21,7 @@ const GRUPOS = [
     { to: '/formas', rotulo: 'Formas de pagamento' },
     { to: '/modelos', rotulo: 'Modelos' },
     { to: '/servicos', rotulo: 'Serviços' },
+    { to: '/bonus', rotulo: 'Faixas de bônus' },
     { to: '/importar', rotulo: 'Importar do legado (.dbf)' },
   ]},
   { titulo: 'Fiscal', itens: [

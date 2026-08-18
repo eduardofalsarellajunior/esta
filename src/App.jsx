@@ -6,7 +6,7 @@ import Patio from './telas/Patio.jsx';
 import Caixa from './telas/Caixa.jsx';
 import BI from './telas/BI.jsx';
 import Precos from './telas/Precos.jsx';
-import { Convenios, Formas, Vagas, Modelos, Servicos } from './telas/cadastros.jsx';
+import { Convenios, Formas, Vagas, Modelos, Servicos, Bonus } from './telas/cadastros.jsx';
 import Mensalistas from './telas/Mensalistas.jsx';
 import { Receber, Pagar, Banco } from './telas/financeiro.jsx';
 import Fiscal from './telas/Fiscal.jsx';
@@ -88,6 +88,7 @@ function Rotas({ perfil }) {
           <Route path="vagas" element={<Vagas perfil={perfil} />} />
           <Route path="modelos" element={<Modelos perfil={perfil} />} />
           <Route path="servicos" element={<Servicos perfil={perfil} />} />
+          <Route path="bonus" element={<Bonus perfil={perfil} />} />
           <Route path="receber" element={<Receber perfil={perfil} />} />
           <Route path="pagar" element={<Pagar perfil={perfil} />} />
           <Route path="banco" element={<Banco perfil={perfil} />} />
