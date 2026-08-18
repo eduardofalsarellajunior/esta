@@ -286,23 +286,23 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
               <label>Bairro</label>
               <input value={m.bairro || ''} onChange={(e) => set('bairro', e.target.value)} />
             </div>
-            <div style={{ flex: 2 }}>
-              <CidadeBusca
-                valor={m.cidade && m.uf ? `${m.cidade} - ${m.uf}` : (m.cidade || '')}
-                onSelecionar={(mun) => { set('cidade', mun.nome); set('uf', mun.uf); set('cod_ibge', mun.codigo); }}
-              />
-              {!m.cod_ibge && <p className="suave" style={{ fontSize: 11, marginTop: 2 }}>
-                {m.cidade ? 'Cadastro antigo, sem código IBGE — busque e selecione a cidade de novo na lista.' : 'Busque e selecione a cidade na lista pra o RPS/DPS sair certo.'}
-              </p>}
-            </div>
             <div className="campo" style={{ width: 110 }}>
               <label>CEP</label>
               <input value={m.cep || ''} onChange={(e) => set('cep', e.target.value)} />
             </div>
+            <div className="campo" style={{ width: 90 }}>
+              <label>Box</label>
+              <input maxLength={5} value={m.box || ''} onChange={(e) => set('box', e.target.value)} />
+            </div>
           </div>
-          <div className="campo" style={{ marginBottom: 10 }}>
-            <label>Box</label>
-            <input value={m.box || ''} onChange={(e) => set('box', e.target.value)} />
+          <div style={{ marginBottom: 10 }}>
+            <CidadeBusca
+              valor={m.cidade && m.uf ? `${m.cidade} - ${m.uf}` : (m.cidade || '')}
+              onSelecionar={(mun) => { set('cidade', mun.nome); set('uf', mun.uf); set('cod_ibge', mun.codigo); }}
+            />
+            {!m.cod_ibge && <p className="suave" style={{ fontSize: 11, marginTop: 2 }}>
+              {m.cidade ? 'Cadastro antigo, sem código IBGE — busque e selecione a cidade de novo na lista.' : 'Busque e selecione a cidade na lista pra o RPS/DPS sair certo.'}
+            </p>}
           </div>
           <div className="campo" style={{ marginBottom: 10 }}>
             <label>Valor da mensalidade</label>
