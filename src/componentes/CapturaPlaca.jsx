@@ -5,8 +5,13 @@ import { supabase } from '../lib/supabase.js';
 // Function `ler-placa` — a chave da API fica só no servidor, nunca no
 // navegador). Câmera ao vivo com fallback automático para escolher um
 // arquivo/foto (sem câmera, permissão negada, ou navegador sem suporte).
-// O operador sempre confirma a placa lida antes de usar — nunca preenche
-// nada por conta própria.
+//
+// Leitura com confiança alta (>=LIMITE_CONFIANCA_AUTO) e sem ambiguidade (só
+// uma placa detectada na foto) preenche direto, sem parar na lista de
+// confirmação — abaixo disso, ou com mais de uma placa na foto, o operador
+// sempre escolhe/confirma antes de usar.
+const LIMITE_CONFIANCA_AUTO = 0.95;
+
 export default function CapturaPlaca({ onConfirmar, rotulo }) {
   const [aberto, setAberto] = useState(false);
   const [modoArquivo, setModoArquivo] = useState(false);
@@ -76,8 +81,18 @@ export default function CapturaPlaca({ onConfirmar, rotulo }) {
       if (error) throw error;
       if (data?.erro) throw new Error(data.erro);
       const lista = data?.resultados || [];
+      if (!lista.length) {
+        setResultados(lista);
+        setErro('Nenhuma placa reconhecida nessa foto — tente de novo, mais de perto e com boa luz.');
+        return;
+      }
+      // Só uma placa na foto (sem ambiguidade de qual carro) e confiança
+      // alta: preenche direto, sem parar pra confirmar.
+      if (lista.length === 1 && lista[0].confianca >= LIMITE_CONFIANCA_AUTO) {
+        confirmar(lista[0].placa);
+        return;
+      }
       setResultados(lista);
-      if (!lista.length) setErro('Nenhuma placa reconhecida nessa foto — tente de novo, mais de perto e com boa luz.');
     } catch (e) {
       setErro(e.message || 'Falha ao reconhecer a placa.');
     } finally {
