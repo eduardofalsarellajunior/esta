@@ -1121,8 +1121,14 @@ export default function Patio({ perfil }) {
                 ))}
               </ul>
             )}
+            {/* Mesma altura tenha ou não modelo selecionado (  no lugar do
+                texto) — sem isso o campo "Carro" ficava mais baixo que a Placa
+                (que tem a nota da saída embaixo), desalinhando os dois inputs
+                (.linha-form usa align-items:end). */}
+            <span className="suave" style={{ fontSize: 11 }}>
+              {modeloSelecionado ? `Tabela: ${modeloSelecionado.tabela_tipo}` : ' '}
+            </span>
           </div>
-          {modeloSelecionado && <span className="badge-mens">Tabela: {modeloSelecionado.tabela_tipo}</span>}
           {buscaModelo.trim().length >= 2 && !modeloSelecionado && sugestoes.length === 0 && (
             <>
               <div className="campo">
