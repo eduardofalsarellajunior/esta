@@ -76,6 +76,7 @@ export function dadosMovimento({ movimento = {}, resultado, operador, servicos =
     SERVICOS: servicos.map((s) => s.descricao).join(', '),
     VALORSERVICOS: valorServicos ? fmtBRL(valorServicos) : '',
     VALORSERVICOS_NUM: valorServicos,
+    AVARIAS: movimento.avarias || '',
     US: operador || '',
   };
 }
