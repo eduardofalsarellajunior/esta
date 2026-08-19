@@ -123,7 +123,7 @@ export default function Layout({ perfil }) {
   return (
     <div className="app">
       <aside className={'lateral' + (menuAberto ? ' aberto' : '')}>
-        <div className="marca">esta <span className="ambar">·PDV</span></div>
+        <div className="marca">SisParkWeb <span className="ambar">·PDV</span></div>
         {grupos.map((g) => (
           <div key={g.titulo} className="nav-grupo">
             <div className="nav-titulo">{g.titulo}</div>
