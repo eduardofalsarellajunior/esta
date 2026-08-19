@@ -60,6 +60,6 @@ if not defined CHROME (
   exit /b 1
 )
 
-start "" "%CHROME%" --app=%URL% --kiosk-printing --disable-popup-blocking --user-data-dir="%PERFIL%" --no-first-run --no-default-browser-check
+start "" "%CHROME%" --app=%URL% --start-maximized --kiosk-printing --disable-popup-blocking --user-data-dir="%PERFIL%" --no-first-run --no-default-browser-check
 
 endlocal
