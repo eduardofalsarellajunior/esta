@@ -30,10 +30,14 @@ export const DESTINOS: Record<string, Destino> = {
     rotulo: 'Mensalistas',
     tabela: 'mensalistas',
     colunas: [
-      // NOMECAR não entra aqui: no ESTAEMPR o código do mensalista é o VEICULO
-      // (a placa do carro principal dele); NOMECAR é campo do ESTASUBS (modelo
-      // de um veículo extra) — ver destino mensalista_veiculos_extra abaixo.
       { campo: 'codigo', rotulo: 'Código (= placa do veículo principal)', obrigatorio: true, palpites: ['VEICULO', 'CODIGO'] },
+      // O ESTAEMPR também tem NOMECAR — modelo do veículo PRINCIPAL (o mesmo
+      // campo é reaproveitado no ESTASUBS pro modelo de cada veículo EXTRA,
+      // ver mensalista_veiculos_extra abaixo). Não é coluna de `mensalistas`
+      // (isso é do veículo, não da pessoa) — importacaoDbf.js tira esse
+      // campo antes de inserir e usa à parte, junto com o código/placa, pra
+      // criar a linha do veículo principal em `mensalista_veiculos`.
+      { campo: 'modelo', rotulo: 'Modelo do veículo principal', palpites: ['NOMECAR'] },
       { campo: 'razao', rotulo: 'Nome', obrigatorio: true, palpites: ['RAZAO', 'NOME'] },
       { campo: 'tipo_mens', rotulo: 'Tipo (I/P/H)', palpites: ['TIPOMENS'], padrao: 'I' },
       { campo: 'cpf_cnpj', rotulo: 'CPF/CNPJ', palpites: ['CPF', 'CGC', 'CNPJ'] },

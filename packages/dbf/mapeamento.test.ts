@@ -27,6 +27,18 @@ test('sugerirMapeamento: respeita a ordem de prioridade dos palpites, não a ord
   assert.equal(mapa.cpf_cnpj, 'CPF');
 });
 
+// Regressão: NOMECAR do ESTAEMPR é o modelo do veículo PRINCIPAL do
+// mensalista (não é coluna de `mensalistas` — importacaoDbf.js tira esse
+// campo antes de inserir e usa em mensalista_veiculos) — sem mapear isso,
+// todo veículo principal importado ficava sem modelo.
+test('sugerirMapeamento + converterLinha: NOMECAR vira o modelo do veículo principal', () => {
+  const colunas = DESTINOS.mensalistas.colunas;
+  const mapa = sugerirMapeamento(colunas, ['VEICULO', 'RAZAO', 'NOMECAR']);
+  assert.equal(mapa.modelo, 'NOMECAR');
+  const linha = converterLinha({ VEICULO: 'ABC1234', RAZAO: 'Fulano', NOMECAR: 'GOL' }, colunas, mapa);
+  assert.equal(linha.modelo, 'GOL');
+});
+
 test('sugerirMapeamento + converterLinha: formas de pagamento (ESTAPGTO)', () => {
   const colunas = DESTINOS.formas_pagamento.colunas;
   const mapa = sugerirMapeamento(colunas, ['CODIGO', 'DESCRICAO', 'PERCPGTO', 'RPSSEMPRE']);

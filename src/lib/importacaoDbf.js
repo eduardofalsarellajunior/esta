@@ -52,7 +52,15 @@ export async function importarDestino({ perfil, destino, colunas, linhas, codigo
   }
 
   for (const lote of emLotes(novas, TAMANHO_LOTE)) {
-    const payload = lote.map((linha) => ({ ...linha, filial_id: perfil.filial_id }));
+    // `modelo` (só existe nas colunas de mensalistas, ver mapeamento.ts) é do
+    // veículo principal, não da pessoa — não é coluna de `mensalistas`.
+    // Guarda à parte por código antes de tirar do payload, pra usar em
+    // importarVeiculoPrincipal.
+    const modeloPorCodigo = new Map(lote.map((linha) => [linha.codigo, linha.modelo]));
+    const payload = lote.map((linha) => {
+      const { modelo, ...resto } = linha;
+      return { ...resto, filial_id: perfil.filial_id };
+    });
     const { data: inseridos, error } = await supabase.from(destino.tabela).insert(payload).select('id, codigo');
     if (error) {
       lote.forEach((linha) => resultado.erros.push({ linha: linha.codigo, motivo: error.message }));
@@ -61,7 +69,7 @@ export async function importarDestino({ perfil, destino, colunas, linhas, codigo
     resultado.criados += inseridos.length;
 
     if (destino.tabela === 'mensalistas' && codigoEhPlacaPrincipal) {
-      await importarVeiculoPrincipal({ perfil, inseridos, resultado });
+      await importarVeiculoPrincipal({ perfil, inseridos, modeloPorCodigo, resultado });
     }
   }
 
@@ -69,9 +77,9 @@ export async function importarDestino({ perfil, destino, colunas, linhas, codigo
 }
 
 /** Cadastra o próprio código do mensalista (= placa do veículo principal) em mensalista_veiculos. */
-async function importarVeiculoPrincipal({ perfil, inseridos, resultado }) {
+async function importarVeiculoPrincipal({ perfil, inseridos, modeloPorCodigo, resultado }) {
   const candidatas = inseridos
-    .map((r) => ({ mensalista_id: r.id, placa: String(r.codigo || '').trim().toUpperCase() }))
+    .map((r) => ({ mensalista_id: r.id, placa: String(r.codigo || '').trim().toUpperCase(), modelo: modeloPorCodigo?.get(r.codigo) || null }))
     .filter((c) => c.placa);
   if (!candidatas.length) return;
 
@@ -85,7 +93,7 @@ async function importarVeiculoPrincipal({ perfil, inseridos, resultado }) {
       continue;
     }
     placasExistentes.add(c.placa);
-    payload.push({ filial_id: perfil.filial_id, mensalista_id: c.mensalista_id, placa: c.placa });
+    payload.push({ filial_id: perfil.filial_id, mensalista_id: c.mensalista_id, placa: c.placa, modelo: c.modelo });
   }
   if (!payload.length) return;
 
