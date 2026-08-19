@@ -130,7 +130,8 @@ export default function Mensalistas({ perfil }) {
             </tr></thead>
             <tbody>
               {listaOrdenada.map((m) => (
-                <tr key={m.id}>
+                <tr key={m.id} className={'linha-clicavel' + (sel?.id === m.id ? ' linha-selecionada' : '')}
+                  onClick={() => setSel(m)} title="Clique pra ver os veículos e recebimentos deste mensalista">
                   <td className="mono">{m.codigo}</td>
                   <td>{m.razao}</td>
                   <td>{rotuloTipoMens(m.tipo_mens)}</td>
@@ -145,8 +146,8 @@ export default function Mensalistas({ perfil }) {
                   </td>
                   <td>{m.ativo ? 'Sim' : 'Não'}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button className="btn-ghost" onClick={() => { setSel(m); setEditando(m); }}>Editar</button>
-                    <button className="btn-primary" onClick={() => { setSel(m); setRecebendo(m); }}>Receber</button>
+                    <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); setSel(m); setEditando(m); }}>Editar</button>
+                    <button className="btn-primary" onClick={(e) => { e.stopPropagation(); setSel(m); setRecebendo(m); }}>Receber</button>
                   </td>
                 </tr>
               ))}

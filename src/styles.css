@@ -73,6 +73,9 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--linha); font-size: 14px; }
 th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .valor { color: var(--ambar); font-weight: 700; }
+.linha-clicavel { cursor: pointer; }
+.linha-clicavel:hover { background: var(--panel2); }
+.linha-selecionada, .linha-selecionada:hover { background: var(--panel2); box-shadow: inset 3px 0 0 var(--ambar); }
 
 .linha-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
 .campo { display: flex; flex-direction: column; gap: 4px; }
