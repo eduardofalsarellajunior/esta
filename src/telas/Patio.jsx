@@ -765,7 +765,21 @@ export default function Patio({ perfil }) {
       const convenioCodigo = mov.convenio_codigo || '';
       const resultado = calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados);
       const formaPadrao = formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
-      setSaindo({ mov, convenioCodigo, servicosSelecionados, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos: [{ forma: formaPadrao, valor: resultado.valor }] });
+      const pagamentos = [{ forma: formaPadrao, valor: resultado.valor }];
+
+      // Mensalista/hóspede de verdade (mensalidade em dia e dentro do
+      // horário contratado — é exatamente isso que faz calcularResultadoSaida
+      // devolver mensalista:true; quem caiu pra avulso por vencimento/vaga/
+      // restrição tem mensalista:false e continua parando aqui, é cobrança
+      // real). Sem valor a cobrar e sem bônus a oferecer (avaliarBonus já
+      // ignora esse caso) — não tem por que parar pedindo confirmação, mesmo
+      // raciocínio da entrada automática dele.
+      if (resultado.mensalista) {
+        await confirmarSaida(null, { mov, convenioCodigo, servicosSelecionados, resultado, bonusAplicado: null, pagamentos });
+        return;
+      }
+
+      setSaindo({ mov, convenioCodigo, servicosSelecionados, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos });
       abrirValorObrigatorioSePreciso(resultado);
       const bonus = await avaliarBonus(resultado, mov.placa);
       if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); }
@@ -899,8 +913,14 @@ export default function Patio({ perfil }) {
     await atualizarListaSenhaMes();
   }
 
-  async function confirmarSaida(tomadorDps) {
-    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado } = saindo;
+  /**
+   * `dadosOverride`: usado só pela saída automática de mensalista em dia
+   * (ver prepararSaida) — ali o card de confirmação nunca chega a abrir
+   * (não faz sentido piscar e sumir na tela), então os dados vêm direto,
+   * sem passar pelo estado `saindo`.
+   */
+  async function confirmarSaida(tomadorDps, dadosOverride) {
+    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, servicosSelecionados } = dadosOverride || saindo;
     const dtSaida = hojeISO();
     const hrSaida = agoraHHMM();
     // Liga ao caixa aberto do operador (se houver), para o fechamento.
@@ -952,7 +972,6 @@ export default function Patio({ perfil }) {
 
     const formaTexto = resultado.mensalista ? 'Mensalista/hóspede'
       : (pagos.map((p) => formas.find((f) => f.codigo === p.forma)?.descricao || p.forma).join(' + ') || '—');
-    const { servicosSelecionados } = saindo;
     const ticketSaida = comModelo('saida', {
       titulo: 'Ticket de saída',
       linhas: [
