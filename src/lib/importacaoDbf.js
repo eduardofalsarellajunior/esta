@@ -3,6 +3,7 @@
 // atualizado, pra não sobrescrever edição feita no app depois da última
 // importação.
 import { supabase } from './supabase.js';
+import { normalizar } from './texto.js';
 
 const TAMANHO_LOTE = 200;
 
@@ -10,6 +11,18 @@ function emLotes(array, tamanho) {
   const lotes = [];
   for (let i = 0; i < array.length; i += tamanho) lotes.push(array.slice(i, i + tamanho));
   return lotes;
+}
+
+/**
+ * Tabela (tipo_veic) por nome de modelo — mesma lógica que a tela de
+ * Mensalistas usa ao selecionar um "Carro" conhecido (auto-preenche a
+ * tabela dele). Sem isso, todo veículo importado do .dbf ficava sem
+ * tipo_veic, e a entrada de mensalista parava pedindo pra completar à mão
+ * em vez de dar entrada sozinha.
+ */
+async function catalogoTabelaPorModelo(filialId) {
+  const { data } = await supabase.from('modelos_veiculo').select('nome, tabela_tipo').eq('filial_id', filialId);
+  return new Map((data || []).filter((m) => m.tabela_tipo).map((m) => [normalizar(m.nome), m.tabela_tipo]));
 }
 
 /** Linhas sem os campos obrigatórios nem tentam ir pro banco. */
@@ -83,7 +96,10 @@ async function importarVeiculoPrincipal({ perfil, inseridos, modeloPorCodigo, re
     .filter((c) => c.placa);
   if (!candidatas.length) return;
 
-  const { data: jaExistem } = await supabase.from('mensalista_veiculos').select('placa').eq('filial_id', perfil.filial_id);
+  const [{ data: jaExistem }, catalogo] = await Promise.all([
+    supabase.from('mensalista_veiculos').select('placa').eq('filial_id', perfil.filial_id),
+    catalogoTabelaPorModelo(perfil.filial_id),
+  ]);
   const placasExistentes = new Set((jaExistem || []).map((r) => r.placa));
 
   const payload = [];
@@ -93,7 +109,10 @@ async function importarVeiculoPrincipal({ perfil, inseridos, modeloPorCodigo, re
       continue;
     }
     placasExistentes.add(c.placa);
-    payload.push({ filial_id: perfil.filial_id, mensalista_id: c.mensalista_id, placa: c.placa, modelo: c.modelo });
+    payload.push({
+      filial_id: perfil.filial_id, mensalista_id: c.mensalista_id, placa: c.placa, modelo: c.modelo,
+      tipo_veic: catalogo.get(normalizar(c.modelo)) || null,
+    });
   }
   if (!payload.length) return;
 
@@ -112,12 +131,13 @@ export async function importarVeiculosExtras({ perfil, linhas, colunas }) {
   const resultado = { criados: 0, ignorados: 0, erros };
   if (!validas.length) return resultado;
 
-  const { data: mensalistasData, error: errMens } = await supabase
-    .from('mensalistas').select('id, codigo').eq('filial_id', perfil.filial_id);
+  const [{ data: mensalistasData, error: errMens }, { data: jaExistem }, catalogo] = await Promise.all([
+    supabase.from('mensalistas').select('id, codigo').eq('filial_id', perfil.filial_id),
+    supabase.from('mensalista_veiculos').select('placa').eq('filial_id', perfil.filial_id),
+    catalogoTabelaPorModelo(perfil.filial_id),
+  ]);
   if (errMens) { resultado.erros.push({ linha: 0, motivo: `Erro ao consultar mensalistas: ${errMens.message}` }); return resultado; }
   const idPorCodigo = new Map((mensalistasData || []).map((m) => [m.codigo, m.id]));
-
-  const { data: jaExistem } = await supabase.from('mensalista_veiculos').select('placa').eq('filial_id', perfil.filial_id);
   const placasExistentes = new Set((jaExistem || []).map((r) => r.placa));
 
   const payload = [];
@@ -130,7 +150,10 @@ export async function importarVeiculosExtras({ perfil, linhas, colunas }) {
     }
     if (placasExistentes.has(p)) { resultado.ignorados++; continue; }
     placasExistentes.add(p);
-    payload.push({ filial_id: perfil.filial_id, mensalista_id: mensalistaId, placa: p, modelo: linha.modelo || null });
+    payload.push({
+      filial_id: perfil.filial_id, mensalista_id: mensalistaId, placa: p, modelo: linha.modelo || null,
+      tipo_veic: catalogo.get(normalizar(linha.modelo)) || null,
+    });
   }
 
   for (const lote of emLotes(payload, TAMANHO_LOTE)) {
