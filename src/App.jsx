@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase, configurado } from './lib/supabase.js';
 import Layout from './componentes/Layout.jsx';
 import Patio from './telas/Patio.jsx';
@@ -14,6 +14,7 @@ import Configuracoes from './telas/Configuracoes.jsx';
 import Usuarios from './telas/Usuarios.jsx';
 import ImportarDbf from './telas/ImportarDbf.jsx';
 import ModelosTicket from './telas/ModelosTicket.jsx';
+import PainelFornecedor from './telas/PainelFornecedor.jsx';
 import EscolherFilial from './telas/EscolherFilial.jsx';
 import SenhaMesGate from './telas/SenhaMesGate.jsx';
 import SessoesGate from './telas/SessoesGate.jsx';
@@ -98,6 +99,10 @@ function Rotas({ perfil }) {
           <Route path="usuarios" element={<Usuarios perfil={perfil} />} />
           <Route path="modelos-ticket" element={<ModelosTicket perfil={perfil} />} />
           <Route path="importar" element={<ImportarDbf perfil={perfil} />} />
+          {/* Fornecedor-only: não existe em acesso.js um terceiro nível pra
+              isso (supervisor e fornecedor têm rotasDoPapel === null, sem
+              restrição), então o gate é direto aqui, igual EscolherFilial. */}
+          <Route path="painel-fornecedor" element={ehFornecedor(perfil) ? <PainelFornecedor perfil={perfil} /> : <Navigate to="/" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>
@@ -112,7 +117,10 @@ function Login() {
   async function entrar(e) {
     e.preventDefault(); setErro(''); setOcupado(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
-    if (error) setErro(error.message);
+    if (error) { setErro(error.message); setOcupado(false); return; }
+    // Contador do Painel de uso (ver 0033_painel_uso.sql) — best-effort,
+    // uma falha aqui não pode travar o login de ninguém.
+    supabase.rpc('registrar_acesso').catch(() => {});
     setOcupado(false);
   }
   return (

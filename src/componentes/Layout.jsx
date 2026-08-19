@@ -113,6 +113,12 @@ export default function Layout({ perfil }) {
   const grupos = GRUPOS
     .map((g) => ({ ...g, itens: g.itens.filter((i) => podeAcessar(perfil, i.to)) }))
     .filter((g) => g.itens.length > 0);
+  // Fornecedor-only: acesso.js não distingue supervisor de fornecedor (os
+  // dois têm rotasDoPapel === null), então não dá pra colocar isso no
+  // GRUPOS estático acima — entra à parte, só quando é o fornecedor.
+  if (ehFornecedor(perfil)) {
+    grupos.push({ titulo: 'Fornecedor', itens: [{ to: '/painel-fornecedor', rotulo: 'Painel de uso' }] });
+  }
 
   return (
     <div className="app">

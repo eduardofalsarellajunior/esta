@@ -37,22 +37,39 @@ function json(body: unknown, status = 200) {
 // (verify_jwt padrão); aqui só checamos se é um usuário logado (role
 // "authenticated") e não a anon key pública — que fica exposta no bundle do
 // app e não deve conseguir gastar a cota da API sozinha.
-function ehUsuarioAutenticado(authHeader: string | null): boolean {
+function payloadDoToken(authHeader: string | null): any {
   try {
     const token = (authHeader || '').replace(/^Bearer\s+/i, '');
     const payloadB64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(atob(payloadB64));
-    return payload.role === 'authenticated';
+    return JSON.parse(atob(payloadB64));
   } catch {
-    return false;
+    return null;
   }
+}
+
+// Contador do Painel de uso do fornecedor (ver
+// supabase/migrations/0033_painel_uso.sql) — melhor esforço: se falhar por
+// qualquer motivo, a leitura de placa em si não pode ser afetada, é só
+// telemetria de quanto cada filial está consumindo do plano do Plate
+// Recognizer.
+async function registrarUso(userId: string) {
+  const { createClient } = await import('npm:@supabase/supabase-js@2');
+  const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: perfil } = await admin.from('perfis').select('filial_id, filial_ativa').eq('id', userId).maybeSingle();
+  const filialId = perfil?.filial_ativa || perfil?.filial_id;
+  if (!filialId) return;
+  await admin.rpc('registrar_reconhecimento_placa', { p_filial_id: filialId });
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ erro: 'Método não suportado.' }, 405);
 
-  if (!ehUsuarioAutenticado(req.headers.get('Authorization'))) {
+  const authHeader = req.headers.get('Authorization');
+  const payload = payloadDoToken(authHeader);
+  if (payload?.role !== 'authenticated') {
     return json({ erro: 'Faça login no app para usar o leitor de placas.' }, 401);
   }
 
@@ -94,6 +111,10 @@ Deno.serve(async (req) => {
       .map((c: any) => ({ placa: String(c.plate || '').toUpperCase(), confianca: typeof c.score === 'number' ? c.score : null }))
       .filter((c: { placa: string }) => c.placa && c.placa !== String(r.plate || '').toUpperCase()),
   }));
+
+  // Melhor esforço — nunca deixa a leitura de placa falhar por causa da
+  // telemetria de uso.
+  if (payload.sub) registrarUso(payload.sub).catch(() => {});
 
   return json({ resultados });
 });
