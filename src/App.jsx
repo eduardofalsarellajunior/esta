@@ -119,8 +119,13 @@ function Login() {
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
     if (error) { setErro(error.message); setOcupado(false); return; }
     // Contador do Painel de uso (ver 0033_painel_uso.sql) — best-effort,
-    // uma falha aqui não pode travar o login de ninguém.
-    supabase.rpc('registrar_acesso').catch(() => {});
+    // uma falha aqui não pode travar o login de ninguém. `.rpc()` não
+    // rejeita em erro do servidor (só resolve com `error` preenchido) — só
+    // um `.catch()` deixaria isso passar em silêncio, sem aparecer nem no
+    // console.
+    supabase.rpc('registrar_acesso')
+      .then(({ error }) => { if (error) console.error('registrar_acesso:', error.message); })
+      .catch((e) => console.error('registrar_acesso:', e.message));
     setOcupado(false);
   }
   return (
