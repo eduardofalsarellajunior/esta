@@ -12,6 +12,7 @@ import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
+import { buscarCnpj } from '../lib/cnpj.js';
 import { ehGerente } from '../lib/acesso.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
@@ -67,6 +68,8 @@ export default function Patio({ perfil }) {
   const [fotosAvarias, setFotosAvarias] = useState(0); // só contador — as fotos não ficam no app, vão pro aparelho
   const [modalExclusao, setModalExclusao] = useState(null); // { mov, motivo }
   const [modalDps, setModalDps] = useState(null); // { documento, nome }
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false);
+  const [erroCnpj, setErroCnpj] = useState('');
   const [modalValor, setModalValor] = useState(null); // { valor } — alteração manual do valor da saída
   const [agora, setAgora] = useState(() => Date.now());
   const [abrirRecebimento, setAbrirRecebimento] = useState(false); // fluxo de "Receber mensalidade" (menu ⋮)
@@ -816,6 +819,20 @@ export default function Patio({ perfil }) {
 
   function abrirModalDps() {
     setModalDps({ documento: '', nome: '' });
+    setErroCnpj('');
+  }
+
+  /**
+   * Preenche o nome/razão social a partir do CNPJ (dado público — ver
+   * src/lib/cnpj.js). Só vale pra CNPJ: CPF não tem consulta pública
+   * equivalente (protegido por sigilo fiscal).
+   */
+  async function buscarNomePorCnpj() {
+    setErroCnpj(''); setBuscandoCnpj(true);
+    const r = await buscarCnpj(modalDps.documento);
+    setBuscandoCnpj(false);
+    if (r.erro) { setErroCnpj(r.erro); return; }
+    setModalDps((s) => ({ ...s, nome: r.nome || s.nome }));
   }
 
   function abrirModalValor() {
@@ -1703,19 +1720,27 @@ export default function Patio({ perfil }) {
               Informe o CPF ou CNPJ do tomador do serviço. Deixe em branco para emitir
               sem identificação (usa não exigibilidade do NIF).
             </p>
-            <div className="campo">
-              <label>CPF/CNPJ (opcional)</label>
-              <input className="mono" value={modalDps.documento}
-                onChange={(e) => setModalDps({ ...modalDps, documento: e.target.value })}
-                placeholder="Deixe em branco para não identificar" />
-              {erroCpfCnpj(modalDps.documento)
-                ? <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(modalDps.documento)}</span>
-                : !validarCpfCnpj(modalDps.documento).vazio && (
-                  <span className="suave" style={{ fontSize: 11 }}>
-                    {validarCpfCnpj(modalDps.documento).tipo} válido: {formatarCpfCnpj(modalDps.documento)}
-                  </span>
-                )}
+            <div className="linha-form" style={{ alignItems: 'flex-end' }}>
+              <div className="campo" style={{ flex: 1 }}>
+                <label>CPF/CNPJ (opcional)</label>
+                <input className="mono" value={modalDps.documento}
+                  onChange={(e) => { setModalDps({ ...modalDps, documento: e.target.value }); setErroCnpj(''); }}
+                  placeholder="Deixe em branco para não identificar" />
+                {erroCpfCnpj(modalDps.documento)
+                  ? <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(modalDps.documento)}</span>
+                  : !validarCpfCnpj(modalDps.documento).vazio && (
+                    <span className="suave" style={{ fontSize: 11 }}>
+                      {validarCpfCnpj(modalDps.documento).tipo} válido: {formatarCpfCnpj(modalDps.documento)}
+                    </span>
+                  )}
+              </div>
+              {validarCpfCnpj(modalDps.documento).tipo === 'CNPJ' && (
+                <button type="button" className="btn-ghost" disabled={buscandoCnpj} onClick={buscarNomePorCnpj}>
+                  {buscandoCnpj ? 'Buscando…' : 'Buscar nome'}
+                </button>
+              )}
             </div>
+            {erroCnpj && <p className="aviso" style={{ fontSize: 11 }}>{erroCnpj}</p>}
             <div className="campo">
               <label>Nome / Razão social (opcional)</label>
               <input value={modalDps.nome}

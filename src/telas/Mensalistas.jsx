@@ -2,7 +2,8 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarModelosVeiculo } from '../lib/dados.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
-import { erroCpfCnpj } from '../lib/documento.js';
+import { erroCpfCnpj, validarCpfCnpj } from '../lib/documento.js';
+import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
 import { dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
 import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
@@ -237,7 +238,28 @@ function Recebimentos({ mensalista, formas, onReimprimir }) {
 
 function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
   const [m, setM] = useState(inicial);
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false);
+  const [erroCnpj, setErroCnpj] = useState('');
   const set = (k, v) => setM((o) => ({ ...o, [k]: v }));
+
+  /**
+   * Preenche nome/endereço a partir do CNPJ (dado público — ver
+   * src/lib/cnpj.js). Só vale pra CNPJ: CPF não tem consulta pública
+   * equivalente (protegido por sigilo fiscal).
+   */
+  async function buscarDadosCnpj() {
+    setErroCnpj(''); setBuscandoCnpj(true);
+    const r = await buscarCnpj(m.cpf_cnpj);
+    if (r.erro) { setErroCnpj(r.erro); setBuscandoCnpj(false); return; }
+    const mun = await municipioIbgeDe(r.cidade, r.uf);
+    setBuscandoCnpj(false);
+    setM((o) => ({
+      ...o, razao: r.nome || o.razao, endereco: r.endereco || o.endereco,
+      numero: r.numero || o.numero, bairro: r.bairro || o.bairro, cep: r.cep || o.cep,
+      ...(mun ? { cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo } : (r.cidade ? { cidade: r.cidade, uf: r.uf } : {})),
+    }));
+  }
+
   return (
     <div className="modal-bg" onClick={onFechar}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 480, maxHeight: '85vh', overflow: 'auto' }}>
@@ -259,13 +281,21 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
               <option value="H">Hóspede</option>
             </select>
           </div>
-          <div className="campo" style={{ marginBottom: 10 }}>
-            <label>CPF/CNPJ</label>
-            <input className="mono" value={m.cpf_cnpj || ''} onChange={(e) => set('cpf_cnpj', e.target.value)} />
-            {erroCpfCnpj(m.cpf_cnpj)
-              ? <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(m.cpf_cnpj)}</span>
-              : <span className="suave" style={{ fontSize: 11 }}>Usado como tomador na nota fiscal do recebimento da mensalidade.</span>}
+          <div className="linha-form" style={{ marginBottom: 10, alignItems: 'flex-end' }}>
+            <div className="campo" style={{ flex: 1 }}>
+              <label>CPF/CNPJ</label>
+              <input className="mono" value={m.cpf_cnpj || ''} onChange={(e) => { set('cpf_cnpj', e.target.value); setErroCnpj(''); }} />
+              {erroCpfCnpj(m.cpf_cnpj)
+                ? <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(m.cpf_cnpj)}</span>
+                : <span className="suave" style={{ fontSize: 11 }}>Usado como tomador na nota fiscal do recebimento da mensalidade.</span>}
+            </div>
+            {validarCpfCnpj(m.cpf_cnpj).tipo === 'CNPJ' && (
+              <button type="button" className="btn-ghost" disabled={buscandoCnpj} onClick={buscarDadosCnpj}>
+                {buscandoCnpj ? 'Buscando…' : 'Buscar dados'}
+              </button>
+            )}
           </div>
+          {erroCnpj && <p className="aviso" style={{ fontSize: 11 }}>{erroCnpj}</p>}
           <div className="campo" style={{ marginBottom: 10 }}>
             <label>Telefone</label>
             <input value={m.telefone || ''} onChange={(e) => set('telefone', e.target.value)} />

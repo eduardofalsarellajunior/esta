@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtBRL, fmtDataBR } from '../lib/tempo.js';
 import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
-import { erroCpfCnpj } from '../lib/documento.js';
+import { erroCpfCnpj, validarCpfCnpj } from '../lib/documento.js';
+import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
@@ -24,6 +25,8 @@ export default function Fiscal({ perfil }) {
   const [emLote, setEmLote] = useState(null); // { acao, feitos, total } enquanto roda em lote
   const [alterando, setAlterando] = useState(null); // nota em edição (formulário do modal)
   const [salvando, setSalvando] = useState(false);
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false);
+  const [erroCnpj, setErroCnpj] = useState('');
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -112,6 +115,25 @@ export default function Fiscal({ perfil }) {
       bairro: t.bairro || '', cidade: t.cidade || '', uf: t.uf || '', cod_ibge: t.cod_ibge || '',
       cep: t.cep || '', email: t.email || '', telefone: t.telefone || '',
     });
+    setErroCnpj('');
+  }
+
+  /**
+   * Preenche nome/endereço do tomador a partir do CNPJ (dado público — ver
+   * src/lib/cnpj.js). Só vale pra CNPJ: CPF não tem consulta pública
+   * equivalente (protegido por sigilo fiscal).
+   */
+  async function buscarDadosCnpj() {
+    setErroCnpj(''); setBuscandoCnpj(true);
+    const r = await buscarCnpj(alterando.cpf_cnpj);
+    if (r.erro) { setErroCnpj(r.erro); setBuscandoCnpj(false); return; }
+    const mun = await municipioIbgeDe(r.cidade, r.uf);
+    setBuscandoCnpj(false);
+    setAlterando((a) => ({
+      ...a, nome: r.nome || a.nome, endereco: r.endereco || a.endereco,
+      numero: r.numero || a.numero, bairro: r.bairro || a.bairro, cep: r.cep || a.cep,
+      ...(mun ? { cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo } : (r.cidade ? { cidade: r.cidade, uf: r.uf } : {})),
+    }));
   }
 
   async function salvarAlteracao(e) {
@@ -279,7 +301,7 @@ export default function Fiscal({ perfil }) {
                 <div className="campo" style={{ maxWidth: 180 }}>
                   <label>CPF/CNPJ</label>
                   <input className="mono" value={alterando.cpf_cnpj}
-                    onChange={(e) => setAlterando({ ...alterando, cpf_cnpj: e.target.value })} />
+                    onChange={(e) => { setAlterando({ ...alterando, cpf_cnpj: e.target.value }); setErroCnpj(''); }} />
                   {erroCpfCnpj(alterando.cpf_cnpj) && (
                     <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(alterando.cpf_cnpj)}</span>
                   )}
@@ -289,7 +311,13 @@ export default function Fiscal({ perfil }) {
                   <input value={alterando.nome}
                     onChange={(e) => setAlterando({ ...alterando, nome: e.target.value })} />
                 </div>
+                {validarCpfCnpj(alterando.cpf_cnpj).tipo === 'CNPJ' && (
+                  <button type="button" className="btn-ghost" disabled={buscandoCnpj} onClick={buscarDadosCnpj}>
+                    {buscandoCnpj ? 'Buscando…' : 'Buscar dados'}
+                  </button>
+                )}
               </div>
+              {erroCnpj && <p className="aviso" style={{ fontSize: 11 }}>{erroCnpj}</p>}
               <div className="linha-form" style={{ marginBottom: 10 }}>
                 <div className="campo" style={{ flex: 2 }}>
                   <label>Endereço</label>
