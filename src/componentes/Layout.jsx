@@ -13,6 +13,7 @@ const GRUPOS = [
     { to: '/', rotulo: 'Pátio', fim: true },
     { to: '/caixa', rotulo: 'Caixa' },
     { to: '/bi', rotulo: 'BI / Painel' },
+    { to: '/reservas', rotulo: 'Reservas de vaga' },
   ]},
   { titulo: 'Cadastros', itens: [
     { to: '/precos', rotulo: 'Tabelas de preço' },

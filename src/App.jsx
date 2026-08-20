@@ -5,6 +5,7 @@ import Layout from './componentes/Layout.jsx';
 import Patio from './telas/Patio.jsx';
 import Caixa from './telas/Caixa.jsx';
 import BI from './telas/BI.jsx';
+import Reservas from './telas/Reservas.jsx';
 import Precos from './telas/Precos.jsx';
 import { Convenios, Formas, Vagas, Modelos, Servicos, Bonus } from './telas/cadastros.jsx';
 import Mensalistas from './telas/Mensalistas.jsx';
@@ -83,6 +84,7 @@ function Rotas({ perfil }) {
           <Route index element={<Patio perfil={perfil} />} />
           <Route path="caixa" element={<Caixa perfil={perfil} />} />
           <Route path="bi" element={<BI perfil={perfil} />} />
+          <Route path="reservas" element={<Reservas perfil={perfil} />} />
           <Route path="precos" element={<Precos perfil={perfil} />} />
           <Route path="convenios" element={<Convenios perfil={perfil} />} />
           <Route path="mensalistas" element={<Mensalistas perfil={perfil} />} />
