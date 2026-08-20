@@ -32,6 +32,9 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${escapeHtml(fmtBRL(v))}</td></tr>`).join('');
   const porTipoCancelado = Object.entries(dados.porTipoCancelado)
     .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
+  const porServico = Object.entries(dados.porServico)
+    .sort(([, a], [, b]) => b.valor - a.valor)
+    .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${v.quantidade}</td><td style="text-align:right">${escapeHtml(fmtBRL(v.valor))}</td></tr>`).join('');
 
   const mensalidadesHtml = `
       <h2>Mensalidades recebidas (${dados.mensalidades.length})</h2>
@@ -88,6 +91,9 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
       <table><tbody>${porTipo || '<tr><td>—</td></tr>'}</tbody></table>
       <h2>Cancelados por tipo</h2>
       <table><tbody>${porTipoCancelado || '<tr><td>Nenhum cancelamento no período.</td></tr>'}</tbody></table>
+      <h2>Por tipo de lavagem</h2>
+      <table><thead><tr><th>Serviço</th><th style="text-align:right">Qtde</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${porServico || '<tr><td colspan="3">Nenhum serviço no período.</td></tr>'}</tbody></table>
       <h2>Por forma de pagamento</h2>
       <table><tbody>${porForma || '<tr><td>Sem pagamentos no período.</td></tr>'}</tbody></table>
       ${mensalidadesHtml}
@@ -125,6 +131,11 @@ function textoRelatorio(dados, de, ate, filial) {
   const cancelados = Object.entries(dados.porTipoCancelado);
   if (cancelados.length) for (const [k, v] of cancelados) linhas.push(`  ${rotuloTipo(k)}: ${v}`);
   else linhas.push('  Nenhum cancelamento no período.');
+  linhas.push('');
+  linhas.push('Por tipo de lavagem:');
+  const porServico = Object.entries(dados.porServico).sort(([, a], [, b]) => b.valor - a.valor);
+  if (porServico.length) for (const [k, v] of porServico) linhas.push(`  ${k}: ${v.quantidade} · ${fmtBRL(v.valor)}`);
+  else linhas.push('  Nenhum serviço no período.');
   linhas.push('');
   linhas.push('Recebido por forma de pagamento:');
   const formas = Object.entries(dados.recebidoPorForma);
@@ -178,14 +189,17 @@ export default function BI({ perfil }) {
     const ids = movs.map((m) => m.id);
     let pagtos = [];
     let movsComServico = new Set();
+    let servicosDoMovimento = [];
     if (ids.length) {
       const { data } = await supabase.from('movimento_pagamentos').select('*').in('movimento_id', ids);
       pagtos = data || [];
       // Serviço sempre substitui a tabela do veículo (nunca soma às duas —
       // ver Patio.jsx), então "quanto veio de serviço" é o valor inteiro dos
       // movimentos com pelo menos um serviço marcado, não uma fração.
-      const { data: ms } = await supabase.from('movimento_servicos').select('movimento_id').in('movimento_id', ids);
-      movsComServico = new Set((ms || []).map((r) => r.movimento_id));
+      const { data: ms } = await supabase.from('movimento_servicos')
+        .select('movimento_id, servico_id, valor, servicos(codigo, descricao)').in('movimento_id', ids);
+      servicosDoMovimento = ms || [];
+      movsComServico = new Set(servicosDoMovimento.map((r) => r.movimento_id));
     }
     const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao');
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
@@ -246,10 +260,36 @@ export default function BI({ perfil }) {
     // tabela — entra na conta do Faturado (que é o valor cheio, sem
     // desconto: Avulso + Descontos + Serviços + Mensalidades).
     const descontos = tabelaCheia - recebidoSaidas;
+
+    // Por tipo de lavagem/serviço: quantidade de vezes usado + valor total.
+    // Serviço "Pede valor" (valor informado ao marcar) usa esse valor exato.
+    // Serviço cobrado pela tabela (valor null) não tem o próprio valor
+    // separado — o motor calcula tudo junto quando há mais de um marcado no
+    // mesmo veículo (ver comSomaServicos em Patio.jsx) — então a parte "de
+    // tabela" do valor do movimento é dividida em partes iguais entre eles.
+    const valorPorMov = Object.fromEntries(movs.map((m) => [m.id, Number(m.valor || 0)]));
+    const porMovimento = {};
+    for (const r of servicosDoMovimento) (porMovimento[r.movimento_id] ||= []).push(r);
+    const porServico = {};
+    for (const [movId, itens] of Object.entries(porMovimento)) {
+      const comValorItens = itens.filter((i) => i.valor != null);
+      const semValorItens = itens.filter((i) => i.valor == null);
+      const somaComValor = comValorItens.reduce((t, i) => t + Number(i.valor), 0);
+      const fatiaSemValor = semValorItens.length
+        ? Math.max(0, (valorPorMov[movId] || 0) - somaComValor) / semValorItens.length
+        : 0;
+      for (const i of itens) {
+        const chave = i.servicos?.descricao || i.servico_id;
+        const e = (porServico[chave] ||= { quantidade: 0, valor: 0 });
+        e.quantidade++;
+        e.valor += i.valor != null ? Number(i.valor) : fatiaSemValor;
+      }
+    }
+
     setDados({
       totalVeic: movs.length, valorAvulso, faturado: valorAvulso + descontos + valorServicos + mensalidadesTotal,
       recebidoSaidas, descontos, valorServicos,
-      porTipo, porTipoCancelado, recebidoPorForma,
+      porTipo, porTipoCancelado, recebidoPorForma, porServico,
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
       mensalidades, mensalidadesTotal,
     });
@@ -343,6 +383,25 @@ export default function BI({ perfil }) {
               ))}
               {Object.keys(dados.porTipoCancelado).length === 0 && <tr><td className="suave">Nenhum cancelamento no período.</td></tr>}
             </tbody></table>
+          </div>
+
+          <div className="card">
+            <h2>Por tipo de lavagem</h2>
+            <p className="suave">
+              Quando mais de um serviço sem valor fixo é marcado no mesmo veículo, o valor é
+              dividido em partes iguais entre eles (não dá pra saber a parte exata de cada um).
+            </p>
+            <table>
+              <thead><tr><th>Serviço</th><th style={{ textAlign: 'right' }}>Quantidade</th><th style={{ textAlign: 'right' }}>Valor total</th></tr></thead>
+              <tbody>
+                {Object.entries(dados.porServico)
+                  .sort(([, a], [, b]) => b.valor - a.valor)
+                  .map(([k, v]) => (
+                    <tr key={k}><td>{k}</td><td style={{ textAlign: 'right' }}>{v.quantidade}</td><td style={{ textAlign: 'right' }}>{fmtBRL(v.valor)}</td></tr>
+                  ))}
+                {Object.keys(dados.porServico).length === 0 && <tr><td colSpan={3} className="suave">Nenhum serviço no período.</td></tr>}
+              </tbody>
+            </table>
           </div>
 
           <div className="card">
