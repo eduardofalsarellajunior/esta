@@ -10,6 +10,7 @@ import { PAPEIS, ehSupervisor, ehFornecedor } from '../lib/acesso.js';
 export default function Usuarios({ perfil }) {
   const [lista, setLista] = useState([]);
   const [editando, setEditando] = useState(null); // objeto no modal (null = fechado)
+  const [trocandoSenha, setTrocandoSenha] = useState(null); // usuário no modal de troca de senha
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const podeEditar = ehSupervisor(perfil);
@@ -58,6 +59,19 @@ export default function Usuarios({ perfil }) {
     carregar();
   }
 
+  async function trocarSenha(u, senha) {
+    setErro(''); setMsg('');
+    const { data: sessao } = await supabase.auth.getSession();
+    const resp = await fetch('/api/trocar-senha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessao.session?.access_token}` },
+      body: JSON.stringify({ userId: u.id, senha }),
+    });
+    const dados = await resp.json().catch(() => ({}));
+    if (!resp.ok) { setErro(dados.erro || `Falha ao trocar a senha (${resp.status}).`); return; }
+    setTrocandoSenha(null); setMsg(`Senha de ${u.nome} trocada — já pode passar a nova senha pra pessoa.`);
+  }
+
   return (
     <div className="card">
       <div className="card-cab">
@@ -85,6 +99,7 @@ export default function Usuarios({ perfil }) {
                   {podeEditar && (
                     <>
                       <button className="btn-ghost" onClick={() => setEditando(u)}>Editar</button>
+                      <button className="btn-ghost" onClick={() => setTrocandoSenha(u)}>Trocar senha</button>
                       <button className="btn-ghost aviso-btn" disabled={u.id === perfil.id}
                         onClick={() => alternarAtivo(u)}>
                         {u.ativo ? 'Desativar' : 'Reativar'}
@@ -103,6 +118,47 @@ export default function Usuarios({ perfil }) {
         <UsuarioModal inicial={editando.novo ? {} : editando} onSalvar={salvar}
           podeCriarFornecedor={ehFornecedor(perfil)} onFechar={() => setEditando(null)} />
       )}
+
+      {trocandoSenha && (
+        <TrocarSenhaModal usuario={trocandoSenha} onConfirmar={trocarSenha} onFechar={() => setTrocandoSenha(null)} />
+      )}
+    </div>
+  );
+}
+
+function TrocarSenhaModal({ usuario, onConfirmar, onFechar }) {
+  const [senha, setSenha] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  async function enviar(e) {
+    e.preventDefault();
+    setSalvando(true);
+    await onConfirmar(usuario, senha);
+    setSalvando(false);
+  }
+
+  return (
+    <div className="modal-bg" onClick={onFechar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Trocar senha — {usuario.nome}</h2>
+        <p className="suave">{usuario.email}</p>
+        <form onSubmit={enviar}>
+          <div className="campo" style={{ marginBottom: 10 }}>
+            <label>Nova senha *</label>
+            <input type="text" className="mono" value={senha} minLength={6} autoFocus
+              onChange={(e) => setSenha(e.target.value)} required />
+            <span className="suave" style={{ fontSize: 11 }}>
+              Mínimo 6 caracteres. Fica visível de propósito, pra você passar pra pessoa.
+            </span>
+          </div>
+          <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+            <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
+            <button type="submit" className="btn-primary" disabled={salvando}>
+              {salvando ? 'Trocando…' : 'Trocar senha'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
