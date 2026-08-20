@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarModelosVeiculo } from '../lib/dados.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
@@ -130,45 +130,51 @@ export default function Mensalistas({ perfil }) {
             </tr></thead>
             <tbody>
               {listaOrdenada.map((m) => (
-                <tr key={m.id} className={'linha-clicavel' + (sel?.id === m.id ? ' linha-selecionada' : '')}
-                  onClick={() => setSel(m)} title="Clique pra ver os veículos e recebimentos deste mensalista">
-                  <td className="mono">{m.codigo}</td>
-                  <td>{m.razao}</td>
-                  <td>{rotuloTipoMens(m.tipo_mens)}</td>
-                  <td>{m.box || '—'}</td>
-                  <td>{m.qte_vagas}</td>
-                  <td>{Number(m.valor_mensalidade || 0) > 0 ? fmtBRL(Number(m.valor_mensalidade)) : '—'}</td>
-                  <td className="mono">
-                    {fmtDataBR(m.proximo_pagamento)}
-                    {!dentroDoVencimento(m.proximo_pagamento, m.tolerancia_dias) && (
-                      <span className="status status-cancelada" style={{ marginLeft: 6 }} title="Fora da tolerância — entra como avulso no pátio">Vencida</span>
-                    )}
-                  </td>
-                  <td>{m.ativo ? 'Sim' : 'Não'}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); setSel(m); setEditando(m); }}>Editar</button>
-                    <button className="btn-primary" onClick={(e) => { e.stopPropagation(); setSel(m); setRecebendo(m); }}>Receber</button>
-                  </td>
-                </tr>
+                <Fragment key={m.id}>
+                  <tr className={'linha-clicavel' + (sel?.id === m.id ? ' linha-selecionada' : '')}
+                    onClick={() => setSel((s) => (s?.id === m.id ? null : m))}
+                    title="Clique pra ver os veículos e recebimentos deste mensalista">
+                    <td className="mono">{m.codigo}</td>
+                    <td>{m.razao}</td>
+                    <td>{rotuloTipoMens(m.tipo_mens)}</td>
+                    <td>{m.box || '—'}</td>
+                    <td>{m.qte_vagas}</td>
+                    <td>{Number(m.valor_mensalidade || 0) > 0 ? fmtBRL(Number(m.valor_mensalidade)) : '—'}</td>
+                    <td className="mono">
+                      {fmtDataBR(m.proximo_pagamento)}
+                      {!dentroDoVencimento(m.proximo_pagamento, m.tolerancia_dias) && (
+                        <span className="status status-cancelada" style={{ marginLeft: 6 }} title="Fora da tolerância — entra como avulso no pátio">Vencida</span>
+                      )}
+                    </td>
+                    <td>{m.ativo ? 'Sim' : 'Não'}</td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); setSel(m); setEditando(m); }}>Editar</button>
+                      <button className="btn-primary" onClick={(e) => { e.stopPropagation(); setSel(m); setRecebendo(m); }}>Receber</button>
+                    </td>
+                  </tr>
+                  {sel?.id === m.id && (
+                    <tr>
+                      <td colSpan={9} className="linha-expandida">
+                        <Veiculos perfil={perfil} mensalista={sel} />
+                        <Recebimentos mensalista={sel} formas={formas}
+                          onReimprimir={async (p) => {
+                            setTicket(await ticketRecebimentoComModelo({
+                              mensalista: sel, dtPagamento: p.dt_pagamento, valor: p.valor_pago,
+                              proximo: p.proximo_pagamento, formaDescricao: descricaoForma(formas, p.forma_pagamento),
+                              operador: perfil.nome, reimpressao: true, recibo: p.id,
+                            }));
+                            setCelularTicket(sel.celular || '');
+                          }} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               {lista.length === 0 && <tr><td colSpan={9} className="suave">Nenhum mensalista.</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
-
-      {sel && <Veiculos perfil={perfil} mensalista={sel} />}
-      {sel && (
-        <Recebimentos mensalista={sel} formas={formas}
-          onReimprimir={async (p) => {
-            setTicket(await ticketRecebimentoComModelo({
-              mensalista: sel, dtPagamento: p.dt_pagamento, valor: p.valor_pago,
-              proximo: p.proximo_pagamento, formaDescricao: descricaoForma(formas, p.forma_pagamento),
-              operador: perfil.nome, reimpressao: true, recibo: p.id,
-            }));
-            setCelularTicket(sel.celular || '');
-          }} />
-      )}
 
       {editando && (
         <HeaderModal inicial={editando.novo ? {} : editando} onSalvar={salvar}

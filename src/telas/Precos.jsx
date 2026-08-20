@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtHora, fmtBRL } from '../lib/tempo.js';
 
@@ -52,21 +52,27 @@ export default function Precos({ perfil }) {
             <thead><tr><th>Tipo</th><th>Descrição</th><th>Seleção manual</th><th></th></tr></thead>
             <tbody>
               {tabelas.map((t) => (
-                <tr key={t.id}>
-                  <td className="mono">{t.tipo}</td>
-                  <td>{t.descricao}</td>
-                  <td>{t.selecao_manual ? 'Sim' : 'Não'}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button className="btn-ghost" onClick={() => { setSel(t); setEditando(t); }}>Editar</button>
-                  </td>
-                </tr>
+                <Fragment key={t.id}>
+                  <tr className={'linha-clicavel' + (sel?.id === t.id ? ' linha-selecionada' : '')}
+                    onClick={() => setSel((s) => (s?.id === t.id ? null : t))}
+                    title="Clique pra ver e cadastrar as faixas desta tabela">
+                    <td className="mono">{t.tipo}</td>
+                    <td>{t.descricao}</td>
+                    <td>{t.selecao_manual ? 'Sim' : 'Não'}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); setSel(t); setEditando(t); }}>Editar</button>
+                    </td>
+                  </tr>
+                  {sel?.id === t.id && (
+                    <tr><td colSpan={4} className="linha-expandida"><Faixas perfil={perfil} tabela={sel} /></td></tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {sel && <Faixas perfil={perfil} tabela={sel} />}
       {editando && (
         <HeaderModal inicial={editando.novo ? {} : editando} onSalvar={salvarHeader}
           onExcluir={editando.id ? () => excluirTabela(editando.id) : null}
