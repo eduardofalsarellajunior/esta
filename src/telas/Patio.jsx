@@ -13,6 +13,7 @@ import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj } from '../lib/cnpj.js';
+import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
 import { ehGerente } from '../lib/acesso.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
@@ -817,9 +818,14 @@ export default function Patio({ perfil }) {
     setModalBonus(null);
   }
 
-  function abrirModalDps() {
+  async function abrirModalDps() {
     setModalDps({ documento: '', nome: '', issRetido: '' });
     setErroCnpj('');
+    // Memória por placa (ver src/lib/issRetido.js) — se essa placa já teve
+    // o recolhimento de ISS descoberto/corrigido antes, vem preenchido
+    // sozinho, sem repetir o ciclo de rejeição da prefeitura.
+    const salvo = await issRetidoDaPlaca(supabase, saindo?.mov.placa);
+    if (salvo) setModalDps((s) => (s ? { ...s, issRetido: AR_PARA_ABRASF[salvo] } : s));
   }
 
   /**
@@ -983,6 +989,12 @@ export default function Patio({ perfil }) {
           nota, filial, modelo: modelosTicket.rps,
           movimento: { ...mov, dt_saida: dtSaida, hr_saida: hrSaida, valor: resultado.valor },
         });
+      }
+      // Memória por placa (ver src/lib/issRetido.js): o operador confirmou/
+      // corrigiu o recolhimento pra esta placa — guarda pra não perguntar
+      // de novo na próxima visita dela.
+      if (tomadorDps.issRetido) {
+        await salvarIssRetidoDaPlaca(supabase, perfil.filial_id, mov.placa, ABRASF_PARA_AR[tomadorDps.issRetido]);
       }
     }
     setModalDps(null);

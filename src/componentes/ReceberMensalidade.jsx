@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js';
 import { hojeISO, proximoVencimento, primeiroVencimento, diferencaEmDias, dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
 import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
+import { AR_PARA_ABRASF } from '../lib/issRetido.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
 
@@ -221,6 +222,7 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
             cpf_cnpj: m.cpf_cnpj, nome: m.razao, endereco: m.endereco, numero: m.numero,
             bairro: m.bairro, cidade: m.cidade, uf: m.uf, cep: m.cep, cod_ibge: m.cod_ibge,
             telefone: m.telefone, email: m.email,
+            issRetido: m.iss_retido ? AR_PARA_ABRASF[m.iss_retido] : null,
           },
         });
         if (nota) {

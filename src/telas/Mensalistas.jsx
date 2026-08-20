@@ -62,6 +62,7 @@ export default function Mensalistas({ perfil }) {
       email: m.email || null, box: m.box || null, cpf_cnpj: m.cpf_cnpj || null,
       endereco: m.endereco || null, numero: m.numero || null, bairro: m.bairro || null,
       cidade: m.cidade || null, uf: m.uf || null, cep: m.cep || null, cod_ibge: m.cod_ibge || null,
+      iss_retido: m.iss_retido || null,
       dia_venc: m.dia_venc ? Number(m.dia_venc) : null,
       tolerancia_dias: Number(m.tolerancia_dias || 0), qte_vagas: Number(m.qte_vagas || 1),
       valor_mensalidade: Number(m.valor_mensalidade || 0),
@@ -296,6 +297,18 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
             )}
           </div>
           {erroCnpj && <p className="aviso" style={{ fontSize: 11 }}>{erroCnpj}</p>}
+          <div className="campo" style={{ marginBottom: 10, maxWidth: 320 }}>
+            <label>Recolhimento do ISS</label>
+            <select value={m.iss_retido || ''} onChange={(e) => set('iss_retido', e.target.value)}>
+              <option value="">Padrão da filial (Configurações → Fiscal)</option>
+              <option value="A">A — Normal (o estacionamento recolhe)</option>
+              <option value="R">R — Retido (o tomador recolhe)</option>
+            </select>
+            <span className="suave" style={{ fontSize: 11 }}>
+              Usado na nota fiscal do recebimento da mensalidade. Normalmente só se descobre quando
+              a prefeitura rejeita um RPS dizendo que este mensalista retém.
+            </span>
+          </div>
           <div className="campo" style={{ marginBottom: 10 }}>
             <label>Telefone</label>
             <input value={m.telefone || ''} onChange={(e) => set('telefone', e.target.value)} />

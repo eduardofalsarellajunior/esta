@@ -4,6 +4,7 @@ import { fmtBRL, fmtDataBR } from '../lib/tempo.js';
 import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
 import { erroCpfCnpj, validarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
+import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
@@ -106,7 +107,7 @@ export default function Fiscal({ perfil }) {
     }
   }
 
-  function abrirAlteracao(n) {
+  async function abrirAlteracao(n) {
     const t = n.tomador || {};
     setAlterando({
       id: n.id, numero_rps: n.numero_rps,
@@ -114,9 +115,21 @@ export default function Fiscal({ perfil }) {
       cpf_cnpj: t.cpf_cnpj || '', nome: t.nome || '', endereco: t.endereco || '', numero: t.numero || '',
       bairro: t.bairro || '', cidade: t.cidade || '', uf: t.uf || '', cod_ibge: t.cod_ibge || '',
       cep: t.cep || '', email: t.email || '', telefone: t.telefone || '',
-      issRetido: t.issRetido || '',
+      issRetido: t.issRetido || '', _placa: null,
     });
     setErroCnpj('');
+
+    // Nota veio de uma saída do pátio (tem movimento) — se o recolhimento
+    // dessa placa já foi descoberto/corrigido antes (ver src/lib/issRetido.js),
+    // pré-preenche sozinho; nota de mensalidade não tem placa própria.
+    if (!n.movimento_id) return;
+    const { data: mov } = await supabase.from('movimentos').select('placa').eq('id', n.movimento_id).maybeSingle();
+    if (!mov?.placa) return;
+    setAlterando((a) => (a ? { ...a, _placa: mov.placa } : a));
+    if (!t.issRetido) {
+      const salvo = await issRetidoDaPlaca(supabase, mov.placa);
+      if (salvo) setAlterando((a) => (a ? { ...a, issRetido: AR_PARA_ABRASF[salvo] } : a));
+    }
   }
 
   /**
@@ -152,6 +165,13 @@ export default function Fiscal({ perfil }) {
     });
     setSalvando(false);
     if (error) { setErro(error); return; }
+    // Memória por placa (ver src/lib/issRetido.js) — é aqui que o A/R
+    // costuma ser descoberto de verdade (rejeição da prefeitura corrigida).
+    // Guarda pra próxima visita dessa placa já vir certa, sem precisar
+    // rejeitar de novo.
+    if (a._placa && a.issRetido) {
+      await salvarIssRetidoDaPlaca(supabase, perfil.filial_id, a._placa, ABRASF_PARA_AR[a.issRetido]);
+    }
     setAlterando(null);
     setMsg(`RPS ${a.numero_rps} alterado — XML regerado e protocolo limpo. Envie de novo quando quiser.`);
     carregar();
