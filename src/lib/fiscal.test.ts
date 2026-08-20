@@ -70,3 +70,25 @@ test('gerarXmlAbrasfLoteRps: sem cod_ibge do tomador, cai no da filial (comporta
   const xml = gerarXmlAbrasfLoteRps({ nota, filial });
   assert.match(xml, /<Bairro>[^<]*<\/Bairro>\s*<CodigoMunicipio>3509502<\/CodigoMunicipio>/);
 });
+
+// Regressão: retenção de ISS é obrigação do TOMADOR (varia por CNPJ/lei
+// municipal, só se descobre quando a prefeitura rejeita um RPS dizendo que
+// aquele tomador retém) — antes era só uma preferência fixa da filial
+// (config.nfse.abrasf.issRetido), então corrigir pra "retido" numa nota
+// specific mudava o padrão pra TODAS as notas da filial.
+test('gerarXmlAbrasfLoteRps: issRetido do tomador sobrepõe o padrão da filial', () => {
+  const filial = { cod_ibge: '3509502', cnpj: '11222333000181', inscricao_mun: '123', config: { nfse: { abrasf: { issRetido: '2' } } } };
+  const nota = {
+    numero_rps: 7, competencia: '2026-08-15', valor: 50,
+    tomador: { cpf_cnpj: '11222333000199', nome: 'Empresa Tomadora', issRetido: '1' },
+  };
+  const xml = gerarXmlAbrasfLoteRps({ nota, filial });
+  assert.match(xml, /<IssRetido>1<\/IssRetido>/);
+});
+
+test('gerarXmlAbrasfLoteRps: sem issRetido no tomador, usa o padrão da filial (comportamento de sempre)', () => {
+  const filial = { cod_ibge: '3509502', cnpj: '11222333000181', inscricao_mun: '123', config: { nfse: { abrasf: { issRetido: '1' } } } };
+  const nota = { numero_rps: 7, competencia: '2026-08-15', valor: 50, tomador: { cpf_cnpj: '12345678900', nome: 'Fulano' } };
+  const xml = gerarXmlAbrasfLoteRps({ nota, filial });
+  assert.match(xml, /<IssRetido>1<\/IssRetido>/);
+});

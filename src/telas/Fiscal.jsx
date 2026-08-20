@@ -114,6 +114,7 @@ export default function Fiscal({ perfil }) {
       cpf_cnpj: t.cpf_cnpj || '', nome: t.nome || '', endereco: t.endereco || '', numero: t.numero || '',
       bairro: t.bairro || '', cidade: t.cidade || '', uf: t.uf || '', cod_ibge: t.cod_ibge || '',
       cep: t.cep || '', email: t.email || '', telefone: t.telefone || '',
+      issRetido: t.issRetido || '',
     });
     setErroCnpj('');
   }
@@ -146,6 +147,7 @@ export default function Fiscal({ perfil }) {
         cpf_cnpj: a.cpf_cnpj, nome: a.nome, endereco: a.endereco, numero: a.numero,
         bairro: a.bairro, cidade: a.cidade, uf: a.uf, cod_ibge: a.cod_ibge,
         cep: a.cep, email: a.email, telefone: a.telefone,
+        issRetido: a.issRetido || null,
       },
     });
     setSalvando(false);
@@ -318,6 +320,19 @@ export default function Fiscal({ perfil }) {
                 )}
               </div>
               {erroCnpj && <p className="aviso" style={{ fontSize: 11 }}>{erroCnpj}</p>}
+              <div className="campo" style={{ marginBottom: 10, maxWidth: 260 }}>
+                <label>ISS retido pelo tomador?</label>
+                <select value={alterando.issRetido} onChange={(e) => setAlterando({ ...alterando, issRetido: e.target.value })}>
+                  <option value="">Padrão da filial (Configurações → Fiscal)</option>
+                  <option value="2">Não — o estacionamento recolhe</option>
+                  <option value="1">Sim — o tomador retém</option>
+                </select>
+                <span className="suave" style={{ fontSize: 11 }}>
+                  Obrigação de cada tomador (varia por lei municipal) — normalmente só se descobre
+                  quando a prefeitura rejeita o RPS dizendo que este tomador retém. Vale só pra esta
+                  nota, não muda o padrão da filial.
+                </span>
+              </div>
               <div className="linha-form" style={{ marginBottom: 10 }}>
                 <div className="campo" style={{ flex: 2 }}>
                   <label>Endereço</label>

@@ -208,7 +208,12 @@ export function gerarXmlAbrasfLoteRps({ nota, filial }) {
     `<Competencia>${esc(nota.competencia)}</Competencia>`,
     '<Servico>',
     `<Valores><ValorServicos>${valorServicos.toFixed(2)}</ValorServicos><ValorIss>${valorIss.toFixed(2)}</ValorIss><Aliquota>${percIss.toFixed(2)}</Aliquota></Valores>`,
-    `<IssRetido>${esc(cfg.issRetido || '2')}</IssRetido>`,
+    // Retenção de ISS é do TOMADOR (obrigação dele, por lei municipal — não
+    // dá pra saber de antemão, só descobre quando a prefeitura rejeita o RPS
+    // dizendo que este tomador retém), não uma preferência fixa da filial.
+    // `tomador.issRetido` (editável na correção da nota, ver Fiscal.jsx)
+    // sobrepõe o padrão da filial quando setado.
+    `<IssRetido>${esc(tomador.issRetido || cfg.issRetido || '2')}</IssRetido>`,
     `<ItemListaServico>${esc(cfg.itemListaServico || '11.01')}</ItemListaServico>`,
     `<CodigoCnae>${esc(cfg.codigoCnae || '')}</CodigoCnae>`,
     `<Discriminacao>${esc(discriminacaoAbrasf(nota.descricao, valorServicos, percTrib))}</Discriminacao>`,

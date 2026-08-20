@@ -818,7 +818,7 @@ export default function Patio({ perfil }) {
   }
 
   function abrirModalDps() {
-    setModalDps({ documento: '', nome: '' });
+    setModalDps({ documento: '', nome: '', issRetido: '' });
     setErroCnpj('');
   }
 
@@ -1747,12 +1747,25 @@ export default function Patio({ perfil }) {
                 onChange={(e) => setModalDps({ ...modalDps, nome: e.target.value })}
                 placeholder="Em branco vira &quot;CONSUMIDOR&quot; no documento" />
             </div>
+            <div className="campo" style={{ marginTop: 10 }}>
+              <label>ISS retido pelo tomador?</label>
+              <select value={modalDps.issRetido} onChange={(e) => setModalDps({ ...modalDps, issRetido: e.target.value })}>
+                <option value="">Padrão da filial (Configurações → Fiscal)</option>
+                <option value="2">Não — o estacionamento recolhe</option>
+                <option value="1">Sim — o tomador retém</option>
+              </select>
+              <span className="suave" style={{ fontSize: 11 }}>
+                Normalmente só se descobre quando a prefeitura rejeita — se já sabe que este
+                tomador retém, marque aqui; senão deixe no padrão e corrija depois em NFS-e/RPS/DPS
+                se for rejeitado.
+              </span>
+            </div>
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setModalDps(null)}>Cancelar</button>
               {/* Documento em branco é permitido (vira tomador não
                   identificado); errado, não — a prefeitura rejeitaria. */}
               <button className="btn-primary" disabled={!!erroCpfCnpj(modalDps.documento)}
-                onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome })}>
+                onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome, issRetido: modalDps.issRetido || null })}>
                 Confirmar saída e gerar DPS
               </button>
             </div>
