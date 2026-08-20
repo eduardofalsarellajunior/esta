@@ -53,14 +53,96 @@ export function Formas({ perfil }) {
 }
 
 export function Vagas({ perfil }) {
-  return <Crud perfil={perfil} titulo="Vagas / boxes" tabela="vagas" ordem="codigo"
-    colunas={[
-      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
-      { campo: 'tipo', rotulo: 'Tipo' },
-      { campo: 'ocupada', rotulo: 'Ocupada', tipo: 'bool' },
-      { campo: 'placa_atual', rotulo: 'Placa', naTabela: true },
-      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
-    ]} />;
+  // Muda a cada lote criado com sucesso, só pra remontar o Crud e ele
+  // recarregar a lista — o Crud não expõe um jeito de forçar reload de fora.
+  const [chaveRecarga, setChaveRecarga] = useState(0);
+  return (
+    <>
+      <CadastroLoteVagas perfil={perfil} onCriado={() => setChaveRecarga((k) => k + 1)} />
+      <Crud key={chaveRecarga} perfil={perfil} titulo="Vagas / boxes" tabela="vagas" ordem="codigo"
+        colunas={[
+          { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+          { campo: 'tipo', rotulo: 'Tipo' },
+          { campo: 'ocupada', rotulo: 'Ocupada', tipo: 'bool' },
+          { campo: 'placa_atual', rotulo: 'Placa', naTabela: true },
+          { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
+        ]} />
+    </>
+  );
+}
+
+/**
+ * Cadastra várias vagas do mesmo tipo de uma vez (ex.: 40 "Coberta", prefixo
+ * "C" -> C001..C040) — pra estacionamento grande não precisar clicar "+
+ * Novo" uma vaga por vez. Tipo digitado à mão (não vem de <select> nem é
+ * adivinhado pela letra do código) — a quantidade total de cada tipo, usada
+ * em Reservas de vaga, é a contagem de linhas ativas com aquele texto em
+ * `tipo`, então digitar igual em todo lote é o que importa, não o prefixo.
+ */
+function CadastroLoteVagas({ perfil, onCriado }) {
+  const [tipo, setTipo] = useState('');
+  const [prefixo, setPrefixo] = useState('');
+  const [quantidade, setQuantidade] = useState(10);
+  const [inicioEm, setInicioEm] = useState(1);
+  const [erro, setErro] = useState('');
+  const [msg, setMsg] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  async function criarLote(e) {
+    e.preventDefault();
+    setErro(''); setMsg(''); setSalvando(true);
+    const qte = Number(quantidade);
+    const inicio = Number(inicioEm);
+    const linhas = Array.from({ length: qte }, (_, i) => ({
+      filial_id: perfil.filial_id,
+      codigo: `${prefixo}${String(inicio + i).padStart(3, '0')}`,
+      tipo, ativo: true, ocupada: false,
+    }));
+    const { error } = await supabase.from('vagas').insert(linhas);
+    setSalvando(false);
+    if (error) {
+      setErro(error.code === '23505'
+        ? `Já existe algum código nessa faixa (${linhas[0].codigo}..${linhas.at(-1).codigo}) — tenta outro prefixo ou "Começa em".`
+        : error.message);
+      return;
+    }
+    setMsg(`${qte} vaga(s) "${tipo}" criada(s): ${linhas[0].codigo}..${linhas.at(-1).codigo}.`);
+    onCriado();
+  }
+
+  return (
+    <div className="card">
+      <h2>Cadastrar em lote</h2>
+      <p className="suave">
+        A quantidade de cada tipo (usada em Reservas de vaga) é o total de vagas ativas cadastradas
+        com aquele tipo — pra um estacionamento grande, cadastre todas de uma vez aqui em vez de uma
+        por uma.
+      </p>
+      {erro && <div className="aviso">{erro}</div>}
+      {msg && <div className="ok-txt">{msg}</div>}
+      <form className="linha-form" onSubmit={criarLote}>
+        <div className="campo" style={{ flex: 1, minWidth: 140 }}>
+          <label>Tipo *</label>
+          <input value={tipo} onChange={(e) => setTipo(e.target.value)} placeholder="Coberta" required />
+        </div>
+        <div className="campo" style={{ width: 100 }}>
+          <label>Prefixo do código</label>
+          <input className="mono" value={prefixo} onChange={(e) => setPrefixo(e.target.value.toUpperCase())} placeholder="C" />
+        </div>
+        <div className="campo" style={{ width: 110 }}>
+          <label>Quantidade *</label>
+          <input type="number" min="1" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} required />
+        </div>
+        <div className="campo" style={{ width: 110 }}>
+          <label>Começa em</label>
+          <input type="number" min="1" value={inicioEm} onChange={(e) => setInicioEm(e.target.value)} />
+        </div>
+        <button className="btn-primary" type="submit" disabled={salvando}>
+          {salvando ? 'Criando…' : '+ Criar lote'}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 export function Modelos({ perfil }) {
