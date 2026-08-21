@@ -25,6 +25,7 @@ const TOKENS = {
     ['@SERVICOS@', 'Serviços'], ['@VALORSERVICOS@', 'Valor dos serviços'],
     ['@BONUS@', 'Bônus fidelidade'], ['@VD@', 'Saldo devedor'],
     ['@MENSALISTA@', 'Nome do mensalista'], ['@AVARIAS@', 'Avarias registradas na entrada'],
+    ['@ANTECIPADO@', 'Valor pago antecipado na entrada'],
   ],
   mensalidade: [
     ['@MENSALISTA@', 'Nome'], ['@MCPF@', 'CPF/CNPJ'], ['@MEND@', 'Endereço'],
@@ -71,6 +72,7 @@ const EXEMPLO = {
   V: 'R$ 15,00', V_NUM: 15, CO: 'CONV01', VC: 'R$ 5,00', VC_NUM: 5,
   SERVICOS: 'LAVAGEM', VALORSERVICOS: 'R$ 30,00', VALORSERVICOS_NUM: 30,
   BONUS: '', BONUS_NUM: 0, VD: '', VD_NUM: 0, AVISO: '', AVARIAS: 'Risco na porta direita',
+  ANTECIPADO: 'R$ 200,00', ANTECIPADO_NUM: 200,
   MENSALISTA: 'JOSE DA SILVA', MCPF: '529.982.247-25', MEND: 'Rua das Flores, 100',
   MCEP: '13010-111', MCID: 'Campinas-SP', MTR: '(19) 3241-4920', MCEL: '(19) 99999-9999',
   MEMAIL: 'jose@exemplo.com.br', VAGAS: '2', CC01: 'ABC1D23', CV01: 'FIESTA',

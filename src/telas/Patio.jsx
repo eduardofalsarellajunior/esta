@@ -72,6 +72,9 @@ export default function Patio({ perfil }) {
   const [avarias, setAvarias] = useState(''); // texto (até 5 linhas de 50) — ver botão "Avarias" na Entrada
   const [modalAvarias, setModalAvarias] = useState(false);
   const [fotosAvarias, setFotosAvarias] = useState(0); // só contador — as fotos não ficam no app, vão pro aparelho
+  const [valorAntecipado, setValorAntecipado] = useState(''); // pago na entrada, descontado na saída — ver botão "Mais opções" na Entrada
+  const [formaAntecipado, setFormaAntecipado] = useState('');
+  const [modalAntecipado, setModalAntecipado] = useState(false);
   const [modalExclusao, setModalExclusao] = useState(null); // { mov, motivo }
   const [modalDps, setModalDps] = useState(null); // { documento, nome }
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
@@ -346,6 +349,7 @@ export default function Patio({ perfil }) {
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
     setServicosEntrada([]);
     setAvarias(''); setFotosAvarias(0);
+    setValorAntecipado(''); setFormaAntecipado('');
   }
 
   /**
@@ -402,6 +406,7 @@ export default function Patio({ perfil }) {
       livre_a_partir: livreAPartir ?? null,
       usuario_entrada: perfil.id,
       avarias: avarias.trim() || null,
+      valor_antecipado: Number(valorAntecipado) || null,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
     // Serviços marcados antes de dar entrada (ver alternarServicoEntrada) —
@@ -413,6 +418,19 @@ export default function Patio({ perfil }) {
           filial_id: perfil.filial_id, movimento_id: novo.id, servico_id: s.servico_id, valor: s.valorInformado,
         }))
       );
+    }
+    // Valor antecipado conta como pagamento recebido AGORA (não só um
+    // desconto lá na saída) — liga ao caixa aberto deste momento, que pode
+    // ser um turno diferente do que vai fechar a saída (ver
+    // 0039_valor_antecipado.sql e Caixa.jsx).
+    if (Number(valorAntecipado) > 0) {
+      const { data: cx } = await supabase.from('caixas').select('id')
+        .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
+      await supabase.from('movimento_pagamentos').insert({
+        filial_id: perfil.filial_id, movimento_id: novo.id,
+        forma_pagamento: formaAntecipado || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D',
+        valor: Number(valorAntecipado), caixa_id: cx?.id ?? null,
+      });
     }
     // Reserva encontrada pra essa placa (ver detectarReserva) — marca só o
     // indicador de chegada, sem tocar no status (ver 0038_reservas_chegou.sql).
@@ -444,11 +462,15 @@ export default function Patio({ perfil }) {
         ['Tabela', tipoVeic],
         ...(servicosEntrada.length ? [['Serviços', servicosEntrada.map((s) => s.descricao).join(', ')]] : []),
         ...(avarias.trim() ? [['Avarias', avarias.trim()]] : []),
+        ...(Number(valorAntecipado) > 0 ? [['Valor antecipado', fmtBRL(Number(valorAntecipado))]] : []),
         ['Entrada', `${dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(hrEntrada))}`],
         ['Operador', perfil.nome],
       ],
     }, {
-      ...dadosMovimento({ movimento: { ...novo, avarias: avarias.trim() || null }, operador: perfil.nome, servicos: servicosEntrada }),
+      ...dadosMovimento({
+        movimento: { ...novo, avarias: avarias.trim() || null, valor_antecipado: Number(valorAntecipado) || null },
+        operador: perfil.nome, servicos: servicosEntrada,
+      }),
       MENSALISTA: nomeMensalista,
     }));
     setPlacaTicket(novo?.placa || p);
@@ -737,6 +759,16 @@ export default function Patio({ perfil }) {
         ? { ...resultado, valor: Math.max(0, Math.round((resultado.valor - bonusFidelidade) * 100) / 100) }
         : resultado
     );
+    // Valor antecipado (pago na entrada, ver 0039_valor_antecipado.sql) —
+    // só mexe em `.valor` (o cobrado), nunca em `.valorProporcional` (o
+    // "cheio"), mesmo raciocínio do comBonus: não é desconto de convênio,
+    // não pode entrar na conta de "Descontos (conv.)" do BI.
+    const valorAntecipadoMov = Number(mov.valor_antecipado || 0);
+    const comAntecipado = (resultado) => (
+      valorAntecipadoMov > 0
+        ? { ...resultado, valor: Math.max(0, Math.round((resultado.valor - valorAntecipadoMov) * 100) / 100), valorAntecipado: valorAntecipadoMov }
+        : { ...resultado, valorAntecipado: 0 }
+    );
 
     // Entrou fora do dia/turno contratado (ver detectar()): cobra avulso só
     // até o horário guardado em livre_a_partir — dali em diante já está
@@ -754,21 +786,21 @@ export default function Patio({ perfil }) {
           dtSaida: dataDeISO(mov.dt_entrada), saida: Number(mov.livre_a_partir),
         },
       });
-      return comBonus(comSomaServicos({
+      return comBonus(comAntecipado(comSomaServicos({
         ...parcial,
         // Tempo mostrado ao operador é o real (quanto tempo o carro ficou),
         // mesmo cobrando só a parte fora do horário contratado.
         tempoDecorrido: horasDecorridas({ dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() }),
         restricaoAte: Number(mov.livre_a_partir),
-      }));
+      })));
     }
 
     const convenio = convenioCodigo ? mapConvenio(convenios[convenioCodigo]) : undefined;
-    return comBonus(comSomaServicos(calcularTarifa({
+    return comBonus(comAntecipado(comSomaServicos(calcularTarifa({
       tabelas, tipoVeic: mov.tipo_veic, convenio,
       servicosTipos: servicosTipos.length ? servicosTipos : undefined,
       movimento: { dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() },
-    })));
+    }))));
   }
 
   /**
@@ -1056,6 +1088,7 @@ export default function Patio({ perfil }) {
         ...(convenioCodigo && resultado.valorConvenio > 0
           ? [['Convênio', convenioCodigo], ['Valor convênio', `-${fmtBRL(resultado.valorConvenio)}`]]
           : []),
+        ...(resultado.valorAntecipado > 0 ? [['Valor antecipado', `-${fmtBRL(resultado.valorAntecipado)}`]] : []),
         ...(bonusAplicado ? [['Bônus fidelidade', `-${fmtBRL(bonusAplicado.valor_desconto)}`]] : []),
         ['Valor', fmtBRL(resultado.valor)],
         ['Pagamento', formaTexto],
@@ -1236,14 +1269,13 @@ export default function Patio({ perfil }) {
               </div>
             </>
           )}
-          <button type="button" className={servicosEntrada.length ? 'btn-servico-ativo' : 'btn-ghost'}
-            onClick={() => setModalServicosEntrada(true)}>
-            Serviços{servicosEntrada.length ? ` (${servicosEntrada.length})` : ''}
-          </button>
-          <button type="button" className={(avarias.trim() || fotosAvarias) ? 'btn-servico-ativo' : 'btn-ghost'}
-            onClick={() => setModalAvarias(true)}>
-            Avarias{fotosAvarias ? ` (${fotosAvarias} foto${fotosAvarias > 1 ? 's' : ''})` : ''}
-          </button>
+          <CardAcoes rotulo="Mais opções"
+            className={(servicosEntrada.length || avarias.trim() || fotosAvarias || Number(valorAntecipado) > 0) ? 'btn-servico-ativo' : 'btn-ghost'}
+            acoes={[
+              { label: `Serviços${servicosEntrada.length ? ` (${servicosEntrada.length})` : ''}`, onClick: () => setModalServicosEntrada(true) },
+              { label: `Avarias${fotosAvarias ? ` (${fotosAvarias} foto${fotosAvarias > 1 ? 's' : ''})` : ''}`, onClick: () => setModalAvarias(true) },
+              { label: `Vlr. Antecipado${Number(valorAntecipado) > 0 ? ` (${fmtBRL(Number(valorAntecipado))})` : ''}`, onClick: () => setModalAntecipado(true) },
+            ]} />
           <button className="btn-primary" type="submit">Registrar entrada</button>
           {detectado && (
             <span className="badge-mens">
@@ -1478,6 +1510,48 @@ export default function Patio({ perfil }) {
         </div>
       )}
 
+      {modalAntecipado && (
+        <div className="modal-bg" onClick={() => setModalAntecipado(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Valor antecipado — <span className="placa mono">{placa.trim().toUpperCase() || '—'}</span></h2>
+            <p className="suave">
+              Cobrado agora (conta como pagamento recebido, entra no caixa deste momento) — na
+              saída, é descontado do valor total calculado.
+            </p>
+            {!caixaAberto && (
+              <p className="aviso" style={{ fontSize: 12 }}>
+                Sem caixa aberto — o recebimento é registrado, mas fica fora do fechamento de caixa.
+              </p>
+            )}
+            <div className="linha-form" style={{ marginBottom: 10 }}>
+              <div className="campo">
+                <label>Valor</label>
+                <input type="number" step="0.01" min="0" value={valorAntecipado} autoFocus
+                  onChange={(e) => setValorAntecipado(e.target.value)} />
+              </div>
+              <div className="campo">
+                <label>Forma de pagamento</label>
+                <select value={formaAntecipado || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || ''}
+                  onChange={(e) => setFormaAntecipado(e.target.value)}>
+                  {formas.map((f) => <option key={f.codigo} value={f.codigo}>{f.descricao}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="linha-form" style={{ justifyContent: 'space-between', marginTop: 12 }}>
+              {Number(valorAntecipado) > 0 && (
+                <button type="button" className="btn-ghost aviso-btn"
+                  onClick={() => { setValorAntecipado(''); setFormaAntecipado(''); setModalAntecipado(false); }}>
+                  Remover
+                </button>
+              )}
+              <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setModalAntecipado(false)}>
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalExclusao && (
         <div className="modal-bg" onClick={() => setModalExclusao(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -1673,6 +1747,11 @@ export default function Patio({ perfil }) {
                 </>
               );
             })()}
+            {saindo.resultado.valorAntecipado > 0 && (
+              <p className="suave" style={{ textAlign: 'center' }}>
+                Valor antecipado: -{fmtBRL(saindo.resultado.valorAntecipado)}
+              </p>
+            )}
             {saindo.bonusAplicado && (
               <p className="suave" style={{ textAlign: 'center' }}>
                 Bônus fidelidade: -{fmtBRL(saindo.bonusAplicado.valor_desconto)} ({saindo.bonusAplicado.pontos_necessarios} pontos)

@@ -82,6 +82,9 @@ export function dadosMovimento({ movimento = {}, resultado, operador, servicos =
     VALORSERVICOS: valorServicos ? fmtBRL(valorServicos) : '',
     VALORSERVICOS_NUM: valorServicos,
     AVARIAS: movimento.avarias || '',
+    ANTECIPADO: Number(resultado?.valorAntecipado ?? movimento.valor_antecipado ?? 0)
+      ? fmtBRL(Number(resultado?.valorAntecipado ?? movimento.valor_antecipado)) : '',
+    ANTECIPADO_NUM: Number(resultado?.valorAntecipado ?? movimento.valor_antecipado ?? 0),
     US: operador || '',
   };
 }

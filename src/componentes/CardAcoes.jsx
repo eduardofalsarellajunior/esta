@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
  * passa a lista de ações, sem precisar reimplementar o dropdown.
  * `acoes`: [{ label, onClick }].
  */
-export default function CardAcoes({ acoes }) {
+export default function CardAcoes({ acoes, rotulo = '⋮', className = 'card-acoes-btn' }) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef(null);
 
@@ -20,7 +20,7 @@ export default function CardAcoes({ acoes }) {
 
   return (
     <div className="card-acoes" ref={ref}>
-      <button type="button" className="card-acoes-btn" onClick={() => setAberto((a) => !a)} aria-label="Mais ações">⋮</button>
+      <button type="button" className={className} onClick={() => setAberto((a) => !a)} aria-label="Mais ações">{rotulo}</button>
       {aberto && (
         <ul className="card-acoes-menu">
           {acoes.map((a) => (
