@@ -83,6 +83,7 @@ export default function Reservas({ perfil }) {
 
   async function tentarSalvarReserva(forcar = false) {
     const m = modalNova;
+    if (m.data_inicio < hojeISO()) { setErro('Não é possível reservar pra uma data antes de hoje.'); return; }
     if (m.data_fim < m.data_inicio) { setErro('A data final não pode ser antes da data inicial.'); return; }
     if (!m.tipo) { setErro('Escolha o tipo de vaga.'); return; }
 
@@ -220,12 +221,12 @@ export default function Reservas({ perfil }) {
             <div className="linha-form" style={{ marginBottom: 10 }}>
               <div className="campo" style={{ flex: 1 }}>
                 <label>De</label>
-                <input type="date" value={modalNova.data_inicio}
+                <input type="date" min={hojeISO()} value={modalNova.data_inicio}
                   onChange={(e) => setModalNova({ ...modalNova, data_inicio: e.target.value, diasSemVaga: null })} />
               </div>
               <div className="campo" style={{ flex: 1 }}>
                 <label>Até</label>
-                <input type="date" value={modalNova.data_fim}
+                <input type="date" min={modalNova.data_inicio || hojeISO()} value={modalNova.data_fim}
                   onChange={(e) => setModalNova({ ...modalNova, data_fim: e.target.value, diasSemVaga: null })} />
               </div>
             </div>
