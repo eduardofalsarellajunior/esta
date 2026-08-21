@@ -7,6 +7,14 @@ const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const ROTULO_PERIODO = { dia_todo: 'Dia todo', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
 const ROTULO_STATUS = { confirmada: 'Confirmada', cancelada: 'Cancelada', no_show: 'Não veio', concluida: 'Concluída' };
 
+/** Verde com folga (>5), amarelo apertado (1-5), vermelho esgotado (<=0). */
+function corRestante(restante) {
+  if (restante == null) return undefined;
+  if (restante <= 0) return 'var(--erro)';
+  if (restante < 5) return 'var(--ambar)';
+  return 'var(--ok)';
+}
+
 function anoMesAtual() {
   const [ano, mes] = hojeISO().split('-');
   return `${ano}-${mes}`;
@@ -160,7 +168,7 @@ export default function Reservas({ perfil }) {
                   <div className="mono" style={{ fontSize: 12 }}>{Number(dia.slice(-2))}</div>
                   {tipos.map((t) => (
                     <div key={t} className="suave" style={{ fontSize: 11 }}>
-                      {t}: <strong className={capacidade[dia]?.[t] <= 0 ? 'aviso-btn' : undefined}>{capacidade[dia]?.[t] ?? '—'}</strong>
+                      {t}: <strong style={{ color: corRestante(capacidade[dia]?.[t]) }}>{capacidade[dia]?.[t] ?? '—'}</strong>
                     </div>
                   ))}
                 </>
