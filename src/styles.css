@@ -9,6 +9,7 @@
   --ambar-esc: #b9791a;
   --ok: #3ddc84;
   --erro: #ff6b6b;
+  --amarelo: #ffd54f;
   --lateral-bg: #12141a;
 }
 :root[data-theme="claro"] {
@@ -22,6 +23,7 @@
   --ambar-esc: #8a5308;
   --ok: #157a45;
   --erro: #c62f2f;
+  --amarelo: #a67c00;
   --lateral-bg: #e9ebef;
 }
 * { box-sizing: border-box; }

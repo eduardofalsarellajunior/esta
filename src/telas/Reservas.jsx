@@ -11,7 +11,7 @@ const ROTULO_STATUS = { confirmada: 'Confirmada', cancelada: 'Cancelada', no_sho
 function corRestante(restante) {
   if (restante == null) return undefined;
   if (restante <= 0) return 'var(--erro)';
-  if (restante < 5) return 'var(--ambar)';
+  if (restante < 5) return 'var(--amarelo)';
   return 'var(--ok)';
 }
 
