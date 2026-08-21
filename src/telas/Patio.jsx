@@ -35,7 +35,11 @@ export default function Patio({ perfil }) {
   const [vagaEsgotada, setVagaEsgotada] = useState(null); // nome do mensalista, se as vagas dele já estão ocupadas
   const [mensalistaVencido, setMensalistaVencido] = useState(null); // nome do mensalista, se venceu (entra como avulso)
   const [restricaoHorario, setRestricaoHorario] = useState(null); // { nome, livreAPartir } — fora do dia/turno contratado
-  const [reservaDetectada, setReservaDetectada] = useState(null); // reserva do dia achada pela placa, sem dar pra completar sozinho (modelo não bateu no catálogo)
+  const [reservaDetectada, setReservaDetectada] = useState(null); // só pro aviso na tela
+  // Ref (não state) porque registrarEntrada às vezes é chamado na hora, no
+  // meio da mesma função que setReservaDetectada — o state só atualizaria no
+  // próximo render, tarde demais pra registrarEntrada ler o valor certo.
+  const reservaParaChegadaRef = useRef(null);
   const [livreAPartirEntrada, setLivreAPartirEntrada] = useState(null); // valor a persistir na entrada (ver registrarEntrada)
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
@@ -193,6 +197,7 @@ export default function Patio({ perfil }) {
     setRestricaoHorario(null);
     setLivreAPartirEntrada(null);
     setReservaDetectada(null);
+    reservaParaChegadaRef.current = null;
 
     // Já está no pátio (por placa ou pelo nº de controle)? Vai direto pra saída.
     // Antes do corte de 3 caracteres: número de controle costuma ter 1 ou 2.
@@ -290,9 +295,8 @@ export default function Patio({ perfil }) {
     if (!reserva) return;
 
     preencherModeloConhecido(reserva.modelo);
-    // Guarda mesmo quando vai auto-registrar — registrarEntrada usa isso
-    // pra marcar `chegou_em` na reserva (ver comentário lá).
-    setReservaDetectada(reserva);
+    setReservaDetectada(reserva); // só pro aviso na tela (ver comentário no state)
+    reservaParaChegadaRef.current = reserva; // registrarEntrada lê daqui, não do state
     const match = modelos.find((mo) => normalizar(mo.nome) === normalizar(reserva.modelo));
     if (match?.tabela_tipo) {
       await registrarEntrada(match.tabela_tipo, reserva.modelo, 'E', null);
@@ -337,6 +341,7 @@ export default function Patio({ perfil }) {
   function limparFormEntrada() {
     setPlaca(''); setDetectado(null); setVagaEsgotada(null); setMensalistaVencido(null);
     setRestricaoHorario(null); setLivreAPartirEntrada(null); setReservaDetectada(null);
+    reservaParaChegadaRef.current = null;
     setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
     setServicosEntrada([]);
@@ -411,8 +416,13 @@ export default function Patio({ perfil }) {
     }
     // Reserva encontrada pra essa placa (ver detectarReserva) — marca só o
     // indicador de chegada, sem tocar no status (ver 0038_reservas_chegou.sql).
-    if (reservaDetectada?.placa === p) {
-      await supabase.from('reservas').update({ chegou_em: new Date().toISOString() }).eq('id', reservaDetectada.id);
+    // Lê do ref (não do state reservaDetectada): no caminho de auto-registro,
+    // registrarEntrada é chamado na mesma função que acabou de setar o
+    // state, antes do React re-renderizar — o state ainda leria o valor
+    // antigo (null) ali.
+    if (reservaParaChegadaRef.current?.placa === p) {
+      await supabase.from('reservas').update({ chegou_em: new Date().toISOString() }).eq('id', reservaParaChegadaRef.current.id);
+      reservaParaChegadaRef.current = null;
     }
     // Mensalista/hóspede de verdade (não o que caiu pra avulso por
     // vencimento/vaga/restrição — esse continua mostrando, é cobrança real):
