@@ -107,7 +107,7 @@ export default function Reservas({ perfil }) {
   }
 
   async function mudarStatus(reserva, status) {
-    if (status === 'cancelada' && !window.confirm('Cancelar esta reserva? Os dias voltam a ficar disponíveis.')) return;
+    if (status === 'cancelada' && !window.confirm('Excluir esta reserva? Os dias voltam a ficar disponíveis.')) return;
     const { error } = await supabase.from('reservas').update({ status }).eq('id', reserva.id);
     if (error) { setErro(error.message); return; }
     carregarMes();
@@ -187,7 +187,7 @@ export default function Reservas({ perfil }) {
                       <>
                         <button className="btn-ghost" onClick={() => mudarStatus(r, 'concluida')}>Concluída</button>
                         <button className="btn-ghost" onClick={() => mudarStatus(r, 'no_show')}>Não veio</button>
-                        <button className="btn-ghost aviso-btn" onClick={() => mudarStatus(r, 'cancelada')}>Cancelar</button>
+                        <button className="btn-ghost aviso-btn" onClick={() => mudarStatus(r, 'cancelada')}>Excluir</button>
                       </>
                     )}
                   </td>
