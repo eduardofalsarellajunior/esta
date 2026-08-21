@@ -10,6 +10,13 @@ const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const ROTULO_PERIODO = { dia_todo: 'Dia todo', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
 const ROTULO_STATUS = { confirmada: 'Confirmada', cancelada: 'Cancelada', no_show: 'Não veio', concluida: 'Concluída' };
 
+/** Quantidade de reservas por tipo (ordem alfabética), pro rodapé da lista/relatório do dia. */
+function totaisPorTipo(reservas) {
+  const totais = {};
+  for (const r of reservas) totais[r.tipo] = (totais[r.tipo] || 0) + 1;
+  return Object.fromEntries(Object.entries(totais).sort(([a], [b]) => a.localeCompare(b, 'pt-BR')));
+}
+
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -31,6 +38,7 @@ function imprimirRelatorioDia(dia, reservas, filial) {
       <td>${escapeHtml(ROTULO_STATUS[r.status] || r.status)}</td>
       <td>${r.chegou_em ? 'Sim' : '—'}</td>
     </tr>`).join('') || '<tr><td colspan="8">Nenhuma reserva neste dia.</td></tr>';
+  const totais = Object.entries(totaisPorTipo(reservas)).map(([t, n]) => `${escapeHtml(t)}: ${n}`).join(' · ');
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Reservas ${escapeHtml(fmtDataBR(dia))}</title>
     <style>
@@ -42,12 +50,15 @@ function imprimirRelatorioDia(dia, reservas, filial) {
       table { width: 100%; border-collapse: collapse; font-size: 13px; }
       th { text-align: left; padding: 4px 6px 4px 0; border-bottom: 1px solid #999; }
       td { padding: 4px 6px 4px 0; border-bottom: 1px solid #ddd; }
+      tfoot td { border-bottom: none; padding-top: 8px; font-weight: 700; }
     </style></head><body>
       ${cabecalho}
       <h1>Reservas — ${escapeHtml(fmtDataBR(dia))}</h1>
       <table><thead><tr>
         <th>Tipo</th><th>Período</th><th>Placa</th><th>Modelo</th><th>Nome</th><th>Telefone</th><th>Status</th><th>Chegou</th>
-      </tr></thead><tbody>${linhas}</tbody></table>
+      </tr></thead><tbody>${linhas}</tbody>
+      ${reservas.length ? `<tfoot><tr><td colspan="8">Total: ${totais}</td></tr></tfoot>` : ''}
+      </table>
     </body></html>`;
   const win = window.open('', '_blank', 'width=560,height=700');
   if (!win) { window.alert('Permita pop-ups para imprimir o relatório.'); return; }
@@ -288,6 +299,14 @@ export default function Reservas({ perfil }) {
               ))}
               {reservasDoDia.length === 0 && <tr><td colSpan={7} className="suave">Nenhuma reserva cobre este dia.</td></tr>}
             </tbody>
+            {reservasDoDia.length > 0 && (
+              <tfoot><tr>
+                <td colSpan={7}>
+                  <strong>Total: </strong>
+                  {Object.entries(totaisPorTipo(reservasDoDia)).map(([t, n]) => `${t}: ${n}`).join(' · ')}
+                </td>
+              </tr></tfoot>
+            )}
           </table>
         </div>
       )}
