@@ -10,6 +10,54 @@ const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const ROTULO_PERIODO = { dia_todo: 'Dia todo', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
 const ROTULO_STATUS = { confirmada: 'Confirmada', cancelada: 'Cancelada', no_show: 'Não veio', concluida: 'Concluída' };
 
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Relatório impresso (janela dedicada), mesmo padrão de imprimirRelatorio em BI.jsx.
+function imprimirRelatorioDia(dia, reservas, filial) {
+  const cabecalho = filial && (filial.nome_fantasia || filial.endereco || filial.cnpj) ? `
+    ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
+    ${filial.endereco ? `<div class="linha-end">${escapeHtml(filial.endereco)}</div>` : ''}
+    ${filial.cnpj ? `<div class="linha-end">CNPJ: ${escapeHtml(filial.cnpj)}</div>` : ''}
+    <hr>` : '';
+  const linhas = reservas.map((r) => `<tr>
+      <td>${escapeHtml(r.tipo)}</td>
+      <td>${escapeHtml(ROTULO_PERIODO[r.periodo] || r.periodo)}</td>
+      <td>${escapeHtml(r.placa || '—')}</td>
+      <td>${escapeHtml(r.modelo || '—')}</td>
+      <td>${escapeHtml(r.nome || '—')}</td>
+      <td>${escapeHtml(r.telefone || '—')}</td>
+      <td>${escapeHtml(ROTULO_STATUS[r.status] || r.status)}</td>
+      <td>${r.chegou_em ? 'Sim' : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="8">Nenhuma reserva neste dia.</td></tr>';
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Reservas ${escapeHtml(fmtDataBR(dia))}</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; color: #000; padding: 20px; max-width: 760px; }
+      .nome { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
+      .linha-end { font-size: 12px; color: #333; margin-bottom: 2px; }
+      hr { border: none; border-top: 1px dashed #999; margin: 12px 0; }
+      h1 { font-size: 16px; margin: 0 0 10px; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th { text-align: left; padding: 4px 6px 4px 0; border-bottom: 1px solid #999; }
+      td { padding: 4px 6px 4px 0; border-bottom: 1px solid #ddd; }
+    </style></head><body>
+      ${cabecalho}
+      <h1>Reservas — ${escapeHtml(fmtDataBR(dia))}</h1>
+      <table><thead><tr>
+        <th>Tipo</th><th>Período</th><th>Placa</th><th>Modelo</th><th>Nome</th><th>Telefone</th><th>Status</th><th>Chegou</th>
+      </tr></thead><tbody>${linhas}</tbody></table>
+    </body></html>`;
+  const win = window.open('', '_blank', 'width=560,height=700');
+  if (!win) { window.alert('Permita pop-ups para imprimir o relatório.'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.onafterprint = () => win.close();
+  win.focus();
+  win.print();
+}
+
 /** Verde com folga (>5), amarelo apertado (1-5), vermelho esgotado (<=0). */
 function corRestante(restante) {
   if (restante == null) return undefined;
@@ -209,9 +257,14 @@ export default function Reservas({ perfil }) {
 
       {diaSelecionado && (
         <div className="card">
-          <h2>Reservas em {fmtDataBR(diaSelecionado)}</h2>
+          <div className="card-cab">
+            <h2>Reservas em {fmtDataBR(diaSelecionado)}</h2>
+            <button className="btn-ghost" onClick={() => imprimirRelatorioDia(diaSelecionado, reservasDoDia, filial)}>
+              Imprimir relatório do dia
+            </button>
+          </div>
           <table>
-            <thead><tr><th>Tipo</th><th>Período</th><th>Cliente</th><th>Placa</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Tipo</th><th>Período</th><th>Cliente</th><th>Placa</th><th>Status</th><th>Chegou</th><th></th></tr></thead>
             <tbody>
               {reservasDoDia.map((r) => (
                 <tr key={r.id}>
@@ -220,6 +273,7 @@ export default function Reservas({ perfil }) {
                   <td>{r.nome || '—'}{r.telefone ? ` · ${r.telefone}` : ''}</td>
                   <td className="mono">{r.placa || '—'}</td>
                   <td>{ROTULO_STATUS[r.status] || r.status}</td>
+                  <td>{r.chegou_em ? 'Sim' : '—'}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn-ghost" onClick={() => imprimirReserva(r)}>Imprimir</button>
                     {r.status === 'confirmada' && (
@@ -232,7 +286,7 @@ export default function Reservas({ perfil }) {
                   </td>
                 </tr>
               ))}
-              {reservasDoDia.length === 0 && <tr><td colSpan={6} className="suave">Nenhuma reserva cobre este dia.</td></tr>}
+              {reservasDoDia.length === 0 && <tr><td colSpan={7} className="suave">Nenhuma reserva cobre este dia.</td></tr>}
             </tbody>
           </table>
         </div>

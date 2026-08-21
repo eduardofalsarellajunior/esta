@@ -290,12 +290,13 @@ export default function Patio({ perfil }) {
     if (!reserva) return;
 
     preencherModeloConhecido(reserva.modelo);
+    // Guarda mesmo quando vai auto-registrar — registrarEntrada usa isso
+    // pra marcar `chegou_em` na reserva (ver comentário lá).
+    setReservaDetectada(reserva);
     const match = modelos.find((mo) => normalizar(mo.nome) === normalizar(reserva.modelo));
     if (match?.tabela_tipo) {
       await registrarEntrada(match.tabela_tipo, reserva.modelo, 'E', null);
-      return;
     }
-    setReservaDetectada(reserva);
   }
 
   /**
@@ -407,6 +408,11 @@ export default function Patio({ perfil }) {
           filial_id: perfil.filial_id, movimento_id: novo.id, servico_id: s.servico_id, valor: s.valorInformado,
         }))
       );
+    }
+    // Reserva encontrada pra essa placa (ver detectarReserva) — marca só o
+    // indicador de chegada, sem tocar no status (ver 0038_reservas_chegou.sql).
+    if (reservaDetectada?.placa === p) {
+      await supabase.from('reservas').update({ chegou_em: new Date().toISOString() }).eq('id', reservaDetectada.id);
     }
     // Mensalista/hóspede de verdade (não o que caiu pra avulso por
     // vencimento/vaga/restrição — esse continua mostrando, é cobrança real):
