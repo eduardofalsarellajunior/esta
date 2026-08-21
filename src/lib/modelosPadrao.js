@@ -12,6 +12,7 @@ export const TIPOS_TICKET = [
   { tipo: 'segunda_via', rotulo: '2ª via (cliente perdeu o ticket)' },
   { tipo: 'mensalidade', rotulo: 'Recebimento de mensalidade' },
   { tipo: 'rps', rotulo: 'RPS / NFS-e' },
+  { tipo: 'reserva', rotulo: 'Reserva de vaga' },
 ];
 
 const CABECALHO = [
@@ -161,5 +162,21 @@ export const MODELOS_PADRAO = {
     '% ISS....: @PERCISS@',
     'Vlr.ISS..: @ISS@',
     '--------------------------------',
+  ].join('\n'),
+
+  reserva: [
+    CABECALHO,
+    '@PG+@RESERVA DE VAGA@PG-@',
+    '',
+    'Placa  : @PG+@@CC@@PG-@',
+    'Veiculo: @CV@',
+    'Tipo   : @RTIPO@',
+    'De     : @RDE@',
+    'Ate    : @RATE@',
+    'Nome   : @RNOME@',
+    'Fone   : @RFONE@',
+    '@SE(ROBS)@Obs.: @ROBS@',
+    '--------------------------------',
+    'Voce foi atendido por @US@',
   ].join('\n'),
 };

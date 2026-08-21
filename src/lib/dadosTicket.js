@@ -127,6 +127,20 @@ export function dadosMensalidade({ dtPagamento, proximo, valor, valorMensalidade
   };
 }
 
+/** Reserva de vaga (Pátio → Reservas). CC/CV: mesmo sentido de placa/veículo que dadosMovimento já usa. */
+export function dadosReserva(reserva = {}) {
+  return {
+    CC: reserva.placa || '',
+    CV: reserva.modelo || '',
+    RTIPO: reserva.tipo || '',
+    RDE: fmtDataBR(reserva.data_inicio),
+    RATE: fmtDataBR(reserva.data_fim),
+    RNOME: reserva.nome || '',
+    RFONE: reserva.telefone || '',
+    ROBS: reserva.observacao || '',
+  };
+}
+
 /** RPS/NFS-e — para o ticket do tipo `rps`. */
 export function dadosRps({ nota, filial } = {}) {
   if (!nota) return {};

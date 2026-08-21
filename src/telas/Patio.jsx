@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { carregarTabelasPreco, carregarPatio, carregarModelosVeiculo, carregarTabelasManuais, carregarModelosTicket } from '../lib/dados.js';
-import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL, dentroDoVencimento } from '../lib/tempo.js';
+import { agoraHHMM, hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtHora, fmtBRL, fmtDataBR, dentroDoVencimento } from '../lib/tempo.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { calcularTarifa, horas as horasDecorridas } from '../../packages/tarifacao/tarifacao.ts';
 import { diaSemanaLegado, calcularRestricaoEntrada } from '../lib/restricaoMensalista.js';
@@ -35,6 +35,7 @@ export default function Patio({ perfil }) {
   const [vagaEsgotada, setVagaEsgotada] = useState(null); // nome do mensalista, se as vagas dele já estão ocupadas
   const [mensalistaVencido, setMensalistaVencido] = useState(null); // nome do mensalista, se venceu (entra como avulso)
   const [restricaoHorario, setRestricaoHorario] = useState(null); // { nome, livreAPartir } — fora do dia/turno contratado
+  const [reservaDetectada, setReservaDetectada] = useState(null); // reserva do dia achada pela placa, sem dar pra completar sozinho (modelo não bateu no catálogo)
   const [livreAPartirEntrada, setLivreAPartirEntrada] = useState(null); // valor a persistir na entrada (ver registrarEntrada)
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
@@ -191,6 +192,7 @@ export default function Patio({ perfil }) {
     setMensalistaVencido(null);
     setRestricaoHorario(null);
     setLivreAPartirEntrada(null);
+    setReservaDetectada(null);
 
     // Já está no pátio (por placa ou pelo nº de controle)? Vai direto pra saída.
     // Antes do corte de 3 caracteres: número de controle costuma ter 1 ou 2.
@@ -209,7 +211,7 @@ export default function Patio({ perfil }) {
     }
 
     const { data: mv } = await supabase.from('mensalista_veiculos').select('mensalista_id, modelo, tipo_veic').eq('placa', p).maybeSingle();
-    if (!mv) return;
+    if (!mv) { await detectarReserva(p); return; }
     const { data: m } = await supabase.from('mensalistas').select('*').eq('id', mv.mensalista_id).maybeSingle();
     if (!m || !m.ativo) return;
 
@@ -272,6 +274,31 @@ export default function Patio({ perfil }) {
   }
 
   /**
+   * Placa não é de mensalista — tenta achar uma reserva confirmada que
+   * cubra hoje (ver Reservas de vaga). A reserva só garante a vaga, não
+   * isenta cobrança: entra como avulso ('E'), cobrado normal na saída.
+   * Modelo batendo com o catálogo (mesmo nome) → entrada automática, igual
+   * já acontece com mensalista em dia; senão só pré-preenche e avisa.
+   */
+  async function detectarReserva(p) {
+    const hoje = hojeISO();
+    const { data: reservasHoje } = await supabase.from('reservas').select('*')
+      .eq('placa', p).eq('status', 'confirmada')
+      .lte('data_inicio', hoje).gte('data_fim', hoje)
+      .order('data_inicio').limit(1);
+    const reserva = reservasHoje?.[0];
+    if (!reserva) return;
+
+    preencherModeloConhecido(reserva.modelo);
+    const match = modelos.find((mo) => normalizar(mo.nome) === normalizar(reserva.modelo));
+    if (match?.tabela_tipo) {
+      await registrarEntrada(match.tabela_tipo, reserva.modelo, 'E', null);
+      return;
+    }
+    setReservaDetectada(reserva);
+  }
+
+  /**
    * Pré-preenche o campo Carro com um modelo já conhecido (do catálogo, se
    * bater o nome; senão texto livre) — usado quando a entrada não se
    * completa sozinha (vaga esgotada, restrição de horário, mensalista sem
@@ -308,7 +335,7 @@ export default function Patio({ perfil }) {
 
   function limparFormEntrada() {
     setPlaca(''); setDetectado(null); setVagaEsgotada(null); setMensalistaVencido(null);
-    setRestricaoHorario(null); setLivreAPartirEntrada(null);
+    setRestricaoHorario(null); setLivreAPartirEntrada(null); setReservaDetectada(null);
     setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
     setServicosEntrada([]);
@@ -1224,6 +1251,12 @@ export default function Patio({ perfil }) {
               {restricaoHorario.livreAPartir != null
                 ? ` até as ${fmtHora(restricaoHorario.livreAPartir)}`
                 : ' pelo período todo'}
+            </span>
+          )}
+          {reservaDetectada && (
+            <span className="badge-mens" style={{ color: 'var(--ambar)', borderColor: 'var(--ambar)', background: 'rgba(245,166,35,.12)' }}>
+              Reserva encontrada ({reservaDetectada.tipo}, até {fmtDataBR(reservaDetectada.data_fim)}) — confirme
+              o modelo/tabela e registre a entrada
             </span>
           )}
         </form>

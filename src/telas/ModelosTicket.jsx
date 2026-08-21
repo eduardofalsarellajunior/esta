@@ -46,11 +46,19 @@ const TOKENS = {
     ['@CCEP@', 'CEP'], ['@CCID@', 'Cidade'], ['@CESTA@', 'UF'],
     ['@CFONE@', 'Telefone'], ['@CEMAIL@', 'E-mail'],
   ],
+  reserva: [
+    ['@CC@', 'Placa'], ['@CV@', 'Modelo do veículo'],
+    ['@RTIPO@', 'Tipo de vaga (coberta/descoberta)'],
+    ['@RDE@', 'Data início'], ['@RATE@', 'Data final'],
+    ['@RNOME@', 'Nome de quem reservou'], ['@RFONE@', 'Telefone'],
+    ['@ROBS@', 'Observações'],
+  ],
 };
 
 function tokensDoTipo(tipo) {
   if (tipo === 'mensalidade') return [...TOKENS.comuns, ...TOKENS.mensalidade];
   if (tipo === 'rps') return [...TOKENS.comuns, ...TOKENS.movimento, ...TOKENS.rps];
+  if (tipo === 'reserva') return [...TOKENS.comuns, ...TOKENS.reserva];
   return [...TOKENS.comuns, ...TOKENS.movimento];
 }
 
@@ -74,6 +82,8 @@ const EXEMPLO = {
   CCPF: '529.982.247-25', CNOME: 'JOSE DA SILVA', CENDE: 'Rua das Flores',
   CNUM: '100', CBAIRRO: 'Centro', CCEP: '13010-111', CCID: 'Campinas', CESTA: 'SP',
   CFONE: '(19) 3241-4920', CEMAIL: 'jose@exemplo.com.br',
+  RTIPO: 'Coberta', RDE: '04/08/2026', RATE: '20/08/2026',
+  RNOME: 'Jose da Silva', RFONE: '(19) 99999-9999', ROBS: 'Chegada por volta das 6h',
   US: 'Eduardo',
 };
 

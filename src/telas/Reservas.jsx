@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, fmtDataBR } from '../lib/tempo.js';
 import { tiposDeVaga, capacidadePorDia, diasSemVaga } from '../lib/reservas.js';
+import { carregarModelosTicket } from '../lib/dados.js';
+import { dadosFilial, dadosReserva } from '../lib/dadosTicket.js';
+import { TicketModal } from '../componentes/Ticket.jsx';
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const ROTULO_PERIODO = { dia_todo: 'Dia todo', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
@@ -51,8 +54,18 @@ export default function Reservas({ perfil }) {
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [carregando, setCarregando] = useState(false);
+  const [filial, setFilial] = useState(null);
+  const [modelosTicket, setModelosTicket] = useState({});
+  const [ticket, setTicket] = useState(null);
+  const [celularTicket, setCelularTicket] = useState('');
 
   const celulas = useMemo(() => celulasDoMes(anoMes), [anoMes]);
+
+  useEffect(() => {
+    supabase.from('filiais').select('nome_fantasia, endereco, cnpj, numero, bairro, inscricao_mun, inscricao_est, razao_social')
+      .eq('id', perfil.filial_id).maybeSingle().then(({ data }) => setFilial(data));
+    carregarModelosTicket().then(setModelosTicket);
+  }, [perfil.filial_id]);
 
   async function carregarMes() {
     setCarregando(true); setErro('');
@@ -83,7 +96,7 @@ export default function Reservas({ perfil }) {
     setModalNova({
       tipo: tipos[0] || '', periodo: 'dia_todo',
       data_inicio: diaSelecionado || hojeISO(), data_fim: diaSelecionado || hojeISO(),
-      nome: '', telefone: '', placa: '', observacao: '',
+      nome: '', telefone: '', placa: '', modelo: '', observacao: '',
       diasSemVaga: null, confirmando: false,
     });
     setErro('');
@@ -106,13 +119,29 @@ export default function Reservas({ perfil }) {
       filial_id: perfil.filial_id, tipo: m.tipo, periodo: m.periodo,
       data_inicio: m.data_inicio, data_fim: m.data_fim,
       nome: m.nome || null, telefone: m.telefone || null, placa: m.placa || null,
-      observacao: m.observacao || null, criado_por: perfil.id,
+      modelo: m.modelo || null, observacao: m.observacao || null, criado_por: perfil.id,
     });
     if (error) { setErro(error.message); return; }
     setModalNova(null);
     setMsg('Reserva criada.');
     carregarMes();
     if (diaSelecionado) carregarReservasDoDia(diaSelecionado);
+  }
+
+  function imprimirReserva(r) {
+    setTicket({
+      titulo: 'Reserva de vaga',
+      linhas: [
+        ['Placa', r.placa || '—'], ['Modelo', r.modelo || '—'],
+        ['Data início', fmtDataBR(r.data_inicio)], ['Data final', fmtDataBR(r.data_fim)],
+        ['Tipo', r.tipo], ['Nome', r.nome || '—'], ['Telefone', r.telefone || '—'],
+        ...(r.observacao ? [['Observações', r.observacao]] : []),
+      ],
+      tipo: 'reserva',
+      ...(modelosTicket.reserva ? { modelo: modelosTicket.reserva } : {}),
+      dados: { ...dadosFilial(filial || {}), ...dadosReserva(r), US: perfil.nome },
+    });
+    setCelularTicket(r.telefone || '');
   }
 
   async function mudarStatus(reserva, status) {
@@ -192,6 +221,7 @@ export default function Reservas({ perfil }) {
                   <td className="mono">{r.placa || '—'}</td>
                   <td>{ROTULO_STATUS[r.status] || r.status}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="btn-ghost" onClick={() => imprimirReserva(r)}>Imprimir</button>
                     {r.status === 'confirmada' && (
                       <>
                         <button className="btn-ghost" onClick={() => mudarStatus(r, 'concluida')}>Concluída</button>
@@ -254,6 +284,13 @@ export default function Reservas({ perfil }) {
               </div>
             </div>
             <div className="campo" style={{ marginBottom: 10 }}>
+              <label>Modelo do veículo (opcional)</label>
+              <input value={modalNova.modelo} onChange={(e) => setModalNova({ ...modalNova, modelo: e.target.value })} />
+              <span className="suave" style={{ fontSize: 11 }}>
+                Se bater com um modelo já cadastrado, a entrada no dia da reserva sai sozinha.
+              </span>
+            </div>
+            <div className="campo" style={{ marginBottom: 10 }}>
               <label>Observação (opcional)</label>
               <input value={modalNova.observacao} onChange={(e) => setModalNova({ ...modalNova, observacao: e.target.value })} />
             </div>
@@ -274,6 +311,11 @@ export default function Reservas({ perfil }) {
             </div>
           </div>
         </div>
+      )}
+
+      {ticket && (
+        <TicketModal ticket={ticket} filial={filial} perfil={perfil} celular={celularTicket}
+          onCelular={setCelularTicket} onFechar={() => setTicket(null)} />
       )}
     </>
   );
