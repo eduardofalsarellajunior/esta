@@ -6,7 +6,8 @@
 // `supabase` vem por parâmetro (não importado direto) pro arquivo poder ser
 // testado com `node --test` puro (sem Vite, sem import.meta.env) — mesmo
 // padrão de src/lib/fiscal.js/notaFiscal.js.
-import { somarDias } from './tempo.js';
+import { somarDias, dataDeISO } from './tempo.js';
+import { calcularProporcional } from '../../packages/tarifacao/tarifacao.ts';
 
 /**
  * Todo tipo distinto cadastrado em `vagas` (ativas) — usado pra popular o
@@ -57,4 +58,64 @@ export function diasSemVaga(mapaCapacidade, tipo, dataInicio, dataFim) {
     if (restante == null || restante <= 0) dias.push(dia);
   }
   return dias;
+}
+
+/**
+ * Prefixo (letras iniciais) do código da vaga — ex.: "C001" -> "C". Mesmo
+ * texto que o "Prefixo do código" do cadastro em lote (ver cadastros.jsx)
+ * pede pra digitar; aqui ele também vira o código da tabela de preço usada
+ * pra propor um valor de reserva (ver `mapaTabelaPorTipo`/`valorPropostoReserva`).
+ */
+export function prefixoTabela(codigo) {
+  return String(codigo || '').match(/^[^\d]+/)?.[0]?.trim().toUpperCase() || '';
+}
+
+/**
+ * Tabela de preço predominante de cada tipo de vaga, a partir do prefixo do
+ * código (ex.: vagas "C001".."C040" tipo "Coberta" -> tabela "C"). Quando um
+ * tipo tem prefixos divergentes entre as vagas (cadastro inconsistente), vence
+ * o mais frequente. Tipo sem nenhum prefixo reconhecível fica de fora do mapa
+ * (sem valor proposto pra ele — não quebra nada, só não estima).
+ */
+export function mapaTabelaPorTipo(vagas) {
+  const contagem = {};
+  for (const v of vagas || []) {
+    const prefixo = prefixoTabela(v.codigo);
+    if (!prefixo || !v.tipo) continue;
+    contagem[v.tipo] ??= {};
+    contagem[v.tipo][prefixo] = (contagem[v.tipo][prefixo] || 0) + 1;
+  }
+  const mapa = {};
+  for (const [tipo, porPrefixo] of Object.entries(contagem)) {
+    mapa[tipo] = Object.entries(porPrefixo).sort(([, a], [, b]) => b - a)[0][0];
+  }
+  return mapa;
+}
+
+/** Busca `vagas` e devolve o mapa tipo -> tabela de preço (ver `mapaTabelaPorTipo`). */
+export async function tabelaPorTipoDeVaga(supabase) {
+  const { data } = await supabase.from('vagas').select('tipo, codigo').eq('ativo', true);
+  return mapaTabelaPorTipo(data || []);
+}
+
+/**
+ * Valor proposto pra uma reserva de `dataInicio` a `dataFim` (dias corridos,
+ * ambos inclusive) na tabela de preço `tabelaCodigo` — usa o MESMO motor de
+ * tarifação da cobrança real (ver packages/tarifacao), simulando uma entrada
+ * às 00:00 de `dataInicio` e saída às 00:00 do dia seguinte a `dataFim` (pra
+ * contar o último dia inteiro). É só uma estimativa impressa no ticket —
+ * quem cobra de verdade é a saída real do veículo (ver Patio.jsx), que pode
+ * dar um valor diferente (hora exata de chegada, convênio, serviços...).
+ * `null` quando não há tabela pro código (tipo sem prefixo reconhecível ou
+ * sem tabela de preço vigente com esse código).
+ */
+export function valorPropostoReserva(tabelas, tabelaCodigo, dataInicio, dataFim) {
+  const tbl = tabelas?.[tabelaCodigo];
+  if (!tbl) return null;
+  const movimento = {
+    dtEntrada: dataDeISO(dataInicio), entrada: 0,
+    dtSaida: dataDeISO(somarDias(dataFim, 1)), saida: 0,
+  };
+  const r = calcularProporcional(tbl, movimento);
+  return { valor: r.valor ?? 0, pedeValor: !!r.pedeValor, manual: r.valor == null };
 }

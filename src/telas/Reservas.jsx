@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, fmtDataBR, fmtBRL } from '../lib/tempo.js';
-import { tiposDeVaga, capacidadePorDia, diasSemVaga } from '../lib/reservas.js';
-import { carregarModelosTicket } from '../lib/dados.js';
+import { tiposDeVaga, capacidadePorDia, diasSemVaga, tabelaPorTipoDeVaga, valorPropostoReserva } from '../lib/reservas.js';
+import { carregarModelosTicket, carregarTabelasPreco } from '../lib/dados.js';
 import { dadosFilial, dadosReserva } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
 
@@ -119,6 +119,8 @@ export default function Reservas({ perfil }) {
   const [celularTicket, setCelularTicket] = useState('');
   const [formas, setFormas] = useState([]);
   const [caixaAberto, setCaixaAberto] = useState(null);
+  const [tabelaPorTipo, setTabelaPorTipo] = useState({});
+  const [tabelasPreco, setTabelasPreco] = useState({});
 
   const celulas = useMemo(() => celulasDoMes(anoMes), [anoMes]);
 
@@ -129,7 +131,18 @@ export default function Reservas({ perfil }) {
     supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo').then(({ data }) => setFormas(data || []));
     supabase.from('caixas').select('id').eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle()
       .then(({ data }) => setCaixaAberto(data));
+    // Prefixo do código das vagas -> tabela de preço, pra propor um valor de
+    // reserva com o mesmo motor de cobrança real (ver src/lib/reservas.js).
+    tabelaPorTipoDeVaga(supabase).then(setTabelaPorTipo);
+    carregarTabelasPreco().then(setTabelasPreco).catch(() => setTabelasPreco({}));
   }, [perfil.filial_id, perfil.id]);
+
+  const valorProposto = useMemo(() => {
+    if (!modalNova?.tipo || !modalNova.data_inicio || !modalNova.data_fim) return null;
+    const tabelaCodigo = tabelaPorTipo[modalNova.tipo];
+    if (!tabelaCodigo) return null;
+    return valorPropostoReserva(tabelasPreco, tabelaCodigo, modalNova.data_inicio, modalNova.data_fim);
+  }, [modalNova?.tipo, modalNova?.data_inicio, modalNova?.data_fim, tabelaPorTipo, tabelasPreco]);
 
   async function carregarMes() {
     setCarregando(true); setErro('');
@@ -194,6 +207,7 @@ export default function Reservas({ perfil }) {
       data_inicio: m.data_inicio, data_fim: m.data_fim,
       nome: m.nome || null, telefone: m.telefone || null, placa: m.placa || null,
       modelo: m.modelo || null, observacao: m.observacao || null, criado_por: perfil.id,
+      valor_proposto: valorProposto && !valorProposto.pedeValor ? valorProposto.valor : null,
       valor_antecipado: Number(m.valorAntecipado) || null,
       forma_antecipado: Number(m.valorAntecipado) > 0
         ? (m.formaAntecipado || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || null) : null,
@@ -213,6 +227,7 @@ export default function Reservas({ perfil }) {
         ['Placa', r.placa || '—'], ['Modelo', r.modelo || '—'],
         ['Data início', fmtDataBR(r.data_inicio)], ['Data final', fmtDataBR(r.data_fim)],
         ['Tipo', r.tipo], ['Nome', r.nome || '—'], ['Telefone', r.telefone || '—'],
+        ...(Number(r.valor_proposto) > 0 ? [['Valor proposto', fmtBRL(Number(r.valor_proposto))]] : []),
         ...(Number(r.valor_antecipado) > 0 ? [['Valor antecipado', fmtBRL(Number(r.valor_antecipado))]] : []),
         ...(r.observacao ? [['Observações', r.observacao]] : []),
       ],
@@ -390,6 +405,11 @@ export default function Reservas({ perfil }) {
               <label>Observação (opcional)</label>
               <input value={modalNova.observacao} onChange={(e) => setModalNova({ ...modalNova, observacao: e.target.value })} />
             </div>
+            <p className="suave" style={{ fontSize: 12, marginBottom: 10 }}>
+              {valorProposto && !valorProposto.pedeValor
+                ? <>Valor proposto (tabela {tabelaPorTipo[modalNova.tipo]}): <strong>{fmtBRL(valorProposto.valor)}</strong> — estimativa, a cobrança real acontece na saída.</>
+                : 'Sem estimativa de valor: cadastre o código das vagas desse tipo com o prefixo da tabela de preço (ver Cadastros → Vagas/boxes).'}
+            </p>
             <div className="linha-form" style={{ marginBottom: 10 }}>
               <div className="campo" style={{ flex: 1 }}>
                 <label>Valor antecipado (opcional)</label>

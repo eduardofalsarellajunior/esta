@@ -61,7 +61,8 @@ export function Vagas({ perfil }) {
       <CadastroLoteVagas perfil={perfil} onCriado={() => setChaveRecarga((k) => k + 1)} />
       <Crud key={chaveRecarga} perfil={perfil} titulo="Vagas / boxes" tabela="vagas" ordem="codigo"
         colunas={[
-          { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+          { campo: 'codigo', rotulo: 'Código', obrigatorio: true,
+            ajuda: 'O prefixo (letras iniciais) define a tabela de preço usada pra calcular o valor proposto da reserva — ex.: "C001" usa a tabela de preço "C".' },
           { campo: 'tipo', rotulo: 'Tipo' },
           { campo: 'ocupada', rotulo: 'Ocupada', tipo: 'bool' },
           { campo: 'placa_atual', rotulo: 'Placa', naTabela: true },
@@ -116,7 +117,9 @@ function CadastroLoteVagas({ perfil, onCriado }) {
       <p className="suave">
         A quantidade de cada tipo (usada em Reservas de vaga) é o total de vagas ativas cadastradas
         com aquele tipo — pra um estacionamento grande, cadastre todas de uma vez aqui em vez de uma
-        por uma.
+        por uma. O prefixo do código também diz qual tabela de preço usar pra calcular o valor
+        proposto da reserva (ex.: prefixo "C" → tabela de preço "C") — use o mesmo código da tabela
+        que se aplica a esse tipo de vaga.
       </p>
       {erro && <div className="aviso">{erro}</div>}
       {msg && <div className="ok-txt">{msg}</div>}

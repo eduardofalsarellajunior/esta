@@ -141,6 +141,8 @@ export function dadosReserva(reserva = {}) {
     RNOME: reserva.nome || '',
     RFONE: reserva.telefone || '',
     ROBS: reserva.observacao || '',
+    PROPOSTO: Number(reserva.valor_proposto || 0) ? fmtBRL(Number(reserva.valor_proposto)) : '',
+    PROPOSTO_NUM: Number(reserva.valor_proposto || 0),
     ANTECIPADO: Number(reserva.valor_antecipado || 0) ? fmtBRL(Number(reserva.valor_antecipado)) : '',
     ANTECIPADO_NUM: Number(reserva.valor_antecipado || 0),
   };

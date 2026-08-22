@@ -176,6 +176,8 @@ export const MODELOS_PADRAO = {
     'Nome   : @RNOME@',
     'Fone   : @RFONE@',
     '@SE(ROBS)@Obs.: @ROBS@',
+    '@SE(PROPOSTO)@Vlr.proposto: @PROPOSTO@',
+    '@SE(ANTECIPADO)@Vlr.antecipado: @ANTECIPADO@',
     '--------------------------------',
     'Voce foi atendido por @US@',
   ].join('\n'),

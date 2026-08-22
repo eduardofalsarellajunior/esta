@@ -53,6 +53,8 @@ const TOKENS = {
     ['@RDE@', 'Data início'], ['@RATE@', 'Data final'],
     ['@RNOME@', 'Nome de quem reservou'], ['@RFONE@', 'Telefone'],
     ['@ROBS@', 'Observações'],
+    ['@PROPOSTO@', 'Valor proposto (estimado pela tabela de preço do prefixo da vaga)'],
+    ['@ANTECIPADO@', 'Valor pago antecipado ao criar a reserva'],
   ],
 };
 
@@ -86,6 +88,7 @@ const EXEMPLO = {
   CFONE: '(19) 3241-4920', CEMAIL: 'jose@exemplo.com.br',
   RTIPO: 'Coberta', RDE: '04/08/2026', RATE: '20/08/2026',
   RNOME: 'Jose da Silva', RFONE: '(19) 99999-9999', ROBS: 'Chegada por volta das 6h',
+  PROPOSTO: 'R$ 800,00', PROPOSTO_NUM: 800,
   US: 'Eduardo',
 };
 
