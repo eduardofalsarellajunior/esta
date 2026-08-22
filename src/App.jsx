@@ -15,6 +15,7 @@ import Configuracoes from './telas/Configuracoes.jsx';
 import Usuarios from './telas/Usuarios.jsx';
 import ImportarDbf from './telas/ImportarDbf.jsx';
 import ModelosTicket from './telas/ModelosTicket.jsx';
+import Sobre from './telas/Sobre.jsx';
 import PainelFornecedor from './telas/PainelFornecedor.jsx';
 import EscolherFilial from './telas/EscolherFilial.jsx';
 import SenhaMesGate from './telas/SenhaMesGate.jsx';
@@ -101,6 +102,7 @@ function Rotas({ perfil }) {
           <Route path="usuarios" element={<Usuarios perfil={perfil} />} />
           <Route path="modelos-ticket" element={<ModelosTicket perfil={perfil} />} />
           <Route path="importar" element={<ImportarDbf perfil={perfil} />} />
+          <Route path="sobre" element={<Sobre />} />
           {/* Fornecedor-only: não existe em acesso.js um terceiro nível pra
               isso (supervisor e fornecedor têm rotasDoPapel === null, sem
               restrição), então o gate é direto aqui, igual EscolherFilial. */}

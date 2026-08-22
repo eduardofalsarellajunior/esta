@@ -34,6 +34,9 @@ const GRUPOS = [
     { to: '/usuarios', rotulo: 'Usuários' },
     { to: '/modelos-ticket', rotulo: 'Modelos de ticket' },
   ]},
+  { titulo: 'Sobre', itens: [
+    { to: '/sobre', rotulo: 'Sobre' },
+  ]},
 ];
 
 /** Número do cliente (Configurações → Dados do estacionamento) antes do nome. */
