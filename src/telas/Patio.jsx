@@ -406,7 +406,12 @@ export default function Patio({ perfil }) {
       livre_a_partir: livreAPartir ?? null,
       usuario_entrada: perfil.id,
       avarias: avarias.trim() || null,
-      valor_antecipado: Number(valorAntecipado) || null,
+      // Soma o antecipado desta entrada com o que já veio da reserva (se
+      // houver) — o da reserva já foi recebido/contado lá no caixa de quando
+      // ela foi criada (ver 0040_reserva_antecipado.sql), então NÃO gera um
+      // novo movimento_pagamentos abaixo, só entra no total a descontar na saída.
+      valor_antecipado: (Number(valorAntecipado) || 0) + Number(reservaParaChegadaRef.current?.placa === p
+        ? reservaParaChegadaRef.current?.valor_antecipado || 0 : 0) || null,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
     // Serviços marcados antes de dar entrada (ver alternarServicoEntrada) —
@@ -462,13 +467,13 @@ export default function Patio({ perfil }) {
         ['Tabela', tipoVeic],
         ...(servicosEntrada.length ? [['Serviços', servicosEntrada.map((s) => s.descricao).join(', ')]] : []),
         ...(avarias.trim() ? [['Avarias', avarias.trim()]] : []),
-        ...(Number(valorAntecipado) > 0 ? [['Valor antecipado', fmtBRL(Number(valorAntecipado))]] : []),
+        ...(Number(novo?.valor_antecipado) > 0 ? [['Valor antecipado', fmtBRL(Number(novo.valor_antecipado))]] : []),
         ['Entrada', `${dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(hrEntrada))}`],
         ['Operador', perfil.nome],
       ],
     }, {
       ...dadosMovimento({
-        movimento: { ...novo, avarias: avarias.trim() || null, valor_antecipado: Number(valorAntecipado) || null },
+        movimento: { ...novo, avarias: avarias.trim() || null },
         operador: perfil.nome, servicos: servicosEntrada,
       }),
       MENSALISTA: nomeMensalista,

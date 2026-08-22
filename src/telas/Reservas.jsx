@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { hojeISO, fmtDataBR } from '../lib/tempo.js';
+import { hojeISO, fmtDataBR, fmtBRL } from '../lib/tempo.js';
 import { tiposDeVaga, capacidadePorDia, diasSemVaga } from '../lib/reservas.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { dadosFilial, dadosReserva } from '../lib/dadosTicket.js';
@@ -29,7 +29,7 @@ function imprimirRelatorioDia(dia, reservas, filial) {
     ${filial.cnpj ? `<div class="linha-end">CNPJ: ${escapeHtml(filial.cnpj)}</div>` : ''}
     <hr>` : '';
   const linhas = reservas.map((r) => `<tr>
-      <td>${escapeHtml(r.tipo)}</td>
+      <td>${Number(r.valor_antecipado) > 0 ? '$ ' : ''}${escapeHtml(r.tipo)}</td>
       <td>${escapeHtml(ROTULO_PERIODO[r.periodo] || r.periodo)}</td>
       <td>${escapeHtml(r.placa || '—')}</td>
       <td>${escapeHtml(r.modelo || '—')}</td>
@@ -117,6 +117,8 @@ export default function Reservas({ perfil }) {
   const [modelosTicket, setModelosTicket] = useState({});
   const [ticket, setTicket] = useState(null);
   const [celularTicket, setCelularTicket] = useState('');
+  const [formas, setFormas] = useState([]);
+  const [caixaAberto, setCaixaAberto] = useState(null);
 
   const celulas = useMemo(() => celulasDoMes(anoMes), [anoMes]);
 
@@ -124,7 +126,10 @@ export default function Reservas({ perfil }) {
     supabase.from('filiais').select('nome_fantasia, endereco, cnpj, numero, bairro, inscricao_mun, inscricao_est, razao_social')
       .eq('id', perfil.filial_id).maybeSingle().then(({ data }) => setFilial(data));
     carregarModelosTicket().then(setModelosTicket);
-  }, [perfil.filial_id]);
+    supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo').then(({ data }) => setFormas(data || []));
+    supabase.from('caixas').select('id').eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle()
+      .then(({ data }) => setCaixaAberto(data));
+  }, [perfil.filial_id, perfil.id]);
 
   async function carregarMes() {
     setCarregando(true); setErro('');
@@ -156,6 +161,7 @@ export default function Reservas({ perfil }) {
       tipo: tipos[0] || '', periodo: 'dia_todo',
       data_inicio: diaSelecionado || hojeISO(), data_fim: diaSelecionado || hojeISO(),
       nome: '', telefone: '', placa: '', modelo: '', observacao: '',
+      valorAntecipado: '', formaAntecipado: '',
       diasSemVaga: null, confirmando: false,
     });
     setErro('');
@@ -174,11 +180,24 @@ export default function Reservas({ perfil }) {
     }
 
     setErro('');
+    // Valor antecipado conta como pagamento recebido AGORA (mesmo espírito
+    // do antecipado na entrada do Pátio) — liga ao caixa aberto deste
+    // momento (ver Caixa.jsx e 0040_reserva_antecipado.sql).
+    let caixaIdAntecipado = null;
+    if (Number(m.valorAntecipado) > 0) {
+      const { data: cx } = await supabase.from('caixas').select('id')
+        .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
+      caixaIdAntecipado = cx?.id ?? null;
+    }
     const { error } = await supabase.from('reservas').insert({
       filial_id: perfil.filial_id, tipo: m.tipo, periodo: m.periodo,
       data_inicio: m.data_inicio, data_fim: m.data_fim,
       nome: m.nome || null, telefone: m.telefone || null, placa: m.placa || null,
       modelo: m.modelo || null, observacao: m.observacao || null, criado_por: perfil.id,
+      valor_antecipado: Number(m.valorAntecipado) || null,
+      forma_antecipado: Number(m.valorAntecipado) > 0
+        ? (m.formaAntecipado || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || null) : null,
+      caixa_id_antecipado: caixaIdAntecipado,
     });
     if (error) { setErro(error.message); return; }
     setModalNova(null);
@@ -194,6 +213,7 @@ export default function Reservas({ perfil }) {
         ['Placa', r.placa || '—'], ['Modelo', r.modelo || '—'],
         ['Data início', fmtDataBR(r.data_inicio)], ['Data final', fmtDataBR(r.data_fim)],
         ['Tipo', r.tipo], ['Nome', r.nome || '—'], ['Telefone', r.telefone || '—'],
+        ...(Number(r.valor_antecipado) > 0 ? [['Valor antecipado', fmtBRL(Number(r.valor_antecipado))]] : []),
         ...(r.observacao ? [['Observações', r.observacao]] : []),
       ],
       tipo: 'reserva',
@@ -279,7 +299,10 @@ export default function Reservas({ perfil }) {
             <tbody>
               {reservasDoDia.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.tipo}</td>
+                  <td>
+                    {Number(r.valor_antecipado) > 0 && <span title={`Antecipado: ${fmtBRL(Number(r.valor_antecipado))}`}>$ </span>}
+                    {r.tipo}
+                  </td>
                   <td>{ROTULO_PERIODO[r.periodo] || r.periodo}</td>
                   <td>{r.nome || '—'}{r.telefone ? ` · ${r.telefone}` : ''}</td>
                   <td className="mono">{r.placa || '—'}</td>
@@ -367,6 +390,29 @@ export default function Reservas({ perfil }) {
               <label>Observação (opcional)</label>
               <input value={modalNova.observacao} onChange={(e) => setModalNova({ ...modalNova, observacao: e.target.value })} />
             </div>
+            <div className="linha-form" style={{ marginBottom: 10 }}>
+              <div className="campo" style={{ flex: 1 }}>
+                <label>Valor antecipado (opcional)</label>
+                <input type="number" step="0.01" min="0" value={modalNova.valorAntecipado}
+                  onChange={(e) => setModalNova({ ...modalNova, valorAntecipado: e.target.value })} />
+              </div>
+              {Number(modalNova.valorAntecipado) > 0 && (
+                <div className="campo" style={{ flex: 1 }}>
+                  <label>Forma de pagamento</label>
+                  <select value={modalNova.formaAntecipado || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || ''}
+                    onChange={(e) => setModalNova({ ...modalNova, formaAntecipado: e.target.value })}>
+                    {formas.map((f) => <option key={f.codigo} value={f.codigo}>{f.descricao}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+            {Number(modalNova.valorAntecipado) > 0 && (
+              <p className="suave" style={{ fontSize: 11, marginTop: -6, marginBottom: 10 }}>
+                Conta como pagamento recebido agora — entra no caixa aberto deste momento. Na entrada
+                do carro, é descontado do valor total calculado na saída.
+                {!caixaAberto && ' Sem caixa aberto — o recebimento é registrado, mas fica fora do fechamento de caixa.'}
+              </p>
+            )}
             {erro && <p className="aviso">{erro}</p>}
             {modalNova.diasSemVaga && (
               <div className="aviso" style={{ marginBottom: 10 }}>

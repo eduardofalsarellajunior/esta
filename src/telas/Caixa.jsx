@@ -18,7 +18,7 @@ export default function Caixa({ perfil }) {
     setCaixa(c);
     if (!c) { setResumo(null); return; }
 
-    const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipados }] = await Promise.all([
+    const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }] = await Promise.all([
       supabase.from('movimentos').select('id,valor').eq('caixa_id', c.id).not('dt_saida', 'is', null),
       supabase.from('sangrias').select('valor').eq('caixa_id', c.id),
       supabase.from('formas_pagamento').select('codigo,eh_dinheiro'),
@@ -28,6 +28,9 @@ export default function Caixa({ perfil }) {
       // — ligados direto pelo próprio caixa_id do pagamento, não pelo do movimento
       // (que só é gravado na saída, podendo ser um turno diferente).
       supabase.from('movimento_pagamentos').select('valor,forma_pagamento').eq('caixa_id', c.id),
+      // Valores antecipados recebidos ao CRIAR UMA RESERVA neste turno (ver
+      // 0040_reserva_antecipado.sql) — mesmo raciocínio, caixa_id próprio.
+      supabase.from('reservas').select('valor_antecipado,forma_antecipado').eq('caixa_id_antecipado', c.id),
     ]);
     const dinheiroCods = new Set((formas || []).filter((f) => f.eh_dinheiro).map((f) => f.codigo));
     let dinheiroSaidas = 0, total = 0;
@@ -45,16 +48,23 @@ export default function Caixa({ perfil }) {
     const dinheiroMensalidades = (mensPagtos || [])
       .filter((p) => dinheiroCods.has(p.forma_pagamento))
       .reduce((s, p) => s + Number(p.valor_pago || 0), 0);
-    const antecipadosTotal = (antecipados || []).reduce((s, p) => s + Number(p.valor || 0), 0);
-    const dinheiroAntecipados = (antecipados || [])
+    // Antecipado feito na entrada (movimento_pagamentos) + antecipado feito
+    // ao criar a reserva (reservas) — mesma natureza (dinheiro recebido
+    // antes da hora, contado neste turno), somados num "Antecipados" só.
+    const reservasAntecip = (antecipadosReserva || []).filter((r) => Number(r.valor_antecipado) > 0);
+    const antecipadosTotal = (antecipadosEntrada || []).reduce((s, p) => s + Number(p.valor || 0), 0)
+      + reservasAntecip.reduce((s, r) => s + Number(r.valor_antecipado), 0);
+    const dinheiroAntecipados = (antecipadosEntrada || [])
       .filter((p) => dinheiroCods.has(p.forma_pagamento))
-      .reduce((s, p) => s + Number(p.valor || 0), 0);
+      .reduce((s, p) => s + Number(p.valor || 0), 0)
+      + reservasAntecip.filter((r) => dinheiroCods.has(r.forma_antecipado))
+        .reduce((s, r) => s + Number(r.valor_antecipado), 0);
     const dinheiro = dinheiroSaidas + dinheiroMensalidades + dinheiroAntecipados;
     const totalSangria = (sangrias || []).reduce((s, x) => s + Number(x.valor || 0), 0);
     setResumo({
       qtd: (movs || []).length, total, dinheiro, sangrias: totalSangria,
       qtdMensalidades: (mensPagtos || []).length, mensalidades,
-      qtdAntecipados: (antecipados || []).length, antecipados: antecipadosTotal,
+      qtdAntecipados: (antecipadosEntrada || []).length + reservasAntecip.length, antecipados: antecipadosTotal,
       esperadoCaixa: Number(c.valor_abertura) + dinheiro - totalSangria,
     });
   }, [perfil.id]);
