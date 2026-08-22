@@ -1328,7 +1328,10 @@ export default function Patio({ perfil }) {
                     : <span className="placa mono">{m.placa}</span>}</td>
                   <td>{m.modelo || '—'}</td>
                   <td>{m.tipo_veic}</td>
-                  <td>{rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}</td>
+                  <td>
+                    {Number(m.valor_antecipado) > 0 && <span title={`Antecipado: ${fmtBRL(Number(m.valor_antecipado))}`}>$ </span>}
+                    {rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}
+                  </td>
                   <td className="mono">{m.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(m.hr_entrada))}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {podeExcluir(m) && (
