@@ -6,6 +6,7 @@ import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { AR_PARA_ABRASF } from '../lib/issRetido.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
+import AbrirCaixaInline from './AbrirCaixaInline.jsx';
 
 /**
  * Recebimento da mensalidade: valor sugerido pelo cadastro, forma de pagamento e
@@ -14,7 +15,7 @@ import { montarTicketRps } from '../lib/dadosTicket.js';
  * cadastro): o primeiro vencimento cai na próxima ocorrência do dia fixo, e o
  * valor sugerido é proporcional aos dias até lá.
  */
-export function ReceberModal({ mensalista, formas, semCaixa, onConfirmar, onFechar }) {
+export function ReceberModal({ mensalista, formas, semCaixa, perfil, onAbrirCaixa, onConfirmar, onFechar }) {
   const hoje = hojeISO();
   const primeiraMensalidade = !mensalista.proximo_pagamento;
   // Base do próximo vencimento: a data que está no cadastro (a competência que
@@ -74,11 +75,14 @@ export function ReceberModal({ mensalista, formas, semCaixa, onConfirmar, onFech
             : `Vencimento no cadastro: ${fmtDataBR(mensalista.proximo_pagamento)}`}
           {!mensalista.dia_venc && ' · sem "Dia vencimento" no cadastro (o próximo cai no mesmo dia do mês seguinte)'}
         </p>
-        {semCaixa && (
-          <p className="aviso" style={{ fontSize: 12 }}>
-            Sem caixa aberto — o recebimento é registrado e aparece no Painel/BI, mas fica fora do fechamento de caixa.
-          </p>
-        )}
+        {semCaixa ? (
+          <>
+            <AbrirCaixaInline perfil={perfil} onAberto={onAbrirCaixa} />
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
+            </div>
+          </>
+        ) : (
         <form onSubmit={(e) => { e.preventDefault(); onConfirmar({ mensalista, dtPagamento, valor, forma, proximo, observacao, gerarNota }); }}>
           <div className="linha-form" style={{ marginBottom: 10 }}>
             <div className="campo" style={{ flex: "1 1 180px", minWidth: 0 }}>
@@ -132,6 +136,7 @@ export function ReceberModal({ mensalista, formas, semCaixa, onConfirmar, onFech
             <button type="submit" className="btn-primary" disabled={semFormas || valorInvalido}>Confirmar recebimento</button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );
@@ -201,7 +206,7 @@ function SelecionarMensalistaModal({ onSelecionar, onFechar }) {
  * imprimir/mostrar (o chamador já tem seu próprio modal de ticket, ex.: Pátio
  * e Mensalistas). `onConcluido(ticket, celularSugerido)` fecha o fluxo.
  */
-export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, onConcluido, onFechar }) {
+export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, onCaixaAberto, onConcluido, onFechar }) {
   const [mensalista, setMensalista] = useState(null); // null = ainda escolhendo na lista
   const [erro, setErro] = useState('');
 
@@ -248,6 +253,7 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
         <div className="modal aviso" onClick={(e) => e.stopPropagation()}>{erro}</div>
       </div>}
       <ReceberModal mensalista={mensalista} formas={formas} semCaixa={!caixaAberto}
+        perfil={perfil} onAbrirCaixa={onCaixaAberto}
         onConfirmar={confirmar} onFechar={onFechar} />
     </>
   );

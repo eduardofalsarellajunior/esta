@@ -10,6 +10,7 @@ import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
 import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import VendaProdutosFluxo from '../componentes/VendaProdutos.jsx';
+import AbrirCaixaInline from '../componentes/AbrirCaixaInline.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
@@ -87,6 +88,7 @@ export default function Patio({ perfil }) {
   const [caixaAberto, setCaixaAberto] = useState(null);
   const [produtos, setProdutos] = useState([]);
   const [abrirVendaProdutos, setAbrirVendaProdutos] = useState(false); // fluxo de "Venda Produtos" (menu ⋮)
+  const [pendenteCaixa, setPendenteCaixa] = useState(null); // { executar } — ação de recebimento esperando caixa aberto
   const placaRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
   const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
@@ -396,6 +398,17 @@ export default function Patio({ perfil }) {
    * (default explícito no parâmetro só entraria com `undefined`).
    */
   async function registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo, livreAPartir = livreAPartirEntrada) {
+    // Antecipado (desta entrada + o que já veio de uma reserva) conta como
+    // pagamento recebido agora — precisa de caixa aberto pra não ficar de
+    // fora do fechamento (ver AbrirCaixaInline). Sem isso aqui, o resto da
+    // função roda de novo quando o operador confirmar a abertura.
+    const precisaCaixa = (Number(valorAntecipado) || 0)
+      + Number(reservaParaChegadaRef.current?.placa === placa.trim().toUpperCase()
+        ? reservaParaChegadaRef.current?.valor_antecipado || 0 : 0) > 0;
+    if (precisaCaixa && !caixaAberto) {
+      setPendenteCaixa({ executar: () => registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo, livreAPartir) });
+      return;
+    }
     const p = placa.trim().toUpperCase();
     const dtEntrada = hojeISO();
     const hrEntrada = agoraHHMM();
@@ -1029,6 +1042,13 @@ export default function Patio({ perfil }) {
    */
   async function confirmarSaida(tomadorDps, dadosOverride) {
     const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, servicosSelecionados } = dadosOverride || saindo;
+    // Cobrança real (dinheiro entrando agora) precisa de caixa aberto pra não
+    // ficar de fora do fechamento — mensalista/hóspede sem pagamento (todos
+    // os itens de `pagamentos` zerados) não passa por aqui (ver AbrirCaixaInline).
+    if (!caixaAberto && (pagamentos || []).some((p) => Number(p.valor) > 0)) {
+      setPendenteCaixa({ executar: () => confirmarSaida(tomadorDps, dadosOverride) });
+      return;
+    }
     const dtSaida = hojeISO();
     const hrSaida = agoraHHMM();
     // Liga ao caixa aberto do operador (se houver), para o fechamento.
@@ -1534,7 +1554,7 @@ export default function Patio({ perfil }) {
             </p>
             {!caixaAberto && (
               <p className="aviso" style={{ fontSize: 12 }}>
-                Sem caixa aberto — o recebimento é registrado, mas fica fora do fechamento de caixa.
+                Sem caixa aberto — ao registrar a entrada, vamos pedir o troco inicial pra abrir um.
               </p>
             )}
             <div className="linha-form" style={{ marginBottom: 10 }}>
@@ -1622,15 +1642,28 @@ export default function Patio({ perfil }) {
       )}
 
       {abrirRecebimento && (
-        <ReceberMensalidadeFluxo perfil={perfil} formas={formas} caixaAberto={caixaAberto}
+        <ReceberMensalidadeFluxo perfil={perfil} formas={formas} caixaAberto={caixaAberto} onCaixaAberto={setCaixaAberto}
           onConcluido={(t, celularSugerido) => { setTicket(t); setCelularTicket(celularSugerido); setAbrirRecebimento(false); }}
           onFechar={() => setAbrirRecebimento(false)} />
       )}
 
       {abrirVendaProdutos && (
-        <VendaProdutosFluxo perfil={perfil} produtos={produtos} formas={formas} caixaAberto={caixaAberto}
+        <VendaProdutosFluxo perfil={perfil} produtos={produtos} formas={formas} caixaAberto={caixaAberto} onCaixaAberto={setCaixaAberto}
           onConcluido={(t) => { setTicket(t); setAbrirVendaProdutos(false); recarregar(); }}
           onFechar={() => setAbrirVendaProdutos(false)} />
+      )}
+
+      {pendenteCaixa && (
+        <div className="modal-bg" onClick={() => setPendenteCaixa(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(420px, 92vw)' }}>
+            <h2>Abrir caixa</h2>
+            <AbrirCaixaInline perfil={perfil}
+              onAberto={(cx) => { setCaixaAberto(cx); const { executar } = pendenteCaixa; setPendenteCaixa(null); executar(); }} />
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setPendenteCaixa(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {modalSenhaMes && (

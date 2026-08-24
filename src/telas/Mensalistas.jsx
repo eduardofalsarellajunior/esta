@@ -186,6 +186,7 @@ export default function Mensalistas({ perfil }) {
 
       {recebendo && (
         <ReceberModal mensalista={recebendo} formas={formas} semCaixa={!caixaAberto}
+          perfil={perfil} onAbrirCaixa={setCaixaAberto}
           onConfirmar={receber} onFechar={() => setRecebendo(null)} />
       )}
 

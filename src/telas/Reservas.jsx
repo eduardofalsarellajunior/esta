@@ -5,6 +5,7 @@ import { tiposDeVaga, capacidadePorDia, diasSemVaga, tabelaPorTipoDeVaga, valorP
 import { carregarModelosTicket, carregarTabelasPreco } from '../lib/dados.js';
 import { dadosFilial, dadosReserva } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
+import AbrirCaixaInline from '../componentes/AbrirCaixaInline.jsx';
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const ROTULO_PERIODO = { dia_todo: 'Dia todo', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
@@ -121,6 +122,7 @@ export default function Reservas({ perfil }) {
   const [caixaAberto, setCaixaAberto] = useState(null);
   const [tabelaPorTipo, setTabelaPorTipo] = useState({});
   const [tabelasPreco, setTabelasPreco] = useState({});
+  const [pendenteCaixa, setPendenteCaixa] = useState(null); // { executar } — ação esperando caixa aberto
 
   const celulas = useMemo(() => celulasDoMes(anoMes), [anoMes]);
 
@@ -194,8 +196,13 @@ export default function Reservas({ perfil }) {
 
     setErro('');
     // Valor antecipado conta como pagamento recebido AGORA (mesmo espírito
-    // do antecipado na entrada do Pátio) — liga ao caixa aberto deste
-    // momento (ver Caixa.jsx e 0040_reserva_antecipado.sql).
+    // do antecipado na entrada do Pátio) — precisa de caixa aberto pra não
+    // ficar de fora do fechamento (ver Caixa.jsx e 0040_reserva_antecipado.sql
+    // e AbrirCaixaInline).
+    if (Number(m.valorAntecipado) > 0 && !caixaAberto) {
+      setPendenteCaixa({ executar: () => tentarSalvarReserva(forcar) });
+      return;
+    }
     let caixaIdAntecipado = null;
     if (Number(m.valorAntecipado) > 0) {
       const { data: cx } = await supabase.from('caixas').select('id')
@@ -430,7 +437,7 @@ export default function Reservas({ perfil }) {
               <p className="suave" style={{ fontSize: 11, marginTop: -6, marginBottom: 10 }}>
                 Conta como pagamento recebido agora — entra no caixa aberto deste momento. Na entrada
                 do carro, é descontado do valor total calculado na saída.
-                {!caixaAberto && ' Sem caixa aberto — o recebimento é registrado, mas fica fora do fechamento de caixa.'}
+                {!caixaAberto && ' Sem caixa aberto — ao reservar, vamos pedir o troco inicial pra abrir um.'}
               </p>
             )}
             {erro && <p className="aviso">{erro}</p>}
@@ -455,6 +462,19 @@ export default function Reservas({ perfil }) {
       {ticket && (
         <TicketModal ticket={ticket} filial={filial} perfil={perfil} celular={celularTicket}
           onCelular={setCelularTicket} onFechar={() => setTicket(null)} />
+      )}
+
+      {pendenteCaixa && (
+        <div className="modal-bg" onClick={() => setPendenteCaixa(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(420px, 92vw)' }}>
+            <h2>Abrir caixa</h2>
+            <AbrirCaixaInline perfil={perfil}
+              onAberto={(cx) => { setCaixaAberto(cx); const { executar } = pendenteCaixa; setPendenteCaixa(null); executar(); }} />
+            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={() => setPendenteCaixa(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
