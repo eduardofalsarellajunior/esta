@@ -32,6 +32,11 @@ export default function Patio({ perfil }) {
   const [convenios, setConvenios] = useState({});
   const [formas, setFormas] = useState([]);
   const [patio, setPatio] = useState([]);
+  // No celular, a lista "No pátio" nasce escondida atrás de um botão (mais
+  // espaço pra Entrada de veículo, especialmente com a fonte maior — ver
+  // .card-entrada/.btn-ver-patio no CSS) — no desktop sempre visível, como
+  // sempre foi (o botão nem aparece lá, ver CSS).
+  const [verPatioMobile, setVerPatioMobile] = useState(() => window.innerWidth > 760);
   const [placa, setPlaca] = useState('');
   const [detectado, setDetectado] = useState(null); // {mensalista, convenio_codigo, tipo_mens}
   const [vagaEsgotada, setVagaEsgotada] = useState(null); // nome do mensalista, se as vagas dele já estão ocupadas
@@ -1255,7 +1260,7 @@ export default function Patio({ perfil }) {
     <>
       {erro && <div className="card aviso">{erro}</div>}
 
-      <div className="card">
+      <div className="card card-entrada">
         <div className="card-cab">
           <h2>Entrada de veículo</h2>
           <CardAcoes acoes={[
@@ -1362,45 +1367,54 @@ export default function Patio({ perfil }) {
       </div>
 
       <div className="card">
-        <h2>No pátio ({patio.length}) — {avulsosNoPatio} avulso(s), {mensalistasNoPatio} mensalista(s)</h2>
-        <div className="tabela-scroll">
-          <table>
-            <thead><tr><th>Nº</th><th>Placa</th><th>Carro</th><th>Tabela</th><th>Tipo</th><th>Entrada</th><th></th></tr></thead>
-            <tbody>
-              {patio.map((m) => (
-                <tr key={m.id}>
-                  {/* O número de controle é o que o cliente devolve na saída —
-                      dá pra digitá-lo no mesmo campo da placa. */}
-                  <td className="mono" style={{ fontWeight: 700 }}>
-                    {m.controle != null ? String(m.controle).padStart(4, '0') : '—'}
-                  </td>
-                  <td>{semChapa(m.placa)
-                    ? <span className="suave">{rotuloPlaca(m.placa)}</span>
-                    : <span className="placa mono">{m.placa}</span>}</td>
-                  <td>{m.modelo || '—'}</td>
-                  <td>{m.tipo_veic}</td>
-                  <td>
-                    {Number(m.valor_antecipado) > 0 && <span title={`Antecipado: ${fmtBRL(Number(m.valor_antecipado))}`}>$ </span>}
-                    {rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}
-                  </td>
-                  <td className="mono">{m.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(m.hr_entrada))}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {podeExcluir(m) && (
-                      <button className="btn-ghost aviso-btn" onClick={() => abrirExclusao(m)}>Excluir</button>
-                    )}
-                    <button className="btn-ghost" onClick={() => segundaVia(m)} title="Cliente perdeu o ticket">2ª via</button>
-                    <button
-                      className={movimentosComServico.has(m.id) ? 'btn-servico-ativo' : 'btn-ghost'}
-                      onClick={() => abrirServicosModal(m)}
-                    >Serviço</button>
-                    <button className="btn-primary" onClick={() => prepararSaida(m)}>Saída</button>
-                  </td>
-                </tr>
-              ))}
-              {patio.length === 0 && <tr><td colSpan={7} className="suave">Pátio vazio.</td></tr>}
-            </tbody>
-          </table>
+        <div className="card-cab">
+          <h2>No pátio ({patio.length}) — {avulsosNoPatio} avulso(s), {mensalistasNoPatio} mensalista(s)</h2>
+          {/* Só existe de verdade no celular (ver .btn-ver-patio no CSS) —
+              no desktop a lista sempre aparece, como antes. */}
+          <button type="button" className="btn-ghost btn-ver-patio" onClick={() => setVerPatioMobile((v) => !v)}>
+            {verPatioMobile ? 'Ocultar veículos' : `Ver veículos (${patio.length})`}
+          </button>
         </div>
+        {verPatioMobile && (
+          <div className="tabela-scroll">
+            <table>
+              <thead><tr><th>Nº</th><th>Placa</th><th>Carro</th><th>Tabela</th><th>Tipo</th><th>Entrada</th><th></th></tr></thead>
+              <tbody>
+                {patio.map((m) => (
+                  <tr key={m.id}>
+                    {/* O número de controle é o que o cliente devolve na saída —
+                        dá pra digitá-lo no mesmo campo da placa. */}
+                    <td className="mono" style={{ fontWeight: 700 }}>
+                      {m.controle != null ? String(m.controle).padStart(4, '0') : '—'}
+                    </td>
+                    <td>{semChapa(m.placa)
+                      ? <span className="suave">{rotuloPlaca(m.placa)}</span>
+                      : <span className="placa mono">{m.placa}</span>}</td>
+                    <td>{m.modelo || '—'}</td>
+                    <td>{m.tipo_veic}</td>
+                    <td>
+                      {Number(m.valor_antecipado) > 0 && <span title={`Antecipado: ${fmtBRL(Number(m.valor_antecipado))}`}>$ </span>}
+                      {rotuloTipo(m.tipo_mens)}{m.convenio_codigo ? ` · ${m.convenio_codigo}` : ''}
+                    </td>
+                    <td className="mono">{m.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(m.hr_entrada))}</td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {podeExcluir(m) && (
+                        <button className="btn-ghost aviso-btn" onClick={() => abrirExclusao(m)}>Excluir</button>
+                      )}
+                      <button className="btn-ghost" onClick={() => segundaVia(m)} title="Cliente perdeu o ticket">2ª via</button>
+                      <button
+                        className={movimentosComServico.has(m.id) ? 'btn-servico-ativo' : 'btn-ghost'}
+                        onClick={() => abrirServicosModal(m)}
+                      >Serviço</button>
+                      <button className="btn-primary" onClick={() => prepararSaida(m)}>Saída</button>
+                    </td>
+                  </tr>
+                ))}
+                {patio.length === 0 && <tr><td colSpan={7} className="suave">Pátio vazio.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="card">
