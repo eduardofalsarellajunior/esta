@@ -400,14 +400,22 @@ export default function Patio({ perfil }) {
   async function registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo, livreAPartir = livreAPartirEntrada) {
     // Antecipado (desta entrada + o que já veio de uma reserva) conta como
     // pagamento recebido agora — precisa de caixa aberto pra não ficar de
-    // fora do fechamento (ver AbrirCaixaInline). Sem isso aqui, o resto da
-    // função roda de novo quando o operador confirmar a abertura.
+    // fora do fechamento (ver AbrirCaixaInline). Busca direto no banco (não
+    // do state `caixaAberto`): essa mesma função é chamada de novo assim que
+    // o operador abre o caixa (ver pendenteCaixa.executar mais abaixo), e o
+    // state daquele render ainda não teria atualizado — bateria o gate de
+    // novo e tentaria abrir um SEGUNDO caixa (erro de unicidade).
     const precisaCaixa = (Number(valorAntecipado) || 0)
       + Number(reservaParaChegadaRef.current?.placa === placa.trim().toUpperCase()
         ? reservaParaChegadaRef.current?.valor_antecipado || 0 : 0) > 0;
-    if (precisaCaixa && !caixaAberto) {
-      setPendenteCaixa({ executar: () => registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo, livreAPartir) });
-      return;
+    if (precisaCaixa) {
+      const { data: cxAtual } = await supabase.from('caixas').select('*')
+        .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
+      if (!cxAtual) {
+        setPendenteCaixa({ executar: () => registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo, livreAPartir) });
+        return;
+      }
+      if (!caixaAberto) setCaixaAberto(cxAtual);
     }
     const p = placa.trim().toUpperCase();
     const dtEntrada = hojeISO();
@@ -1044,10 +1052,19 @@ export default function Patio({ perfil }) {
     const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, servicosSelecionados } = dadosOverride || saindo;
     // Cobrança real (dinheiro entrando agora) precisa de caixa aberto pra não
     // ficar de fora do fechamento — mensalista/hóspede sem pagamento (todos
-    // os itens de `pagamentos` zerados) não passa por aqui (ver AbrirCaixaInline).
-    if (!caixaAberto && (pagamentos || []).some((p) => Number(p.valor) > 0)) {
-      setPendenteCaixa({ executar: () => confirmarSaida(tomadorDps, dadosOverride) });
-      return;
+    // os itens de `pagamentos` zerados) não passa por aqui. Busca direto no
+    // banco (não do state `caixaAberto`): esta função é chamada de novo assim
+    // que o operador abre o caixa (pendenteCaixa.executar), e o state daquele
+    // render ainda não teria atualizado — bateria o gate de novo e tentaria
+    // abrir um SEGUNDO caixa (erro de unicidade).
+    if ((pagamentos || []).some((p) => Number(p.valor) > 0)) {
+      const { data: cxAtual } = await supabase.from('caixas').select('*')
+        .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
+      if (!cxAtual) {
+        setPendenteCaixa({ executar: () => confirmarSaida(tomadorDps, dadosOverride) });
+        return;
+      }
+      if (!caixaAberto) setCaixaAberto(cxAtual);
     }
     const dtSaida = hojeISO();
     const hrSaida = agoraHHMM();

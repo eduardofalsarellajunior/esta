@@ -198,16 +198,21 @@ export default function Reservas({ perfil }) {
     // Valor antecipado conta como pagamento recebido AGORA (mesmo espírito
     // do antecipado na entrada do Pátio) — precisa de caixa aberto pra não
     // ficar de fora do fechamento (ver Caixa.jsx e 0040_reserva_antecipado.sql
-    // e AbrirCaixaInline).
-    if (Number(m.valorAntecipado) > 0 && !caixaAberto) {
-      setPendenteCaixa({ executar: () => tentarSalvarReserva(forcar) });
-      return;
-    }
+    // e AbrirCaixaInline). Busca direto no banco (não do state `caixaAberto`):
+    // esta função é chamada de novo assim que o operador abre o caixa
+    // (pendenteCaixa.executar), e o state daquele render ainda não teria
+    // atualizado — bateria o gate de novo e tentaria abrir um SEGUNDO caixa
+    // (erro de unicidade).
     let caixaIdAntecipado = null;
     if (Number(m.valorAntecipado) > 0) {
-      const { data: cx } = await supabase.from('caixas').select('id')
+      const { data: cx } = await supabase.from('caixas').select('*')
         .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
-      caixaIdAntecipado = cx?.id ?? null;
+      if (!cx) {
+        setPendenteCaixa({ executar: () => tentarSalvarReserva(forcar) });
+        return;
+      }
+      if (!caixaAberto) setCaixaAberto(cx);
+      caixaIdAntecipado = cx.id;
     }
     const { error } = await supabase.from('reservas').insert({
       filial_id: perfil.filial_id, tipo: m.tipo, periodo: m.periodo,
