@@ -21,6 +21,7 @@ const GRUPOS = [
     { to: '/mensalistas', rotulo: 'Mensalistas' },
     { to: '/formas', rotulo: 'Formas de pagamento' },
     { to: '/vagas', rotulo: 'Vagas/boxes' },
+    { to: '/produtos', rotulo: 'Produtos' },
     { to: '/modelos', rotulo: 'Modelos' },
     { to: '/servicos', rotulo: 'Serviços' },
     { to: '/bonus', rotulo: 'Faixas de bônus' },

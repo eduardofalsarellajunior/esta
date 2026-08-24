@@ -23,7 +23,8 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     ['Descontos (conv.)', fmtBRL(dados.descontos)],
     ['Tempo médio', fmtHora(dados.tempoMedio)],
     ['Mensalidades recebidas', `${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`],
-    ['Faturado (avulso + desconto conv. + serviços + mensalidades)', fmtBRL(dados.faturado)],
+    ['Venda de produtos', `${dados.produtosVendidos.length} · ${fmtBRL(dados.produtosTotal)}`],
+    ['Faturado (avulso + desconto conv. + serviços + mensalidades + produtos)', fmtBRL(dados.faturado)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
   const porTipo = Object.entries(dados.porTipo)
@@ -48,6 +49,20 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
         <td style="text-align:right">${escapeHtml(fmtBRL(p.valor))}</td>
       </tr>`).join('') || '<tr><td colspan="5">Nenhuma mensalidade recebida no período.</td></tr>'}</tbody>
       ${dados.mensalidades.length ? `<tfoot><tr><td colspan="4"><strong>Total</strong></td><td style="text-align:right"><strong>${escapeHtml(fmtBRL(dados.mensalidadesTotal))}</strong></td></tr></tfoot>` : ''}
+      </table>`;
+
+  const produtosHtml = `
+      <h2>Vendas de produtos (${dados.produtosVendidos.length})</h2>
+      <table><thead><tr>
+        <th>Data</th><th>Produto</th><th>Qtde</th><th>Forma</th><th>Valor</th>
+      </tr></thead><tbody>${dados.produtosVendidos.map((v) => `<tr>
+        <td>${escapeHtml(new Date(v.criado_em).toLocaleString('pt-BR'))}</td>
+        <td>${escapeHtml(v.produto)}</td>
+        <td style="text-align:right">${v.quantidade}</td>
+        <td>${escapeHtml(v.forma)}</td>
+        <td style="text-align:right">${escapeHtml(fmtBRL(v.valor))}</td>
+      </tr>`).join('') || '<tr><td colspan="5">Nenhuma venda de produto no período.</td></tr>'}</tbody>
+      ${dados.produtosVendidos.length ? `<tfoot><tr><td colspan="4"><strong>Total</strong></td><td style="text-align:right"><strong>${escapeHtml(fmtBRL(dados.produtosTotal))}</strong></td></tr></tfoot>` : ''}
       </table>`;
 
   const veiculosHtml = veiculosDetalhe != null ? `
@@ -97,6 +112,7 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
       <h2>Por forma de pagamento</h2>
       <table><tbody>${porForma || '<tr><td>Sem pagamentos no período.</td></tr>'}</tbody></table>
       ${mensalidadesHtml}
+      ${produtosHtml}
       ${veiculosHtml}
     </body></html>`;
   const win = window.open('', '_blank', 'width=420,height=650');
@@ -148,7 +164,13 @@ function textoRelatorio(dados, de, ate, filial) {
   }
   if (!dados.mensalidades.length) linhas.push('  Nenhuma mensalidade recebida no período.');
   linhas.push('');
-  linhas.push(`Faturado (avulso + desconto conv. + serviços + mensalidades): ${fmtBRL(dados.faturado)}`);
+  linhas.push(`Venda de produtos: ${dados.produtosVendidos.length} · ${fmtBRL(dados.produtosTotal)}`);
+  for (const v of dados.produtosVendidos) {
+    linhas.push(`  ${new Date(v.criado_em).toLocaleString('pt-BR')} — ${v.produto}: ${v.quantidade} un · ${fmtBRL(v.valor)} (${v.forma})`);
+  }
+  if (!dados.produtosVendidos.length) linhas.push('  Nenhuma venda de produto no período.');
+  linhas.push('');
+  linhas.push(`Faturado (avulso + desconto conv. + serviços + mensalidades + produtos): ${fmtBRL(dados.faturado)}`);
   return linhas.join('\n');
 }
 
@@ -211,6 +233,14 @@ export default function BI({ perfil }) {
       .order('dt_pagamento', { ascending: false });
     if (errMens) { setErro(errMens.message); return; }
 
+    // Vendas de produto (balcão) no período — nunca passa por movimentos/
+    // notas_fiscais (ver 0042_produtos.sql), soma à parte igual mensalidade.
+    const { data: vendasProdutos, error: errProd } = await supabase.from('vendas_produtos')
+      .select('*, produtos(codigo, descricao)')
+      .gte('criado_em', inicio).lt('criado_em', fim)
+      .order('criado_em', { ascending: false });
+    if (errProd) { setErro(errProd.message); return; }
+
     const porTipo = {};
     let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, valorAvulso = 0, minutosTotal = 0, saidasComTempo = 0;
     for (const m of movs) {
@@ -250,11 +280,20 @@ export default function BI({ perfil }) {
     }));
     const mensalidadesTotal = mensalidades.reduce((s, p) => s + p.valor, 0);
 
+    const produtosVendidos = (vendasProdutos || []).map((v) => ({
+      id: v.id, criado_em: v.criado_em,
+      produto: v.produtos ? `${v.produtos.codigo} — ${v.produtos.descricao}` : '—',
+      quantidade: Number(v.quantidade || 0), valor: Number(v.valor_total || 0),
+      forma: descForma[v.forma_pagamento] || v.forma_pagamento,
+    }));
+    const produtosTotal = produtosVendidos.reduce((s, v) => s + v.valor, 0);
+
     // Recebido por forma de pagamento, somando saídas (avulso+convênio+
-    // serviço, via movimento_pagamentos) e mensalidades juntos — é o mesmo
-    // "soma tudo" do KPI Faturado, só que quebrado por forma.
+    // serviço, via movimento_pagamentos), mensalidades e vendas de produto
+    // juntos — é o mesmo "soma tudo" do KPI Faturado, só que quebrado por forma.
     const recebidoPorForma = { ...porForma };
     for (const p of mensalidades) recebidoPorForma[p.forma] = (recebidoPorForma[p.forma] || 0) + p.valor;
+    for (const v of produtosVendidos) recebidoPorForma[v.forma] = (recebidoPorForma[v.forma] || 0) + v.valor;
 
     // "Descontos (conv.)" é o quanto o convênio tirou do valor cheio da
     // tabela — entra na conta do Faturado (que é o valor cheio, sem
@@ -287,11 +326,13 @@ export default function BI({ perfil }) {
     }
 
     setDados({
-      totalVeic: movs.length, valorAvulso, faturado: valorAvulso + descontos + valorServicos + mensalidadesTotal,
+      totalVeic: movs.length, valorAvulso,
+      faturado: valorAvulso + descontos + valorServicos + mensalidadesTotal + produtosTotal,
       recebidoSaidas, descontos, valorServicos,
       porTipo, porTipoCancelado, recebidoPorForma, porServico,
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
       mensalidades, mensalidadesTotal,
+      produtosVendidos, produtosTotal,
     });
 
     const detalheNormal = movs.map((m) => ({
@@ -360,10 +401,12 @@ export default function BI({ perfil }) {
             <Kpi rotulo="Descontos (conv.)" valor={fmtBRL(dados.descontos)} moeda />
             <Kpi rotulo="Tempo médio" valor={fmtHora(dados.tempoMedio)} />
             <Kpi rotulo="Mensalidades" valor={fmtBRL(dados.mensalidadesTotal)} moeda />
+            <Kpi rotulo="Venda de produtos" valor={fmtBRL(dados.produtosTotal)} moeda />
             <Kpi rotulo="Faturado" valor={fmtBRL(dados.faturado)} destaque moeda />
           </div>
           <p className="suave" style={{ marginTop: -4 }}>
-            Faturado = Avulso + Descontos (conv.) + Serviços + Mensalidades — o valor cheio, antes do desconto de convênio.
+            Faturado = Avulso + Descontos (conv.) + Serviços + Mensalidades + Venda de produtos — o valor
+            cheio, antes do desconto de convênio.
           </p>
 
           <div className="card">
@@ -437,6 +480,34 @@ export default function BI({ perfil }) {
                   <tfoot><tr>
                     <td colSpan={4}><strong>Total</strong></td>
                     <td style={{ textAlign: 'right' }}><strong>{fmtBRL(dados.mensalidadesTotal)}</strong></td>
+                  </tr></tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Vendas de produtos ({dados.produtosVendidos.length})</h2>
+            <p className="suave">Venda avulsa de balcão (ver Pátio → ⋮ → Venda Produtos) — nunca gera RPS/NFS-e.</p>
+            <div className="tabela-scroll">
+              <table>
+                <thead><tr><th>Data</th><th>Produto</th><th>Qtde</th><th>Forma</th><th>Valor</th></tr></thead>
+                <tbody>
+                  {dados.produtosVendidos.map((v) => (
+                    <tr key={v.id}>
+                      <td className="mono">{new Date(v.criado_em).toLocaleString('pt-BR')}</td>
+                      <td>{v.produto}</td>
+                      <td style={{ textAlign: 'right' }}>{v.quantidade}</td>
+                      <td>{v.forma}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtBRL(v.valor)}</td>
+                    </tr>
+                  ))}
+                  {dados.produtosVendidos.length === 0 && <tr><td colSpan={5} className="suave">Nenhuma venda de produto no período.</td></tr>}
+                </tbody>
+                {dados.produtosVendidos.length > 0 && (
+                  <tfoot><tr>
+                    <td colSpan={4}><strong>Total</strong></td>
+                    <td style={{ textAlign: 'right' }}><strong>{fmtBRL(dados.produtosTotal)}</strong></td>
                   </tr></tfoot>
                 )}
               </table>

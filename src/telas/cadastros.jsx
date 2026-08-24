@@ -148,6 +148,19 @@ function CadastroLoteVagas({ perfil, onCriado }) {
   );
 }
 
+export function Produtos({ perfil }) {
+  return <Crud perfil={perfil} titulo="Produtos" tabela="produtos" ordem="codigo"
+    subtitulo="Produtos à venda no balcão (água, item de loja...) — a venda fica em Pátio → ⋮ → Venda Produtos."
+    colunas={[
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
+      { campo: 'descricao', rotulo: 'Descrição', obrigatorio: true },
+      { campo: 'valor_compra', rotulo: 'Vlr. compra', tipo: 'number' },
+      { campo: 'valor_venda', rotulo: 'Vlr. venda', tipo: 'number', obrigatorio: true },
+      { campo: 'quantidade_estoque', rotulo: 'Estoque', tipo: 'number' },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
+    ]} />;
+}
+
 export function Modelos({ perfil }) {
   return <Crud perfil={perfil} titulo="Modelos de veículo" tabela="modelos_veiculo" ordem="codigo"
     subtitulo="Catálogo de modelos e a tabela de preço padrão de cada um."

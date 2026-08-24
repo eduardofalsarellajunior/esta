@@ -18,7 +18,7 @@ export default function Caixa({ perfil }) {
     setCaixa(c);
     if (!c) { setResumo(null); return; }
 
-    const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }] = await Promise.all([
+    const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }, { data: vendasProdutos }] = await Promise.all([
       supabase.from('movimentos').select('id,valor').eq('caixa_id', c.id).not('dt_saida', 'is', null),
       supabase.from('sangrias').select('valor').eq('caixa_id', c.id),
       supabase.from('formas_pagamento').select('codigo,eh_dinheiro'),
@@ -31,6 +31,9 @@ export default function Caixa({ perfil }) {
       // Valores antecipados recebidos ao CRIAR UMA RESERVA neste turno (ver
       // 0040_reserva_antecipado.sql) — mesmo raciocínio, caixa_id próprio.
       supabase.from('reservas').select('valor_antecipado,forma_antecipado').eq('caixa_id_antecipado', c.id),
+      // Vendas de produto (balcão) neste turno (ver 0042_produtos.sql) — nunca
+      // passa por movimentos/notas_fiscais, caixa_id próprio igual antecipado.
+      supabase.from('vendas_produtos').select('valor_total,forma_pagamento').eq('caixa_id', c.id),
     ]);
     const dinheiroCods = new Set((formas || []).filter((f) => f.eh_dinheiro).map((f) => f.codigo));
     let dinheiroSaidas = 0, total = 0;
@@ -59,12 +62,17 @@ export default function Caixa({ perfil }) {
       .reduce((s, p) => s + Number(p.valor || 0), 0)
       + reservasAntecip.filter((r) => dinheiroCods.has(r.forma_antecipado))
         .reduce((s, r) => s + Number(r.valor_antecipado), 0);
-    const dinheiro = dinheiroSaidas + dinheiroMensalidades + dinheiroAntecipados;
+    const produtosTotal = (vendasProdutos || []).reduce((s, v) => s + Number(v.valor_total || 0), 0);
+    const dinheiroProdutos = (vendasProdutos || [])
+      .filter((v) => dinheiroCods.has(v.forma_pagamento))
+      .reduce((s, v) => s + Number(v.valor_total || 0), 0);
+    const dinheiro = dinheiroSaidas + dinheiroMensalidades + dinheiroAntecipados + dinheiroProdutos;
     const totalSangria = (sangrias || []).reduce((s, x) => s + Number(x.valor || 0), 0);
     setResumo({
       qtd: (movs || []).length, total, dinheiro, sangrias: totalSangria,
       qtdMensalidades: (mensPagtos || []).length, mensalidades,
       qtdAntecipados: (antecipadosEntrada || []).length + reservasAntecip.length, antecipados: antecipadosTotal,
+      qtdProdutos: (vendasProdutos || []).length, produtos: produtosTotal,
       esperadoCaixa: Number(c.valor_abertura) + dinheiro - totalSangria,
     });
   }, [perfil.id]);
@@ -121,15 +129,16 @@ export default function Caixa({ perfil }) {
             <Kpi rotulo="Faturado (saídas)" valor={fmtBRL(resumo.total)} />
             <Kpi rotulo={`Mensalidades (${resumo.qtdMensalidades})`} valor={fmtBRL(resumo.mensalidades)} />
             <Kpi rotulo={`Antecipados (${resumo.qtdAntecipados})`} valor={fmtBRL(resumo.antecipados)} />
-            <Kpi rotulo="Total do turno" valor={fmtBRL(resumo.total + resumo.mensalidades + resumo.antecipados)} />
+            <Kpi rotulo={`Venda de produtos (${resumo.qtdProdutos})`} valor={fmtBRL(resumo.produtos)} />
+            <Kpi rotulo="Total do turno" valor={fmtBRL(resumo.total + resumo.mensalidades + resumo.antecipados + resumo.produtos)} />
             <Kpi rotulo="Em dinheiro" valor={fmtBRL(resumo.dinheiro)} />
             <Kpi rotulo="Sangrias" valor={fmtBRL(resumo.sangrias)} />
             <Kpi rotulo="Esperado no caixa" valor={fmtBRL(resumo.esperadoCaixa)} destaque />
           </div>
         )}
         <p className="suave">
-          "Em dinheiro" e "Esperado no caixa" já incluem as mensalidades e os valores antecipados
-          recebidos neste turno.
+          "Em dinheiro" e "Esperado no caixa" já incluem as mensalidades, os valores antecipados e
+          as vendas de produtos recebidos neste turno.
         </p>
       </div>
 

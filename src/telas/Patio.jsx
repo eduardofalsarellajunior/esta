@@ -9,6 +9,7 @@ import { TicketModal } from '../componentes/Ticket.jsx';
 import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
 import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
+import VendaProdutosFluxo from '../componentes/VendaProdutos.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
@@ -84,6 +85,8 @@ export default function Patio({ perfil }) {
   const [abrirRecebimento, setAbrirRecebimento] = useState(false); // fluxo de "Receber mensalidade" (menu ⋮)
   const [modalSenhaMes, setModalSenhaMes] = useState(null); // { senha, erro, ocupado } — "Cadastrar senha do mês" (menu ⋮)
   const [caixaAberto, setCaixaAberto] = useState(null);
+  const [produtos, setProdutos] = useState([]);
+  const [abrirVendaProdutos, setAbrirVendaProdutos] = useState(false); // fluxo de "Venda Produtos" (menu ⋮)
   const placaRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
   const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
@@ -123,7 +126,7 @@ export default function Patio({ perfil }) {
     try {
       const hoje = hojeISO();
       const { inicio: inicioHoje, fim: fimHoje } = limitesDiaLocal(hoje, hoje);
-      const [t, p, cv, fp, md, tm, sr, fl, sv, mt, bf] = await Promise.all([
+      const [t, p, cv, fp, md, tm, sr, fl, sv, mt, bf, pr] = await Promise.all([
         carregarTabelasPreco(), carregarPatio(),
         supabase.from('convenios').select('*'),
         supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo'),
@@ -135,11 +138,13 @@ export default function Patio({ perfil }) {
         supabase.from('servicos').select('*').eq('ativo', true).order('codigo'),
         carregarModelosTicket(),
         supabase.from('bonus_faixas').select('*').order('pontos_necessarios', { ascending: false }),
+        supabase.from('produtos').select('*').eq('ativo', true).order('codigo'),
       ]);
       setTabelas(t); setPatio(p);
       setConvenios(Object.fromEntries((cv.data || []).map((c) => [c.codigo, c])));
       setFormas(fp.data || []);
       setModelos(md); setTabelasManuais(tm);
+      setProdutos(pr.data || []);
       const listaSaidas = (sr.data || [])
         .map((m) => ({ ...m, _quando: m.excluido_em ? new Date(m.excluido_em).getTime() : dataHoraDe(m.dt_saida, Number(m.hr_saida)).getTime() }))
         .sort((a, b) => b._quando - a._quando)
@@ -1219,6 +1224,7 @@ export default function Patio({ perfil }) {
           <CardAcoes acoes={[
             { label: 'Receber mensalidade', onClick: () => setAbrirRecebimento(true) },
             { label: 'Cadastrar senha do mês', onClick: abrirModalSenhaMes },
+            { label: 'Venda Produtos', onClick: () => setAbrirVendaProdutos(true) },
           ]} />
         </div>
         <form className="linha-form" onSubmit={darEntrada}>
@@ -1619,6 +1625,12 @@ export default function Patio({ perfil }) {
         <ReceberMensalidadeFluxo perfil={perfil} formas={formas} caixaAberto={caixaAberto}
           onConcluido={(t, celularSugerido) => { setTicket(t); setCelularTicket(celularSugerido); setAbrirRecebimento(false); }}
           onFechar={() => setAbrirRecebimento(false)} />
+      )}
+
+      {abrirVendaProdutos && (
+        <VendaProdutosFluxo perfil={perfil} produtos={produtos} formas={formas} caixaAberto={caixaAberto}
+          onConcluido={(t) => { setTicket(t); setAbrirVendaProdutos(false); recarregar(); }}
+          onFechar={() => setAbrirVendaProdutos(false)} />
       )}
 
       {modalSenhaMes && (
