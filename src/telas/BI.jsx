@@ -54,15 +54,16 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
   const produtosHtml = `
       <h2>Vendas de produtos (${dados.produtosVendidos.length})</h2>
       <table><thead><tr>
-        <th>Data</th><th>Produto</th><th>Qtde</th><th>Forma</th><th>Valor</th>
+        <th>Data</th><th>Produto</th><th>Qtde</th><th>Forma</th><th>Valor</th><th>Estoque atual</th>
       </tr></thead><tbody>${dados.produtosVendidos.map((v) => `<tr>
         <td>${escapeHtml(new Date(v.criado_em).toLocaleString('pt-BR'))}</td>
         <td>${escapeHtml(v.produto)}</td>
         <td style="text-align:right">${v.quantidade}</td>
         <td>${escapeHtml(v.forma)}</td>
         <td style="text-align:right">${escapeHtml(fmtBRL(v.valor))}</td>
-      </tr>`).join('') || '<tr><td colspan="5">Nenhuma venda de produto no período.</td></tr>'}</tbody>
-      ${dados.produtosVendidos.length ? `<tfoot><tr><td colspan="4"><strong>Total</strong></td><td style="text-align:right"><strong>${escapeHtml(fmtBRL(dados.produtosTotal))}</strong></td></tr></tfoot>` : ''}
+        <td style="text-align:right">${v.estoque ?? '—'}</td>
+      </tr>`).join('') || '<tr><td colspan="6">Nenhuma venda de produto no período.</td></tr>'}</tbody>
+      ${dados.produtosVendidos.length ? `<tfoot><tr><td colspan="4"><strong>Total</strong></td><td style="text-align:right"><strong>${escapeHtml(fmtBRL(dados.produtosTotal))}</strong></td><td></td></tr></tfoot>` : ''}
       </table>`;
 
   const veiculosHtml = veiculosDetalhe != null ? `
@@ -166,7 +167,7 @@ function textoRelatorio(dados, de, ate, filial) {
   linhas.push('');
   linhas.push(`Venda de produtos: ${dados.produtosVendidos.length} · ${fmtBRL(dados.produtosTotal)}`);
   for (const v of dados.produtosVendidos) {
-    linhas.push(`  ${new Date(v.criado_em).toLocaleString('pt-BR')} — ${v.produto}: ${v.quantidade} un · ${fmtBRL(v.valor)} (${v.forma})`);
+    linhas.push(`  ${new Date(v.criado_em).toLocaleString('pt-BR')} — ${v.produto}: ${v.quantidade} un · ${fmtBRL(v.valor)} (${v.forma}) · estoque atual: ${v.estoque ?? '—'}`);
   }
   if (!dados.produtosVendidos.length) linhas.push('  Nenhuma venda de produto no período.');
   linhas.push('');
@@ -236,7 +237,7 @@ export default function BI({ perfil }) {
     // Vendas de produto (balcão) no período — nunca passa por movimentos/
     // notas_fiscais (ver 0042_produtos.sql), soma à parte igual mensalidade.
     const { data: vendasProdutos, error: errProd } = await supabase.from('vendas_produtos')
-      .select('*, produtos(codigo, descricao)')
+      .select('*, produtos(codigo, descricao, quantidade_estoque)')
       .gte('criado_em', inicio).lt('criado_em', fim)
       .order('criado_em', { ascending: false });
     if (errProd) { setErro(errProd.message); return; }
@@ -285,6 +286,9 @@ export default function BI({ perfil }) {
       produto: v.produtos ? `${v.produtos.codigo} — ${v.produtos.descricao}` : '—',
       quantidade: Number(v.quantidade || 0), valor: Number(v.valor_total || 0),
       forma: descForma[v.forma_pagamento] || v.forma_pagamento,
+      // Estoque ATUAL do produto (não o de quando a venda foi feita) — é o
+      // saldo pra decidir se precisa repor, não um retrato histórico.
+      estoque: v.produtos ? Number(v.produtos.quantidade_estoque || 0) : null,
     }));
     const produtosTotal = produtosVendidos.reduce((s, v) => s + v.valor, 0);
 
@@ -491,7 +495,7 @@ export default function BI({ perfil }) {
             <p className="suave">Venda avulsa de balcão (ver Pátio → ⋮ → Venda Produtos) — nunca gera RPS/NFS-e.</p>
             <div className="tabela-scroll">
               <table>
-                <thead><tr><th>Data</th><th>Produto</th><th>Qtde</th><th>Forma</th><th>Valor</th></tr></thead>
+                <thead><tr><th>Data</th><th>Produto</th><th>Qtde</th><th>Forma</th><th>Valor</th><th>Estoque atual</th></tr></thead>
                 <tbody>
                   {dados.produtosVendidos.map((v) => (
                     <tr key={v.id}>
@@ -500,14 +504,16 @@ export default function BI({ perfil }) {
                       <td style={{ textAlign: 'right' }}>{v.quantidade}</td>
                       <td>{v.forma}</td>
                       <td style={{ textAlign: 'right' }}>{fmtBRL(v.valor)}</td>
+                      <td style={{ textAlign: 'right' }}>{v.estoque ?? '—'}</td>
                     </tr>
                   ))}
-                  {dados.produtosVendidos.length === 0 && <tr><td colSpan={5} className="suave">Nenhuma venda de produto no período.</td></tr>}
+                  {dados.produtosVendidos.length === 0 && <tr><td colSpan={6} className="suave">Nenhuma venda de produto no período.</td></tr>}
                 </tbody>
                 {dados.produtosVendidos.length > 0 && (
                   <tfoot><tr>
                     <td colSpan={4}><strong>Total</strong></td>
                     <td style={{ textAlign: 'right' }}><strong>{fmtBRL(dados.produtosTotal)}</strong></td>
+                    <td></td>
                   </tr></tfoot>
                 )}
               </table>
