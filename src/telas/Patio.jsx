@@ -1276,7 +1276,9 @@ export default function Patio({ perfil }) {
               Na saída, o nº do ticket (ex.: 42) também serve.
             </span>
           </div>
-          <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); detectar(p); }} />
+          {(filial?.config?.patio?.usaLeituraPlaca ?? true) && (
+            <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); detectar(p); }} />
+          )}
           <div className="campo campo-busca" style={{ minWidth: 340 }}>
             <label>Carro</label>
             <input value={buscaModelo}

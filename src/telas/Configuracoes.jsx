@@ -180,6 +180,15 @@ export default function Configuracoes({ perfil }) {
                 comprovante. Quem entra/sai cobrado como avulso (fora do vencimento, vaga
                 esgotada, fora do horário contratado) continua sempre mostrando o ticket.
               </p>
+              <label className="campo-check" style={{ marginBottom: 4 }}>
+                <input type="checkbox" checked={filial.config?.patio?.usaLeituraPlaca ?? true} disabled={!podeEditar}
+                  onChange={(e) => setPatio('usaLeituraPlaca', e.target.checked)} />
+                Usa leitura de placa por foto (câmera)?
+              </label>
+              <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+                Desmarcado, o botão de câmera (📷) some da tela de Entrada de veículo e do
+                cadastro de veículo do mensalista — digitar a placa continua funcionando normal.
+              </p>
               {podeEditar
                 ? <button className="btn-primary" type="submit">Salvar</button>
                 : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}

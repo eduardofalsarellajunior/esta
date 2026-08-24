@@ -48,7 +48,7 @@ export default function Mensalistas({ perfil }) {
   useEffect(() => {
     supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo')
       .then(({ data }) => setFormas(data || []));
-    supabase.from('filiais').select('nome_fantasia, endereco, cnpj').eq('id', perfil.filial_id).maybeSingle()
+    supabase.from('filiais').select('nome_fantasia, endereco, cnpj, config').eq('id', perfil.filial_id).maybeSingle()
       .then(({ data }) => setFilial(data));
     supabase.from('caixas').select('id').eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle()
       .then(({ data }) => setCaixaAberto(data));
@@ -157,7 +157,7 @@ export default function Mensalistas({ perfil }) {
                   {sel?.id === m.id && (
                     <tr>
                       <td colSpan={9} className="linha-expandida">
-                        <Veiculos perfil={perfil} mensalista={sel} />
+                        <Veiculos perfil={perfil} mensalista={sel} filial={filial} />
                         <Recebimentos mensalista={sel} formas={formas}
                           onReimprimir={async (p) => {
                             setTicket(await ticketRecebimentoComModelo({
@@ -460,7 +460,7 @@ function RestricaoTurnos({ m, set }) {
   );
 }
 
-function Veiculos({ perfil, mensalista }) {
+function Veiculos({ perfil, mensalista, filial }) {
   const [veiculos, setVeiculos] = useState([]);
   const [placa, setPlaca] = useState('');
   const [tipoVeic, setTipoVeic] = useState('');
@@ -558,7 +558,9 @@ function Veiculos({ perfil, mensalista }) {
             value={placa} onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); }}
             placeholder="ABC1D23" required />
         </div>
-        <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); }} />
+        {(filial?.config?.patio?.usaLeituraPlaca ?? true) && (
+          <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); }} />
+        )}
         <div className="campo campo-busca" style={{ minWidth: 200 }}>
           <label>Modelo</label>
           <input value={buscaModelo}
