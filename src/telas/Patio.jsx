@@ -1270,6 +1270,7 @@ export default function Patio({ perfil }) {
             <input className="mono" ref={placaRef} value={placa}
               onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); }}
               onBlur={(e) => detectar(e.target.value)}
+              inputMode="text" autoCapitalize="characters" autoComplete="off"
               placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 220, fontSize: 18 }} />
             <span className="suave" style={{ fontSize: 11 }}>
               Na saída, o nº do ticket (ex.: 42) também serve.

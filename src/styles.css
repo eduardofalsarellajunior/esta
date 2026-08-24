@@ -113,7 +113,7 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .card-acoes { position: relative; }
 .card-acoes-btn { background: transparent; border: 1px solid var(--linha); border-radius: 8px; padding: 4px 10px; font-size: 18px; line-height: 1.2; }
 .card-acoes-menu { position: absolute; top: 100%; right: 0; background: var(--panel2); border: 1px solid var(--linha);
-  border-radius: 8px; margin-top: 4px; min-width: 220px; z-index: 20; list-style: none; padding: 4px; }
+  border-radius: 8px; margin-top: 4px; min-width: 220px; max-width: calc(100vw - 16px); z-index: 20; list-style: none; padding: 4px; }
 .card-acoes-menu button { display: block; width: 100%; text-align: left; background: transparent; border: none;
   padding: 8px 12px; border-radius: 6px; font-size: 14px; }
 .card-acoes-menu button:hover { background: var(--panel); }
