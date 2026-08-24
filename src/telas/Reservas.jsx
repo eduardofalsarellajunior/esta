@@ -465,7 +465,9 @@ export default function Reservas({ perfil }) {
       )}
 
       {pendenteCaixa && (
-        <div className="modal-bg" onClick={() => setPendenteCaixa(null)}>
+        // z-index acima do padrão (50): nasce de dentro do modal "Nova reserva",
+        // que já está aberto — precisa ficar por cima dele.
+        <div className="modal-bg" style={{ zIndex: 60 }} onClick={() => setPendenteCaixa(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(420px, 92vw)' }}>
             <h2>Abrir caixa</h2>
             <AbrirCaixaInline perfil={perfil}

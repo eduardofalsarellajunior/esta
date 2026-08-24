@@ -1654,7 +1654,11 @@ export default function Patio({ perfil }) {
       )}
 
       {pendenteCaixa && (
-        <div className="modal-bg" onClick={() => setPendenteCaixa(null)}>
+        // z-index acima do padrão (50): esta ação sempre nasce de dentro de outro
+        // modal já aberto (Confirmar saída, Registrar entrada...) — precisa ficar
+        // por cima dele, não embaixo (mesma z-index empataria e o de baixo, por
+        // vir depois no JSX, ganharia).
+        <div className="modal-bg" style={{ zIndex: 60 }} onClick={() => setPendenteCaixa(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(420px, 92vw)' }}>
             <h2>Abrir caixa</h2>
             <AbrirCaixaInline perfil={perfil}
