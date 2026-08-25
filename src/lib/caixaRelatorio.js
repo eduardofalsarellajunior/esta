@@ -161,8 +161,14 @@ function secao(titulo) {
  * Relatório de fechamento de caixa, impresso na bobina de 58mm (mesmo padrão
  * de Ticket.jsx — ver comentário lá sobre @page/58mm) — é um comprovante,
  * não um relatório A4 como BI/Reservas.
+ *
+ * `reimpressao`: true quando vem da lista "Caixas fechados" (reimprimir um
+ * turno de qualquer data) — nesse caso omite "Sem saída (no pátio)", porque
+ * esse número só faz sentido na hora exata do fechamento (reimprimir dias
+ * depois, os carros que apareciam "sem saída" naquela hora já saíram há
+ * muito — o número ficaria só enganando).
  */
-export function imprimirRelatorioCaixa(dados, filial) {
+export function imprimirRelatorioCaixa(dados, filial, reimpressao = false) {
   const { caixa } = dados;
   const cabecalho = filial && (filial.nome_fantasia || filial.cnpj) ? `
     ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
@@ -174,7 +180,7 @@ export function imprimirRelatorioCaixa(dados, filial) {
     + linha('  Avulso', String(dados.porTipo.avulso))
     + linha('  Mensalista', String(dados.porTipo.mensalista))
     + linha('Cancelados', String(dados.qtdCancelados))
-    + linha('Sem saída (no pátio)', String(dados.qtdSemSaida));
+    + (reimpressao ? '' : linha('Sem saída (no pátio)', String(dados.qtdSemSaida)));
 
   const faturamento = secao('Faturamento')
     + linha('Valor faturado', fmtBRL(dados.valorFaturado))

@@ -66,24 +66,25 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
       ${dados.produtosVendidos.length ? `<tfoot><tr><td colspan="4"><strong>Total</strong></td><td style="text-align:right"><strong>${escapeHtml(fmtBRL(dados.produtosTotal))}</strong></td><td></td></tr></tfoot>` : ''}
       </table>`;
 
+  // Cada veículo em 2-3 linhas de texto corrido (não colunas de tabela) —
+  // com 10 dados por veículo, uma tabela larga estourava a largura da
+  // página impressa e cortava colunas fora (não saía completa). Texto
+  // corrido só quebra linha, nunca corta — mesmo raciocínio do relatório
+  // de caixa (ver src/lib/caixaRelatorio.js).
   const veiculosHtml = veiculosDetalhe != null ? `
       <h2>Veículos (${veiculosDetalhe.length})</h2>
-      <table><thead><tr>
-        <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th><th>Tempo</th><th>Pagto</th><th>Valor</th><th>Desc. conv.</th><th>Status</th>
-      </tr></thead><tbody>${veiculosDetalhe.map((v) => `<tr>
-        <td>${escapeHtml(v.placa)}</td>
-        <td>${escapeHtml(v.modelo || '—')}</td>
-        <td>${escapeHtml(v.tipo_veic)}</td>
-        <td>${escapeHtml(v.dt_entrada.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_entrada)))}</td>
-        <td>${v.cancelado ? '—' : `${escapeHtml(v.dt_saida.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_saida)))}`}</td>
-        <td>${v.tempo != null ? escapeHtml(fmtHora(v.tempo)) : '—'}</td>
-        <td>${escapeHtml(v.pagamento)}</td>
-        <td>${v.cancelado ? '—' : escapeHtml(fmtBRL(v.valor) + (v.valorCalculado != null ? ' *' : ''))}</td>
-        <td>${v.cancelado || !v.descontoConvenio ? '—' : escapeHtml(fmtBRL(v.descontoConvenio))}</td>
-        <td>${v.cancelado ? '<strong>Cancelado</strong>' : ''}</td>
-      </tr>`).join('') || '<tr><td colspan="10">Nenhum veículo no período.</td></tr>'}</tbody></table>${
-        veiculosDetalhe.some((v) => v.valorCalculado != null)
-          ? '<p style="font-size:11px">* valor alterado na saída (diferente do calculado pela tabela).</p>' : ''
+      ${veiculosDetalhe.map((v) => `
+        <div class="veiculo">
+          <p class="v1"><strong>${escapeHtml(v.placa)}</strong> — ${escapeHtml(v.modelo || '—')} (${escapeHtml(v.tipo_veic)})${v.cancelado ? ' <strong>· Cancelado</strong>' : ''}</p>
+          <p class="v2">Entrada: ${escapeHtml(v.dt_entrada.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_entrada)))}${
+            v.cancelado ? '' : ` · Saída: ${escapeHtml(v.dt_saida.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_saida)))} · Tempo: ${v.tempo != null ? escapeHtml(fmtHora(v.tempo)) : '—'}`
+          }</p>
+          ${v.cancelado ? '' : `<p class="v3">Pagto: ${escapeHtml(v.pagamento)} · Valor: ${escapeHtml(fmtBRL(v.valor))}${v.valorCalculado != null ? ' *' : ''}${
+            v.descontoConvenio ? ` · Desc. conv.: ${escapeHtml(fmtBRL(v.descontoConvenio))}` : ''
+          }</p>`}
+        </div>`).join('') || '<p>Nenhum veículo no período.</p>'}
+      ${veiculosDetalhe.some((v) => v.valorCalculado != null)
+        ? '<p style="font-size:11px">* valor alterado na saída (diferente do calculado pela tabela).</p>' : ''
       }` : '';
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório BI</title>
@@ -98,6 +99,9 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
       table { width: 100%; border-collapse: collapse; font-size: 13px; }
       th { text-align: left; padding: 4px 6px 4px 0; border-bottom: 1px solid #999; }
       td { padding: 4px 6px 4px 0; border-bottom: 1px solid #ddd; }
+      .veiculo { border-bottom: 1px dashed #ccc; padding-bottom: 4px; margin-bottom: 4px; }
+      .veiculo p { margin: 1px 0; font-size: 12px; }
+      .veiculo .v1 { font-size: 13px; }
     </style></head><body>
       ${cabecalho}
       <h1>Painel / BI</h1>

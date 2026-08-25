@@ -129,11 +129,11 @@ export default function Caixa({ perfil }) {
     carregarHistorico();
   }
 
-  async function imprimir(c) {
+  async function imprimir(c, reimpressao = false) {
     setErro(''); setImprimindo(c.id);
     try {
       const dados = await carregarRelatorioCaixa(c);
-      imprimirRelatorioCaixa(dados, filial);
+      imprimirRelatorioCaixa(dados, filial, reimpressao);
     } catch (e) {
       setErro(e.message);
     } finally {
@@ -250,7 +250,7 @@ function HistoricoCaixas({ historico, imprimindo, onImprimir, vendoTodos }) {
                 <td className="mono">{c.fechado_em ? new Date(c.fechado_em).toLocaleString('pt-BR') : '—'}</td>
                 <td>{fmtBRL(Number(c.valor_fechamento || 0))}</td>
                 <td style={{ textAlign: 'right' }}>
-                  <button className="btn-ghost" disabled={imprimindo === c.id} onClick={() => onImprimir(c)}>
+                  <button className="btn-ghost" disabled={imprimindo === c.id} onClick={() => onImprimir(c, true)}>
                     {imprimindo === c.id ? 'Gerando…' : 'Imprimir relatório'}
                   </button>
                 </td>
