@@ -142,9 +142,16 @@ export async function carregarRelatorioCaixa(caixa) {
   };
 }
 
-/** Uma linha "rótulo .... valor" — o jeito padrão de comprovante de bobina. */
+/**
+ * Uma linha "Rótulo: valor" — texto corrido (não colunas com layout flex
+ * lado a lado). Era um flex "rótulo .......... valor" antes, mas isso
+ * cortava o último dígito na impressora real (o valor, de largura fixa,
+ * espremia até estourar a bobina) — texto corrido é o mesmo formato que já
+ * funciona comprovadamente no ticket normal (ver Ticket.jsx): sem espaço
+ * sobrando, ele só quebra linha, nunca corta.
+ */
 function linha(rotulo, valor, opts = '') {
-  return `<div class="linha ${opts}"><span>${escapeHtml(rotulo)}</span><strong>${escapeHtml(valor)}</strong></div>`;
+  return `<p class="linha ${opts}"><strong>${escapeHtml(rotulo)}:</strong> ${escapeHtml(valor)}</p>`;
 }
 function secao(titulo) {
   return `<div class="secao">${escapeHtml(titulo)}</div>`;
@@ -235,11 +242,9 @@ export function imprimirRelatorioCaixa(dados, filial) {
       .numero { font-size: 16px; font-weight: 800; text-align: center; margin: 4px 0; }
       .periodo { font-size: 11px; text-align: center; color: #333; margin-bottom: 6px; }
       .secao { font-size: 11px; font-weight: 800; text-transform: uppercase; margin: 10px 0 3px; border-bottom: 1px dashed #999; padding-bottom: 2px; }
-      .linha { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; margin: 2px 0; }
-      .linha span { flex: 1; }
-      .linha strong { font-weight: 600; white-space: nowrap; }
-      .linha.total { font-weight: 800; border-top: 1px dashed #999; padding-top: 3px; margin-top: 4px; }
-      .linha.destaque strong { color: #b30000; }
+      .linha { font-size: 12px; margin: 3px 0; line-height: 1.3; }
+      .linha.total { font-weight: 800; border-top: 1px dashed #999; padding-top: 4px; margin-top: 5px; }
+      .linha.destaque { color: #b30000; font-weight: 800; }
       .rodape { font-size: 11px; color: #333; margin-top: 10px; }
     </style></head><body>
       ${cabecalho}
