@@ -87,6 +87,11 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .campo { display: flex; flex-direction: column; gap: 4px; }
 .campo label { font-size: 12px; color: var(--suave); }
 .campo-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+/* Placa e Carro na Entrada de veículo — os dois campos mais lidos/digitados
+   ali, um pouco maiores que o resto mesmo fora do celular (era inline antes;
+   virou classe pra dar pra sobrescrever só no @media do celular, mais abaixo). */
+.campo-destaque { font-size: 18px; }
+.placa-input { width: 220px; }
 
 /* auto-fill (não auto-fit): mantém as colunas do tamanho normal quando a
    última linha tem menos itens, em vez de esticar o item sozinho pra
@@ -154,6 +159,10 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
   .card-entrada .suave { font-size: 14px !important; }
   .card-entrada .badge-mens { font-size: 15px; }
   .btn-ver-lista-mobile { display: inline-flex; align-items: center; white-space: nowrap; }
+  /* Placa: o dado mais lido/digitado na Entrada — maior que o resto do
+     formulário. Largura solta (a fixa de 220px não ia sobrar espaço pro
+     texto nesse tamanho) com um teto pra não estourar celular bem estreito. */
+  .card-entrada .placa-input { font-size: 30px; width: min(280px, 78vw); padding: 14px 16px; }
 }
 
 .ticket-impressao { color: var(--texto); }

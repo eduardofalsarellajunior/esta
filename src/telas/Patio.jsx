@@ -1273,11 +1273,11 @@ export default function Patio({ perfil }) {
         <form className="linha-form" onSubmit={darEntrada}>
           <div className="campo">
             <label>Placa ou nº do ticket</label>
-            <input className="mono" ref={placaRef} value={placa}
+            <input className="mono placa-input campo-destaque" ref={placaRef} value={placa}
               onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); }}
               onBlur={(e) => detectar(e.target.value)}
               inputMode="text" autoCapitalize="characters" autoComplete="off"
-              placeholder="ABC1D23" style={{ textTransform: 'uppercase', width: 220, fontSize: 18 }} />
+              placeholder="ABC1D23" style={{ textTransform: 'uppercase' }} />
             <span className="suave" style={{ fontSize: 11 }}>
               Na saída, o nº do ticket (ex.: 42) também serve.
             </span>
