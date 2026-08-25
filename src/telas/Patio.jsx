@@ -1373,7 +1373,7 @@ export default function Patio({ perfil }) {
           {/* Só existe de verdade no celular (ver .btn-ver-lista-mobile no CSS) —
               no desktop a lista sempre aparece, como antes. */}
           <button type="button" className="btn-ghost btn-ver-lista-mobile" onClick={() => setVerPatioMobile((v) => !v)}>
-            {verPatioMobile ? 'Ocultar veículos' : `Ver veículos (${patio.length})`}
+            {verPatioMobile ? 'Ocultar pátio' : `Ver pátio (${patio.length})`}
           </button>
         </div>
         {verPatioMobile && (
