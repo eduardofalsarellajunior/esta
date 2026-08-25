@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtBRL } from '../lib/tempo.js';
+import { carregarRelatorioCaixa, imprimirRelatorioCaixa } from '../lib/caixaRelatorio.js';
+import { ehGerente } from '../lib/acesso.js';
 
 export default function Caixa({ perfil }) {
   const [caixa, setCaixa] = useState(null);
@@ -9,6 +11,15 @@ export default function Caixa({ perfil }) {
   const [abertura, setAbertura] = useState('0');
   const [sangria, setSangria] = useState({ valor: '', motivo: '' });
   const [contado, setContado] = useState('');
+  const [filial, setFilial] = useState(null); // cabeçalho do relatório impresso
+  const [caixaFechado, setCaixaFechado] = useState(null); // caixa recém-fechado — oferece "Imprimir relatório"
+  const [historico, setHistorico] = useState([]);
+  const [imprimindo, setImprimindo] = useState(null); // id do caixa sendo carregado pra impressão
+
+  useEffect(() => {
+    supabase.from('filiais').select('nome_fantasia, cnpj').eq('id', perfil.filial_id).maybeSingle()
+      .then(({ data }) => setFilial(data));
+  }, [perfil.filial_id]);
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -77,7 +88,20 @@ export default function Caixa({ perfil }) {
     });
   }, [perfil.id]);
 
+  const carregarHistorico = useCallback(async () => {
+    // Cada um vê os próprios caixas fechados; gerente/supervisor/fornecedor
+    // vê os de todo mundo na filial (RLS já isola por filial — aqui é só
+    // decidir se restringe também por operador).
+    let q = supabase.from('caixas').select('*, perfis(nome)').eq('status', 'fechado')
+      .order('numero', { ascending: false }).limit(30);
+    if (!ehGerente(perfil)) q = q.eq('operador_id', perfil.id);
+    const { data, error } = await q;
+    if (error) { setErro(error.message); return; }
+    setHistorico(data || []);
+  }, [perfil]);
+
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { carregarHistorico(); }, [carregarHistorico]);
 
   async function abrir() {
     const { error } = await supabase.from('caixas').insert({
@@ -95,24 +119,55 @@ export default function Caixa({ perfil }) {
   }
   async function fechar() {
     if (!window.confirm('Fechar o caixa deste turno?')) return;
-    const { error } = await supabase.from('caixas').update({
+    const { data: fechado, error } = await supabase.from('caixas').update({
       status: 'fechado', fechado_em: new Date().toISOString(), valor_fechamento: Number(contado || 0),
-    }).eq('id', caixa.id);
-    if (error) setErro(error.message); else { setContado(''); carregar(); }
+    }).eq('id', caixa.id).select().single();
+    if (error) { setErro(error.message); return; }
+    setContado('');
+    setCaixaFechado(fechado);
+    carregar();
+    carregarHistorico();
+  }
+
+  async function imprimir(c) {
+    setErro(''); setImprimindo(c.id);
+    try {
+      const dados = await carregarRelatorioCaixa(c);
+      imprimirRelatorioCaixa(dados, filial);
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setImprimindo(null);
+    }
   }
 
   if (erro) return <div className="card aviso">{erro}<p className="suave">Se a tabela não existir, rode a migration 0003_caixa.sql.</p></div>;
 
   if (!caixa) return (
-    <div className="card" style={{ maxWidth: 460 }}>
-      <h2>Abrir caixa</h2>
-      <p className="suave">Nenhum caixa aberto para você. Informe o troco inicial.</p>
-      <div className="campo" style={{ marginBottom: 12 }}>
-        <label>Troco de abertura</label>
-        <input type="number" step="0.01" value={abertura} onChange={(e) => setAbertura(e.target.value)} />
+    <>
+      {caixaFechado && (
+        <div className="card" style={{ maxWidth: 460, borderColor: 'var(--ok)' }}>
+          <h2>Caixa Nº {caixaFechado.numero} fechado</h2>
+          <p className="ok-txt">Turno encerrado com sucesso.</p>
+          <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn-ghost" onClick={() => setCaixaFechado(null)}>Fechar aviso</button>
+            <button className="btn-primary" disabled={imprimindo === caixaFechado.id} onClick={() => imprimir(caixaFechado)}>
+              {imprimindo === caixaFechado.id ? 'Gerando…' : 'Imprimir relatório'}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="card" style={{ maxWidth: 460 }}>
+        <h2>Abrir caixa</h2>
+        <p className="suave">Nenhum caixa aberto para você. Informe o troco inicial.</p>
+        <div className="campo" style={{ marginBottom: 12 }}>
+          <label>Troco de abertura</label>
+          <input type="number" step="0.01" value={abertura} onChange={(e) => setAbertura(e.target.value)} />
+        </div>
+        <button className="btn-primary" onClick={abrir}>Abrir caixa</button>
       </div>
-      <button className="btn-primary" onClick={abrir}>Abrir caixa</button>
-    </div>
+      <HistoricoCaixas historico={historico} imprimindo={imprimindo} onImprimir={imprimir} vendoTodos={ehGerente(perfil)} />
+    </>
   );
 
   const dif = resumo ? Number(contado || 0) - resumo.esperadoCaixa : 0;
@@ -162,9 +217,50 @@ export default function Caixa({ perfil }) {
             Diferença: {fmtBRL(dif)} {Math.abs(dif) < 0.005 ? '(fechado certo)' : dif > 0 ? '(sobra)' : '(falta)'}
           </p>
         )}
+        <p className="suave" style={{ fontSize: 11 }}>
+          Depois de fechar, o relatório fica pronto pra imprimir (bobina de 58mm) — dá pra
+          reimprimir a qualquer momento na lista de "Caixas fechados" abaixo.
+        </p>
         <button className="btn-primary" onClick={fechar}>Fechar caixa</button>
       </div>
+
+      <HistoricoCaixas historico={historico} imprimindo={imprimindo} onImprimir={imprimir} vendoTodos={ehGerente(perfil)} />
     </>
+  );
+}
+
+function HistoricoCaixas({ historico, imprimindo, onImprimir, vendoTodos }) {
+  return (
+    <div className="card">
+      <h2>Caixas fechados</h2>
+      <p className="suave">
+        {vendoTodos ? 'Últimos 30 turnos fechados na filial, de todos os operadores.' : 'Seus últimos 30 turnos fechados.'}
+      </p>
+      <div className="tabela-scroll">
+        <table>
+          <thead><tr>
+            <th>Nº</th>{vendoTodos && <th>Operador</th>}<th>Aberto em</th><th>Fechado em</th><th>Contado</th><th></th>
+          </tr></thead>
+          <tbody>
+            {historico.map((c) => (
+              <tr key={c.id}>
+                <td className="mono">{c.numero}</td>
+                {vendoTodos && <td>{c.perfis?.nome || '—'}</td>}
+                <td className="mono">{new Date(c.aberto_em).toLocaleString('pt-BR')}</td>
+                <td className="mono">{c.fechado_em ? new Date(c.fechado_em).toLocaleString('pt-BR') : '—'}</td>
+                <td>{fmtBRL(Number(c.valor_fechamento || 0))}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <button className="btn-ghost" disabled={imprimindo === c.id} onClick={() => onImprimir(c)}>
+                    {imprimindo === c.id ? 'Gerando…' : 'Imprimir relatório'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {historico.length === 0 && <tr><td colSpan={vendoTodos ? 6 : 5} className="suave">Nenhum caixa fechado ainda.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
