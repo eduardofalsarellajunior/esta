@@ -62,7 +62,7 @@ button { cursor: pointer; }
 .btn-primary:hover { background: var(--ambar-esc); }
 .btn-ghost { background: transparent; }
 .btn-ghost:hover { background: var(--panel2); }
-.btn-ver-patio { display: none; } /* só existe no celular — ver @media abaixo */
+.btn-ver-lista-mobile { display: none; } /* só existe no celular — ver @media abaixo */
 .btn-servico-ativo { color: var(--ok); border-color: var(--ok); background: rgba(61,220,132,.1); font-weight: 700; }
 .btn-servico-ativo:hover { background: rgba(61,220,132,.18); }
 .aviso-btn { color: var(--erro); }
@@ -148,12 +148,12 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
      ajudar a leitura em sol forte (a tela dá menos brilho, precisa de
      mais contraste/tamanho pra compensar; ver também o tema Claro em
      Configurações → Aparência, que ajuda ainda mais no sol). */
-  .card-entrada .campo label { font-size: 15px; }
-  .card-entrada input, .card-entrada select, .card-entrada button { font-size: 18px; padding: 11px 14px; }
-  .card-entrada .card-acoes-btn { font-size: 16px; }
-  .card-entrada .suave { font-size: 13px !important; }
-  .card-entrada .badge-mens { font-size: 14px; }
-  .btn-ver-patio { display: inline-flex; align-items: center; white-space: nowrap; }
+  .card-entrada .campo label { font-size: 16px; }
+  .card-entrada input, .card-entrada select, .card-entrada button { font-size: 20px; padding: 12px 14px; }
+  .card-entrada .card-acoes-btn { font-size: 18px; }
+  .card-entrada .suave { font-size: 14px !important; }
+  .card-entrada .badge-mens { font-size: 15px; }
+  .btn-ver-lista-mobile { display: inline-flex; align-items: center; white-space: nowrap; }
 }
 
 .ticket-impressao { color: var(--texto); }

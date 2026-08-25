@@ -32,11 +32,12 @@ export default function Patio({ perfil }) {
   const [convenios, setConvenios] = useState({});
   const [formas, setFormas] = useState([]);
   const [patio, setPatio] = useState([]);
-  // No celular, a lista "No pátio" nasce escondida atrás de um botão (mais
-  // espaço pra Entrada de veículo, especialmente com a fonte maior — ver
-  // .card-entrada/.btn-ver-patio no CSS) — no desktop sempre visível, como
-  // sempre foi (o botão nem aparece lá, ver CSS).
+  // No celular, as listas "No pátio" e "Saídas de hoje" nascem escondidas
+  // atrás de um botão (mais espaço pra Entrada de veículo, especialmente com
+  // a fonte maior — ver .card-entrada/.btn-ver-lista-mobile no CSS) — no
+  // desktop sempre visíveis, como sempre foi (o botão nem aparece lá, ver CSS).
   const [verPatioMobile, setVerPatioMobile] = useState(() => window.innerWidth > 760);
+  const [verSaidasMobile, setVerSaidasMobile] = useState(() => window.innerWidth > 760);
   const [placa, setPlaca] = useState('');
   const [detectado, setDetectado] = useState(null); // {mensalista, convenio_codigo, tipo_mens}
   const [vagaEsgotada, setVagaEsgotada] = useState(null); // nome do mensalista, se as vagas dele já estão ocupadas
@@ -1369,9 +1370,9 @@ export default function Patio({ perfil }) {
       <div className="card">
         <div className="card-cab">
           <h2>No pátio ({patio.length}) — {avulsosNoPatio} avulso(s), {mensalistasNoPatio} mensalista(s)</h2>
-          {/* Só existe de verdade no celular (ver .btn-ver-patio no CSS) —
+          {/* Só existe de verdade no celular (ver .btn-ver-lista-mobile no CSS) —
               no desktop a lista sempre aparece, como antes. */}
-          <button type="button" className="btn-ghost btn-ver-patio" onClick={() => setVerPatioMobile((v) => !v)}>
+          <button type="button" className="btn-ghost btn-ver-lista-mobile" onClick={() => setVerPatioMobile((v) => !v)}>
             {verPatioMobile ? 'Ocultar veículos' : `Ver veículos (${patio.length})`}
           </button>
         </div>
@@ -1418,43 +1419,50 @@ export default function Patio({ perfil }) {
       </div>
 
       <div className="card">
-        <h2>Saídas de hoje ({saidasRecentes.length})</h2>
-        <div className="tabela-scroll">
-          <table>
-            <thead><tr><th>Placa</th><th>Carro</th><th>Saída</th><th>Valor</th><th></th></tr></thead>
-            <tbody>
-              {saidasRecentes.map((m) => (
-                <tr key={m.id}>
-                  <td>{semChapa(m.placa)
-                    ? <span className="suave">{rotuloPlaca(m.placa)}{m.controle != null ? ` ${String(m.controle).padStart(4, '0')}` : ''}</span>
-                    : <span className="placa mono">{m.placa}</span>}</td>
-                  <td>{m.modelo || '—'}</td>
-                  <td className="mono">
-                    {m.excluido_em
-                      ? new Date(m.excluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                      : fmtHora(Number(m.hr_saida))}
-                  </td>
-                  <td>
-                    {m.excluido_em
-                      ? <span className="status status-cancelada">Cancelado</span>
-                      : (
-                        <>
-                          {fmtBRL(Number(m.valor || 0))}
-                          {m.valor_calculado != null && (
-                            <span title={`Valor alterado na saída — o cálculo dava ${fmtBRL(Number(m.valor_calculado))}`}> *</span>
-                          )}
-                        </>
-                      )}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button className="btn-ghost" onClick={() => (m.excluido_em ? reimprimirExclusao(m) : reimprimirSaida(m))}>Reimprimir</button>
-                  </td>
-                </tr>
-              ))}
-              {saidasRecentes.length === 0 && <tr><td colSpan={5} className="suave">Nenhuma saída hoje.</td></tr>}
-            </tbody>
-          </table>
+        <div className="card-cab">
+          <h2>Saídas de hoje ({saidasRecentes.length})</h2>
+          <button type="button" className="btn-ghost btn-ver-lista-mobile" onClick={() => setVerSaidasMobile((v) => !v)}>
+            {verSaidasMobile ? 'Ocultar saídas' : `Ver saídas (${saidasRecentes.length})`}
+          </button>
         </div>
+        {verSaidasMobile && (
+          <div className="tabela-scroll">
+            <table>
+              <thead><tr><th>Placa</th><th>Carro</th><th>Saída</th><th>Valor</th><th></th></tr></thead>
+              <tbody>
+                {saidasRecentes.map((m) => (
+                  <tr key={m.id}>
+                    <td>{semChapa(m.placa)
+                      ? <span className="suave">{rotuloPlaca(m.placa)}{m.controle != null ? ` ${String(m.controle).padStart(4, '0')}` : ''}</span>
+                      : <span className="placa mono">{m.placa}</span>}</td>
+                    <td>{m.modelo || '—'}</td>
+                    <td className="mono">
+                      {m.excluido_em
+                        ? new Date(m.excluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                        : fmtHora(Number(m.hr_saida))}
+                    </td>
+                    <td>
+                      {m.excluido_em
+                        ? <span className="status status-cancelada">Cancelado</span>
+                        : (
+                          <>
+                            {fmtBRL(Number(m.valor || 0))}
+                            {m.valor_calculado != null && (
+                              <span title={`Valor alterado na saída — o cálculo dava ${fmtBRL(Number(m.valor_calculado))}`}> *</span>
+                            )}
+                          </>
+                        )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn-ghost" onClick={() => (m.excluido_em ? reimprimirExclusao(m) : reimprimirSaida(m))}>Reimprimir</button>
+                    </td>
+                  </tr>
+                ))}
+                {saidasRecentes.length === 0 && <tr><td colSpan={5} className="suave">Nenhuma saída hoje.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {modalServicos && (
