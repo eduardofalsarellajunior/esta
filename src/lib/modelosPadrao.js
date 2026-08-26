@@ -13,6 +13,7 @@ export const TIPOS_TICKET = [
   { tipo: 'mensalidade', rotulo: 'Recebimento de mensalidade' },
   { tipo: 'rps', rotulo: 'RPS / NFS-e' },
   { tipo: 'reserva', rotulo: 'Reserva de vaga' },
+  { tipo: 'divida', rotulo: 'Dívida (saída paga como "Devedor")' },
 ];
 
 const CABECALHO = [
@@ -55,6 +56,7 @@ export const MODELOS_PADRAO = {
     'Perman.: @TH@',
     '@SE(VALORSERVICOS_NUM)@Serv.: @SERVICOS@ = @VALORSERVICOS@',
     '@SE(VC_NUM)@Convenio @CO@: -@VC@',
+    '@SE(VD_NUM)@Divida ant.: +@VD@',
     '@SE(BONUS_NUM)@Bonus  : @BONUS@',
     '@PG+@Valor  : @V@@PG-@',
     '--------------------------------',
@@ -178,6 +180,25 @@ export const MODELOS_PADRAO = {
     '@SE(ROBS)@Obs.: @ROBS@',
     '@SE(PROPOSTO)@Vlr.proposto: @PROPOSTO@',
     '@SE(ANTECIPADO)@Vlr.antecipado: @ANTECIPADO@',
+    '--------------------------------',
+    'Voce foi atendido por @US@',
+  ].join('\n'),
+
+  // Impresso na hora que a saída é paga (total ou parcialmente) com a forma
+  // "Devedor" — o valor vira saldo devedor da placa (ver Cadastros → Formas
+  // de pagamento), cobrado junto com a próxima estadia (token @VD@ no
+  // ticket de entrada/saída seguinte). Equivalente ao TICKETD.TXT do legado.
+  divida: [
+    CABECALHO,
+    '@PG+@TICKET DE DIVIDA@PG-@',
+    '',
+    'Placa  : @PG+@@CC@@PG-@',
+    'Veiculo: @CV@',
+    'Data   : @DS@ as @HS@ h.',
+    '@PG+@Valor devido: @DIVIDA@@PG-@',
+    '--------------------------------',
+    'Pague este valor na proxima vez',
+    'que este veiculo entrar.',
     '--------------------------------',
     'Voce foi atendido por @US@',
   ].join('\n'),

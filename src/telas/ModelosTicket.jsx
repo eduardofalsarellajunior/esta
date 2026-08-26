@@ -56,12 +56,18 @@ const TOKENS = {
     ['@PROPOSTO@', 'Valor proposto (estimado pela tabela de preço do prefixo da vaga)'],
     ['@ANTECIPADO@', 'Valor pago antecipado ao criar a reserva'],
   ],
+  divida: [
+    ['@CC@', 'Placa'], ['@CV@', 'Veículo'],
+    ['@DS@', 'Data'], ['@HS@', 'Hora'],
+    ['@DIVIDA@', 'Valor da dívida contraída nesta saída (forma "Devedor")'],
+  ],
 };
 
 function tokensDoTipo(tipo) {
   if (tipo === 'mensalidade') return [...TOKENS.comuns, ...TOKENS.mensalidade];
   if (tipo === 'rps') return [...TOKENS.comuns, ...TOKENS.movimento, ...TOKENS.rps];
   if (tipo === 'reserva') return [...TOKENS.comuns, ...TOKENS.reserva];
+  if (tipo === 'divida') return [...TOKENS.comuns, ...TOKENS.divida];
   return [...TOKENS.comuns, ...TOKENS.movimento];
 }
 

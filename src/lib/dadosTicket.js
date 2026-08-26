@@ -148,6 +148,21 @@ export function dadosReserva(reserva = {}) {
   };
 }
 
+/**
+ * Ticket de dívida — impresso quando uma saída é paga (total ou em parte)
+ * com a forma "Devedor" (ver Cadastros → Formas de pagamento, eh_devedor).
+ * @DIVIDA@ é o valor contraído AGORA, diferente de @VD@ (dadosMovimento),
+ * que é a dívida ANTERIOR sendo cobrada nesta mesma saída — os dois podem
+ * aparecer juntos (ex.: devia R$20, esta estadia+dívida deu R$50, pagou
+ * R$30 e deixou R$20 de dívida nova).
+ */
+export function dadosDivida(valorDivida) {
+  return {
+    DIVIDA: fmtBRL(Number(valorDivida || 0)),
+    DIVIDA_NUM: Number(valorDivida || 0),
+  };
+}
+
 /** RPS/NFS-e — para o ticket do tipo `rps`. */
 export function dadosRps({ nota, filial } = {}) {
   if (!nota) return {};

@@ -180,6 +180,7 @@ export function TicketModal({ ticket, filial, perfil, celular, placa, onCelular,
       else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); salvarCelularDoCliente(); onFechar(); }
       else if (tecla === 'i') { e.preventDefault(); imprimirTicket(ticket, filial); onFechar(); }
       else if (tecla === 'r' && ticket.ticketRps) { e.preventDefault(); imprimirTicket(ticket.ticketRps, filial); }
+      else if (tecla === 'd' && ticket.ticketDivida) { e.preventDefault(); imprimirTicket(ticket.ticketDivida, filial); }
     }
     document.addEventListener('keydown', aoTeclar);
     return () => document.removeEventListener('keydown', aoTeclar);
@@ -235,6 +236,12 @@ export function TicketModal({ ticket, filial, perfil, celular, placa, onCelular,
           {ticket.ticketRps && (
             <button className="btn-ghost" onClick={() => imprimirTicket(ticket.ticketRps, filial)}>
               Imprimir <u>R</u>PS
+            </button>
+          )}
+          {/* Dívida contraída nesta saída (forma "Devedor") — ver Patio.jsx confirmarSaida. */}
+          {ticket.ticketDivida && (
+            <button className="btn-ghost" onClick={() => imprimirTicket(ticket.ticketDivida, filial)}>
+              Imprimir <u>D</u>ívida
             </button>
           )}
           {suportaBluetooth && (

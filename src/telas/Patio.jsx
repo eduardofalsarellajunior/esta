@@ -13,7 +13,7 @@ import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import VendaProdutosFluxo from '../componentes/VendaProdutos.jsx';
 import AbrirCaixaInline from '../componentes/AbrirCaixaInline.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
-import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps } from '../lib/dadosTicket.js';
+import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps, dadosDivida } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj } from '../lib/cnpj.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
@@ -49,6 +49,8 @@ export default function Patio({ perfil }) {
   // meio da mesma função que setReservaDetectada — o state só atualizaria no
   // próximo render, tarde demais pra registrarEntrada ler o valor certo.
   const reservaParaChegadaRef = useRef(null);
+  const [dividaDetectada, setDividaDetectada] = useState(0); // só pro aviso na tela — ver detectar()
+  const dividaDetectadaRef = useRef(0); // mesmo raciocínio do reservaParaChegadaRef — registrarEntrada lê daqui
   const [livreAPartirEntrada, setLivreAPartirEntrada] = useState(null); // valor a persistir na entrada (ver registrarEntrada)
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
@@ -215,6 +217,8 @@ export default function Patio({ perfil }) {
     setLivreAPartirEntrada(null);
     setReservaDetectada(null);
     reservaParaChegadaRef.current = null;
+    setDividaDetectada(0);
+    dividaDetectadaRef.current = 0;
 
     // Já está no pátio (por placa ou pelo nº de controle)? Vai direto pra saída.
     // Antes do corte de 3 caracteres: número de controle costuma ter 1 ou 2.
@@ -231,6 +235,15 @@ export default function Patio({ perfil }) {
         .limit(1).maybeSingle();
       preencherModeloConhecido(anterior?.modelo);
     }
+
+    // Dívida de uma saída anterior (forma de pagamento "Devedor", ver
+    // confirmarSaida) — soma na próxima estadia calculada (ver
+    // calcularResultadoSaida/dividaAnterior) e já avisa aqui na entrada.
+    // Vale pra qualquer placa (mensalista ou avulso), por isso é checado
+    // antes de qualquer um dos ramos abaixo, não só no caminho de avulso.
+    const { data: clienteDivida } = await supabase.from('clientes').select('saldo_devedor').eq('placa', p).maybeSingle();
+    const divida = Number(clienteDivida?.saldo_devedor || 0);
+    if (divida > 0) { setDividaDetectada(divida); dividaDetectadaRef.current = divida; }
 
     const { data: mv } = await supabase.from('mensalista_veiculos').select('mensalista_id, modelo, tipo_veic').eq('placa', p).maybeSingle();
     if (!mv) { await detectarReserva(p); return; }
@@ -359,6 +372,7 @@ export default function Patio({ perfil }) {
     setPlaca(''); setDetectado(null); setVagaEsgotada(null); setMensalistaVencido(null);
     setRestricaoHorario(null); setLivreAPartirEntrada(null); setReservaDetectada(null);
     reservaParaChegadaRef.current = null;
+    setDividaDetectada(0); dividaDetectadaRef.current = 0;
     setBuscaModelo(''); setModeloSelecionado(null); setMostrarSugestoes(false);
     setTabelaManual(''); setNomeCarroNovo(''); setConfirmNovo(null);
     setServicosEntrada([]);
@@ -445,6 +459,9 @@ export default function Patio({ perfil }) {
       // novo movimento_pagamentos abaixo, só entra no total a descontar na saída.
       valor_antecipado: (Number(valorAntecipado) || 0) + Number(reservaParaChegadaRef.current?.placa === p
         ? reservaParaChegadaRef.current?.valor_antecipado || 0 : 0) || null,
+      // Dívida trazida de uma saída anterior (ver detectar()) — cobrada
+      // junto com esta estadia na saída (dividaAnterior em calcularResultadoSaida).
+      valor_dev: dividaDetectadaRef.current || null,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
     // Serviços marcados antes de dar entrada (ver alternarServicoEntrada) —
@@ -500,6 +517,7 @@ export default function Patio({ perfil }) {
         ['Tabela', tipoVeic],
         ...(servicosEntrada.length ? [['Serviços', servicosEntrada.map((s) => s.descricao).join(', ')]] : []),
         ...(avarias.trim() ? [['Avarias', avarias.trim()]] : []),
+        ...(Number(novo?.valor_dev) > 0 ? [['Dívida anterior', fmtBRL(Number(novo.valor_dev))]] : []),
         ...(Number(novo?.valor_antecipado) > 0 ? [['Valor antecipado', fmtBRL(Number(novo.valor_antecipado))]] : []),
         ['Entrada', `${dtEntrada.split('-').reverse().join('/')} ${fmtHora(Number(hrEntrada))}`],
         ['Operador', perfil.nome],
@@ -823,6 +841,11 @@ export default function Patio({ perfil }) {
           dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada),
           dtSaida: dataDeISO(mov.dt_entrada), saida: Number(mov.livre_a_partir),
         },
+        // Saldo devedor trazido de uma visita anterior (ver detectar() e
+        // registrarEntrada) — o motor já soma isso ao final, sem mexer em
+        // valorProporcional (não é desconto de convênio nem precisa de
+        // wrapper, como antecipado/bônus — é nativo do pipeline).
+        dividaAnterior: Number(mov.valor_dev || 0),
       });
       return comBonus(comAntecipado(comSomaServicos({
         ...parcial,
@@ -838,6 +861,7 @@ export default function Patio({ perfil }) {
       tabelas, tipoVeic: mov.tipo_veic, convenio,
       servicosTipos: servicosTipos.length ? servicosTipos : undefined,
       movimento: { dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() },
+      dividaAnterior: Number(mov.valor_dev || 0),
     }))));
   }
 
@@ -1105,6 +1129,17 @@ export default function Patio({ perfil }) {
       await atualizarFidelidade(mov.placa, resultado.pontos - (bonusAplicado?.pontos_necessarios || 0));
     }
 
+    // Forma "Devedor" (ver Cadastros → Formas de pagamento, eh_devedor): a
+    // parte paga com ela não entrou em caixa — vira saldo devedor da placa,
+    // cobrado junto com a estadia da próxima entrada (dividaAnterior/valor_dev,
+    // ver detectar() e calcularResultadoSaida acima). Zera/atualiza mesmo
+    // quando não há dívida nova, pra não deixar um saldo velho pendurado.
+    const formasDevedor = new Set(formas.filter((f) => f.eh_devedor).map((f) => f.codigo));
+    const novaDivida = pagos.filter((p) => formasDevedor.has(p.forma)).reduce((s, p) => s + Number(p.valor), 0);
+    if (novaDivida > 0 || Number(mov.valor_dev || 0) > 0) {
+      await atualizarSaldoDevedor(mov.placa, novaDivida);
+    }
+
     let ticketRps = null;
     if (tomadorDps) {
       const { error: errNota, nota } = await criarNotaFiscal(supabase, {
@@ -1142,6 +1177,7 @@ export default function Patio({ perfil }) {
         ...(convenioCodigo && resultado.valorConvenio > 0
           ? [['Convênio', convenioCodigo], ['Valor convênio', `-${fmtBRL(resultado.valorConvenio)}`]]
           : []),
+        ...(Number(mov.valor_dev) > 0 ? [['Dívida anterior', `+${fmtBRL(Number(mov.valor_dev))}`]] : []),
         ...(resultado.valorAntecipado > 0 ? [['Valor antecipado', `-${fmtBRL(resultado.valorAntecipado)}`]] : []),
         ...(bonusAplicado ? [['Bônus fidelidade', `-${fmtBRL(bonusAplicado.valor_desconto)}`]] : []),
         ['Valor', fmtBRL(resultado.valor)],
@@ -1157,11 +1193,25 @@ export default function Patio({ perfil }) {
       }),
       MOEDA: formaTexto,
     });
+    // Contraiu dívida nova nesta saída (forma "Devedor") — ticket dedicado,
+    // igual ao TICKETD.TXT do legado (ver atualizarSaldoDevedor acima).
+    const ticketDivida = novaDivida > 0 ? comModelo('divida', {
+      titulo: 'Ticket de dívida',
+      linhas: [
+        ['Placa', mov.placa],
+        ['Carro', mov.modelo || '—'],
+        ['Data', `${dtSaida.split('-').reverse().join('/')} ${fmtHora(Number(hrSaida))}`],
+        ['Valor devido', fmtBRL(novaDivida)],
+      ],
+    }, {
+      ...dadosMovimento({ movimento: { ...mov, dt_saida: dtSaida, hr_saida: hrSaida }, operador: perfil.nome }),
+      ...dadosDivida(novaDivida),
+    }) : null;
     // Mensalista/hóspede de verdade (sem cobrança) respeita a preferência de
     // não parar na tela do ticket — quem foi cobrado (mesmo um mensalista
     // fora do horário/vencido) sempre vê o comprovante, é dinheiro de verdade.
     if (!(resultado.mensalista && !imprimeTicketMensalista)) {
-      setTicket({ ...ticketSaida, ticketRps });
+      setTicket({ ...ticketSaida, ticketRps, ticketDivida });
       setPlacaTicket(mov.placa);
       setCelularTicket(await celularSalvo(mov.placa));
     }
@@ -1254,6 +1304,20 @@ export default function Patio({ perfil }) {
         });
       }
     } catch { /* fidelidade é best-effort */ }
+  }
+
+  // Saldo devedor da placa (ver confirmarSaida, forma "Devedor") — mesmo
+  // padrão de find-or-create de atualizarFidelidade, mas substitui o valor
+  // (não soma): `novaDivida` já é o total do saldo depois desta saída.
+  async function atualizarSaldoDevedor(placa, saldo) {
+    try {
+      const { data: c } = await supabase.from('clientes').select('id').eq('placa', placa).maybeSingle();
+      if (c) {
+        await supabase.from('clientes').update({ saldo_devedor: saldo }).eq('id', c.id);
+      } else if (saldo > 0) {
+        await supabase.from('clientes').insert({ filial_id: perfil.filial_id, placa, saldo_devedor: saldo });
+      }
+    } catch { /* best-effort, igual fidelidade */ }
   }
 
   const totalPago = (saindo?.pagamentos || []).reduce((s, p) => s + Number(p.valor || 0), 0);
@@ -1366,6 +1430,11 @@ export default function Patio({ perfil }) {
             <span className="badge-mens" style={{ color: 'var(--ambar)', borderColor: 'var(--ambar)', background: 'rgba(245,166,35,.12)' }}>
               Reserva encontrada ({reservaDetectada.tipo}, até {fmtDataBR(reservaDetectada.data_fim)}) — confirme
               o modelo/tabela e registre a entrada
+            </span>
+          )}
+          {dividaDetectada > 0 && (
+            <span className="badge-mens" style={{ color: 'var(--erro)', borderColor: 'var(--erro)', background: 'rgba(255,107,107,.12)' }}>
+              Placa com dívida de {fmtBRL(dividaDetectada)} — soma na estadia calculada na saída
             </span>
           )}
         </form>
@@ -1850,6 +1919,11 @@ export default function Patio({ perfil }) {
                 </>
               );
             })()}
+            {Number(saindo.mov.valor_dev) > 0 && (
+              <p className="suave" style={{ textAlign: 'center' }}>
+                Dívida anterior: +{fmtBRL(Number(saindo.mov.valor_dev))}
+              </p>
+            )}
             {saindo.resultado.valorAntecipado > 0 && (
               <p className="suave" style={{ textAlign: 'center' }}>
                 Valor antecipado: -{fmtBRL(saindo.resultado.valorAntecipado)}

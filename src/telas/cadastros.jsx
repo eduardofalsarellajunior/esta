@@ -48,6 +48,7 @@ export function Formas({ perfil }) {
       { campo: 'perc_ajuste', rotulo: '% ajuste', tipo: 'number' },
       { campo: 'eh_dinheiro', rotulo: 'É dinheiro', tipo: 'bool' },
       { campo: 'rps_sempre', rotulo: 'RPS/DPS sempre', tipo: 'bool', naTabela: false },
+      { campo: 'eh_devedor', rotulo: 'É "Devedor" (vira dívida da placa)', tipo: 'bool', naTabela: false },
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
     ]} />;
 }
