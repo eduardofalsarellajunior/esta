@@ -111,6 +111,10 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 
 .ok-txt { color: var(--ok); }
 .aviso { color: var(--erro); background: rgba(255,107,107,.08); border: 1px solid var(--erro); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+/* Célula de tabela pra marcar uma anomalia (ex.: pagamento de veículo
+   cancelado, que nunca vai ter forma de pagamento nenhuma) — fundo
+   diferente pra chamar o olho na lista, sem precisar de coluna à parte. */
+.cel-anomalia { background: rgba(255,107,107,.12); }
 
 .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 24px; box-sizing: border-box; }
 .modal { background: var(--panel); border: 1px solid var(--linha); border-radius: 12px; padding: 24px; width: 420px; max-height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; }

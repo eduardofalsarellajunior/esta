@@ -81,7 +81,7 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
           }</p>
           ${v.cancelado ? '' : `<p class="v3">Pagto: ${escapeHtml(v.pagamento)} · Valor: ${escapeHtml(fmtBRL(v.valor))}${v.valorCalculado != null ? ' *' : ''}${
             v.descontoConvenio ? ` · Desc. conv.: ${escapeHtml(fmtBRL(v.descontoConvenio))}` : ''
-          }</p>`}
+          }${v.servico != null ? ` · Serviço: ${escapeHtml(fmtBRL(v.servico))}` : ''}</p>`}
         </div>`).join('') || '<p>Nenhum veículo no período.</p>'}
       ${veiculosDetalhe.some((v) => v.valorCalculado != null)
         ? '<p style="font-size:11px">* valor alterado na saída (diferente do calculado pela tabela).</p>' : ''
@@ -390,13 +390,17 @@ export default function BI({ perfil }) {
         dtSaida: dataDeISO(m.dt_saida), saida: Number(m.hr_saida),
       }) : null,
       pagamento: pagtosPorMov[m.id]?.join(' + ') || (MENSALISTA.has(m.tipo_mens) ? 'Mensalista/hóspede' : '—'),
+      // Valor do serviço (mesmo valor cobrado — serviço substitui a tabela
+      // do veículo inteira, nunca soma às duas, ver Patio.jsx) — null pros
+      // avulsos normais, só pra distinguir um do outro na lista.
+      servico: movsComServico.has(m.id) ? Number(m.valor || 0) : null,
       cancelado: false,
       _quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)).getTime(),
     }));
     const detalheCancelados = (cancelados || []).map((m) => ({
       id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: m.tipo_veic,
       dt_entrada: m.dt_entrada, hr_entrada: m.hr_entrada, dt_saida: null, hr_saida: null,
-      valor: 0, tempo: null, pagamento: '—',
+      valor: 0, tempo: null, pagamento: 'Cancelado', servico: null,
       cancelado: true,
       _quando: new Date(m.excluido_em).getTime(),
     }));
@@ -563,7 +567,7 @@ export default function BI({ perfil }) {
                 <table>
                   <thead><tr>
                     <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th>
-                    <th>Tempo</th><th>Pagamento</th><th>Valor</th><th>Desc. convênio</th><th>Status</th>
+                    <th>Tempo</th><th>Pagamento</th><th>Valor</th><th>Desc. convênio</th><th>Serviço</th>
                   </tr></thead>
                   <tbody>
                     {veiculos.map((v) => (
@@ -574,7 +578,12 @@ export default function BI({ perfil }) {
                         <td className="mono">{v.dt_entrada.split('-').reverse().join('/')} {fmtHora(Number(v.hr_entrada))}</td>
                         <td className="mono">{v.cancelado ? '—' : `${v.dt_saida.split('-').reverse().join('/')} ${fmtHora(Number(v.hr_saida))}`}</td>
                         <td className="mono">{v.tempo != null ? fmtHora(v.tempo) : '—'}</td>
-                        <td>{v.pagamento}</td>
+                        {/* Pagamento é onde as anomalias (cancelamento, por ora) aparecem —
+                            fundo destacado pra chamar atenção, em vez de uma coluna à parte
+                            só pra isso (ver conversa: Status virou Serviço). */}
+                        <td className={v.cancelado ? 'cel-anomalia' : undefined}>
+                          {v.cancelado ? <span className="status status-cancelada">Cancelado</span> : v.pagamento}
+                        </td>
                         <td>
                           {v.cancelado ? '—' : (
                             <>
@@ -586,7 +595,7 @@ export default function BI({ perfil }) {
                           )}
                         </td>
                         <td>{v.cancelado || !v.descontoConvenio ? '—' : fmtBRL(v.descontoConvenio)}</td>
-                        <td>{v.cancelado && <span className="status status-cancelada">Cancelado</span>}</td>
+                        <td>{v.servico != null ? fmtBRL(v.servico) : '—'}</td>
                       </tr>
                     ))}
                     {veiculos.length === 0 && <tr><td colSpan={10} className="suave">Nenhum veículo no período.</td></tr>}
