@@ -52,11 +52,17 @@ export default function CapturaPlaca({ onConfirmar, rotulo }) {
     }
   }
 
+  // Captura/escolha já dispara a leitura sozinha (sem esperar clique em "Ler
+  // placa") — passa o dataURL direto pra enviar() em vez de depender do
+  // state `foto`, que só atualiza no próximo render (mesmo raciocínio do
+  // bug de state desatualizado já corrigido em outros lugares do app).
   function capturar() {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
-    setFoto(redimensionarDeElemento(video, video.videoWidth, video.videoHeight));
+    const dataUrl = redimensionarDeElemento(video, video.videoWidth, video.videoHeight);
+    setFoto(dataUrl);
     pararCamera();
+    enviar(dataUrl);
   }
 
   function onArquivoEscolhido(e) {
@@ -65,16 +71,20 @@ export default function CapturaPlaca({ onConfirmar, rotulo }) {
     const leitor = new FileReader();
     leitor.onload = () => {
       const img = new Image();
-      img.onload = () => setFoto(redimensionarDeElemento(img, img.width, img.height));
+      img.onload = () => {
+        const dataUrl = redimensionarDeElemento(img, img.width, img.height);
+        setFoto(dataUrl);
+        enviar(dataUrl);
+      };
       img.src = leitor.result;
     };
     leitor.readAsDataURL(arq);
   }
 
-  async function enviar() {
+  async function enviar(fotoParaEnviar) {
     setProcessando(true); setErro('');
     try {
-      const blob = await (await fetch(foto)).blob();
+      const blob = await (await fetch(fotoParaEnviar)).blob();
       const form = new FormData();
       form.append('imagem', blob, 'placa.jpg');
       const { data, error } = await supabase.functions.invoke('ler-placa', { body: form });
@@ -141,12 +151,15 @@ export default function CapturaPlaca({ onConfirmar, rotulo }) {
             {foto && !resultados && (
               <>
                 <img src={foto} alt="Foto capturada" style={{ width: '100%', borderRadius: 8 }} />
+                {processando && <p className="suave" style={{ marginTop: 10 }}>Lendo a placa…</p>}
                 {erro && <div className="aviso" style={{ marginTop: 10 }}>{erro}</div>}
                 <div className="linha-form" style={{ justifyContent: 'space-between', marginTop: 10 }}>
                   <button type="button" className="btn-ghost" onClick={tentarNovamente} disabled={processando}>Repetir foto</button>
-                  <button type="button" className="btn-primary" onClick={enviar} disabled={processando}>
-                    {processando ? 'Lendo…' : 'Ler placa'}
-                  </button>
+                  {!processando && (
+                    <button type="button" className="btn-primary" onClick={() => enviar(foto)}>
+                      {erro ? 'Tentar de novo' : 'Ler placa'}
+                    </button>
+                  )}
                 </div>
               </>
             )}
