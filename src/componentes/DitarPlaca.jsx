@@ -13,29 +13,57 @@ const SpeechRecognitionAPI = typeof window !== 'undefined'
  * convertido pra letras/números, num campo editável — o operador confirma ou
  * corrige antes de usar (mesmo princípio da leitura de placa por foto, ver
  * CapturaPlaca.jsx).
+ *
+ * `continuous`/`interimResults` são o pulo do gato aqui: sem eles (como na
+ * primeira versão), o reconhecimento PARA sozinho na primeira pausa entre
+ * letras e descarta o resto — só pegava o começo da placa. Com eles ligados,
+ * continua ouvindo e vai acumulando cada trecho reconhecido, até o operador
+ * apertar "Parar" (ou uma pausa bem longa encerrar sozinho).
  */
 export default function DitarPlaca({ onConfirmar, rotulo }) {
   const [aberto, setAberto] = useState(false);
   const [ouvindo, setOuvindo] = useState(false);
+  const [parcial, setParcial] = useState(''); // trecho ainda não confirmado pelo reconhecimento, só pra feedback
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState('');
   const recRef = useRef(null);
+  const brutoRef = useRef(''); // transcrição acumulada (antes de virar letras/números)
 
   function ouvir() {
-    setErro(''); setTexto('');
+    setErro(''); setTexto(''); setParcial('');
+    brutoRef.current = '';
     const rec = new SpeechRecognitionAPI();
     rec.lang = 'pt-BR';
-    rec.interimResults = false;
+    rec.continuous = true;
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.onresult = (e) => {
-      const falado = e.results[0][0].transcript;
-      setTexto(normalizarDitadoPlaca(falado));
+      let finalNovo = '';
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const trecho = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalNovo += `${trecho} `;
+        else interim += trecho;
+      }
+      if (finalNovo) {
+        brutoRef.current += finalNovo;
+        setTexto(normalizarDitadoPlaca(brutoRef.current));
+      }
+      setParcial(interim);
     };
-    rec.onerror = () => { setErro('Não deu pra entender — tenta de novo, falando letra por letra (ex.: "a", "be", "ce", "um").'); setOuvindo(false); };
-    rec.onend = () => setOuvindo(false);
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech') return; // pausa normal — deixa continuar ouvindo
+      setErro('Não deu pra usar o microfone — confira a permissão do navegador e tenta de novo.');
+      setOuvindo(false);
+    };
+    rec.onend = () => { setOuvindo(false); setParcial(''); };
     recRef.current = rec;
     setOuvindo(true);
     rec.start();
+  }
+
+  function parar() {
+    recRef.current?.stop();
   }
 
   function abrir() {
@@ -50,7 +78,7 @@ export default function DitarPlaca({ onConfirmar, rotulo }) {
 
   function fechar() {
     recRef.current?.stop();
-    setAberto(false); setOuvindo(false); setTexto(''); setErro('');
+    setAberto(false); setOuvindo(false); setTexto(''); setParcial(''); setErro('');
   }
 
   function confirmar() {
@@ -73,7 +101,10 @@ export default function DitarPlaca({ onConfirmar, rotulo }) {
             {SpeechRecognitionAPI && (
               <>
                 <p className="suave">
-                  {ouvindo ? 'Ouvindo… fale a placa letra por letra.' : 'Confira e corrija se precisar antes de usar.'}
+                  {ouvindo
+                    ? <>Ouvindo… fale a placa letra por letra, sem pressa (ex.: "erre", "pê", "pê", "um", "um", "um", "um").</>
+                    : 'Confira e corrija se precisar antes de usar.'}
+                  {ouvindo && parcial && <><br />Reconhecendo: <em>{parcial}</em></>}
                 </p>
                 <div className="campo" style={{ marginBottom: 10 }}>
                   <label>Placa reconhecida</label>
@@ -84,7 +115,9 @@ export default function DitarPlaca({ onConfirmar, rotulo }) {
             )}
             <div className="linha-form" style={{ justifyContent: 'space-between', marginTop: 12 }}>
               {SpeechRecognitionAPI
-                ? <button type="button" className="btn-ghost" onClick={ouvir} disabled={ouvindo}>{ouvindo ? 'Ouvindo…' : 'Falar de novo'}</button>
+                ? (ouvindo
+                  ? <button type="button" className="btn-primary" onClick={parar}>Parar</button>
+                  : <button type="button" className="btn-ghost" onClick={ouvir}>Falar de novo</button>)
                 : <span />}
               <div className="linha-form" style={{ gap: 8 }}>
                 <button type="button" className="btn-ghost" onClick={fechar}>Cancelar</button>
