@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { lerDbf } from '../../packages/dbf/dbf.ts';
-import { DESTINOS, sugerirMapeamento, converterLinha } from '../../packages/dbf/mapeamento.ts';
-import { importarDestino, importarVeiculosExtras } from '../lib/importacaoDbf.js';
+import { DESTINOS, sugerirMapeamento, converterLinha, filtrarLinhas } from '../../packages/dbf/mapeamento.ts';
+import { detectarTabelasPreco } from '../../packages/dbf/tabelaPreco.ts';
+import { importarDestino, importarVeiculosExtras, importarTabelasPreco } from '../lib/importacaoDbf.js';
 
 const LIMITE_PREVIA = 5;
 
@@ -20,6 +21,7 @@ export default function ImportarDbf({ perfil }) {
 
   const destinoAtual = DESTINOS[destino];
   const ehVeiculosExtra = destinoAtual.tipoImportacao === 'veiculos_extra';
+  const ehTabelaPreco = destinoAtual.tipoImportacao === 'tabela_preco';
 
   function mudarDestino(novo) {
     setDestino(novo);
@@ -47,22 +49,43 @@ export default function ImportarDbf({ perfil }) {
     }
   }
 
-  const preview = useMemo(() => {
-    if (!dbf) return [];
-    return dbf.registros.slice(0, LIMITE_PREVIA).map((r) => converterLinha(r, destinoAtual.colunas, mapeamento));
-  }, [dbf, mapeamento, destinoAtual]);
+  // Alguns destinos filtram o arquivo (ex.: Serviços só pega TIPO='S' do
+  // ESTACONV, que também tem convênio misturado) — a contagem que aparece
+  // pro operador (prévia, botão "Importar N") tem que ser a de quem passa
+  // no filtro, não a do arquivo inteiro, senão "Importar 500" engana quando
+  // só 40 são mesmo serviço.
+  const linhasFiltradas = useMemo(() => {
+    if (!dbf || ehTabelaPreco) return [];
+    const linhas = dbf.registros.map((r) => converterLinha(r, destinoAtual.colunas, mapeamento));
+    return filtrarLinhas(destinoAtual.colunas, linhas);
+  }, [dbf, mapeamento, destinoAtual, ehTabelaPreco]);
+  const preview = useMemo(() => linhasFiltradas.slice(0, LIMITE_PREVIA), [linhasFiltradas]);
+
+  // Tabela de preço não passa pelo mapeamento manual coluna-a-coluna — os
+  // campos (inclusive as até 45 faixas largas) são detectados sozinhos pelo
+  // nome (ver packages/dbf/tabelaPreco.ts).
+  const tabelasDetectadas = useMemo(() => {
+    if (!dbf || !ehTabelaPreco) return { tabelas: [], colunasFaixa: [] };
+    return detectarTabelasPreco(dbf.campos.map((c) => c.nome), dbf.registros);
+  }, [dbf, ehTabelaPreco]);
 
   async function importar() {
     if (!dbf) return;
     setImportando(true); setErro(''); setResultado(null);
     try {
-      const linhas = dbf.registros.map((r) => converterLinha(r, destinoAtual.colunas, mapeamento));
-      const res = ehVeiculosExtra
-        ? await importarVeiculosExtras({ perfil, linhas, colunas: destinoAtual.colunas })
-        : await importarDestino({
-            perfil, destino: destinoAtual, colunas: destinoAtual.colunas, linhas,
-            codigoEhPlacaPrincipal: destino === 'mensalistas' && codigoEhPlacaPrincipal,
-          });
+      let res;
+      if (ehTabelaPreco) {
+        res = await importarTabelasPreco({ perfil, tabelas: tabelasDetectadas.tabelas });
+      } else {
+        const convertidas = dbf.registros.map((r) => converterLinha(r, destinoAtual.colunas, mapeamento));
+        const linhas = filtrarLinhas(destinoAtual.colunas, convertidas);
+        res = ehVeiculosExtra
+          ? await importarVeiculosExtras({ perfil, linhas, colunas: destinoAtual.colunas })
+          : await importarDestino({
+              perfil, destino: destinoAtual, colunas: destinoAtual.colunas, linhas,
+              codigoEhPlacaPrincipal: destino === 'mensalistas' && codigoEhPlacaPrincipal,
+            });
+      }
       setResultado(res);
     } catch (err) {
       setErro(err.message);
@@ -111,6 +134,14 @@ export default function ImportarDbf({ perfil }) {
             dele) — importe os Mensalistas primeiro. Corresponde ao ESTASUBS.dbf do legado.
           </p>
         )}
+        {ehTabelaPreco && (
+          <p className="suave" style={{ fontSize: 12, marginTop: 10 }}>
+            Uma linha do arquivo vira uma tabela de preço inteira, com as até 45 faixas
+            (colunas ATE/HOR/CON) detectadas sozinhas — sem mapeamento manual. Um tipo que já
+            tenha tabela vigente na filial é ignorado (mudar preço em uso é coisa de fazer em
+            Preços, não de reimportação).
+          </p>
+        )}
         {erro && <div className="aviso" style={{ marginTop: 10 }}>{erro}</div>}
         {dbf && (
           <p className="suave" style={{ marginTop: 10 }}>
@@ -119,7 +150,47 @@ export default function ImportarDbf({ perfil }) {
         )}
       </div>
 
-      {dbf && (
+      {dbf && ehTabelaPreco && (
+        <div className="card">
+          <h2>Tabelas de preço detectadas</h2>
+          <p className="suave">
+            {tabelasDetectadas.colunasFaixa.length} coluna(s) de faixa encontrada(s) no arquivo
+            (ATE/HOR/CON) — confira se as faixas de cada tabela abaixo batem com o que você
+            espera antes de importar.
+          </p>
+          <div className="tabela-scroll">
+            <table>
+              <thead><tr><th>Tipo</th><th>Descrição</th><th>Faixas</th><th>Valor antes</th><th>Pontos</th></tr></thead>
+              <tbody>
+                {tabelasDetectadas.tabelas.slice(0, LIMITE_PREVIA).map((t, i) => (
+                  <tr key={i}>
+                    <td className="mono">{t.tipo}</td>
+                    <td>{t.descricao || '—'}</td>
+                    <td>{t.faixas.length}</td>
+                    <td>{t.valorAntes}</td>
+                    <td>{t.qtePontos}</td>
+                  </tr>
+                ))}
+                {tabelasDetectadas.tabelas.length === 0 && (
+                  <tr><td colSpan={5} className="suave">Nenhuma tabela com código (TIPO) encontrada.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {tabelasDetectadas.tabelas.length > LIMITE_PREVIA && (
+            <p className="suave" style={{ fontSize: 12 }}>
+              + {tabelasDetectadas.tabelas.length - LIMITE_PREVIA} tabela(s) a mais, não mostrada(s) aqui.
+            </p>
+          )}
+          <div className="linha-form" style={{ marginTop: 16 }}>
+            <button className="btn-primary" onClick={importar} disabled={importando || !tabelasDetectadas.tabelas.length}>
+              {importando ? 'Importando…' : `Importar ${tabelasDetectadas.tabelas.length} tabela(s)`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {dbf && !ehTabelaPreco && (
         <div className="card">
           <h2>Mapeamento — {destinoAtual.rotulo}</h2>
           <p className="suave">
@@ -145,7 +216,13 @@ export default function ImportarDbf({ perfil }) {
             </table>
           </div>
 
-          <h2 style={{ marginTop: 16 }}>Prévia (primeiras {Math.min(LIMITE_PREVIA, dbf.registros.length)} de {dbf.registros.length})</h2>
+          <h2 style={{ marginTop: 16 }}>Prévia (primeiras {Math.min(LIMITE_PREVIA, linhasFiltradas.length)} de {linhasFiltradas.length})</h2>
+          {linhasFiltradas.length !== dbf.registros.length && (
+            <p className="suave" style={{ marginTop: -8 }}>
+              {dbf.registros.length - linhasFiltradas.length} registro(s) do arquivo não bateram no filtro
+              e ficam de fora.
+            </p>
+          )}
           <div className="tabela-scroll">
             <table>
               <thead><tr>{destinoAtual.colunas.map((c) => <th key={c.campo}>{c.rotulo}</th>)}</tr></thead>
@@ -161,7 +238,7 @@ export default function ImportarDbf({ perfil }) {
 
           <div className="linha-form" style={{ marginTop: 16 }}>
             <button className="btn-primary" onClick={importar} disabled={importando}>
-              {importando ? 'Importando…' : `Importar ${dbf.registros.length} registro(s)`}
+              {importando ? 'Importando…' : `Importar ${linhasFiltradas.length} registro(s)`}
             </button>
           </div>
         </div>
@@ -172,7 +249,7 @@ export default function ImportarDbf({ perfil }) {
           <h2>Resultado</h2>
           <p>
             <strong>{resultado.criados}</strong> criado(s), <strong>{resultado.ignorados}</strong> ignorado(s)
-            {' '}({ehVeiculosExtra ? 'placa já cadastrada' : 'código já existia'}).
+            {' '}({ehVeiculosExtra ? 'placa já cadastrada' : ehTabelaPreco ? 'tipo já tem tabela vigente' : 'código já existia'}).
           </p>
           {resultado.erros.length > 0 && (
             <>

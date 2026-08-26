@@ -64,6 +64,11 @@ export async function importarDestino({ perfil, destino, colunas, linhas, codigo
     codigosExistentes.add(linha.codigo); // protege contra códigos duplicados dentro do próprio arquivo
   }
 
+  // Colunas auxiliares (ex.: o campo TIPO só usado pra filtrar Serviços do
+  // ESTACONV — ver mapeamento.ts `naoGravar`) não são coluna de verdade da
+  // tabela de destino, ficam fora do INSERT.
+  const camposNaoGravar = colunas.filter((c) => c.naoGravar).map((c) => c.campo);
+
   for (const lote of emLotes(novas, TAMANHO_LOTE)) {
     // `modelo` (só existe nas colunas de mensalistas, ver mapeamento.ts) é do
     // veículo principal, não da pessoa — não é coluna de `mensalistas`.
@@ -71,7 +76,9 @@ export async function importarDestino({ perfil, destino, colunas, linhas, codigo
     // importarVeiculoPrincipal.
     const modeloPorCodigo = new Map(lote.map((linha) => [linha.codigo, linha.modelo]));
     const payload = lote.map((linha) => {
-      const { modelo, ...resto } = linha;
+      const resto = { ...linha };
+      delete resto.modelo;
+      for (const campo of camposNaoGravar) delete resto[campo];
       return { ...resto, filial_id: perfil.filial_id };
     });
     const { data: inseridos, error } = await supabase.from(destino.tabela).insert(payload).select('id, codigo');
@@ -160,6 +167,53 @@ export async function importarVeiculosExtras({ perfil, linhas, colunas }) {
     const { error } = await supabase.from('mensalista_veiculos').insert(lote);
     if (error) { lote.forEach((l) => resultado.erros.push({ linha: l.placa, motivo: error.message })); continue; }
     resultado.criados += lote.length;
+  }
+
+  return resultado;
+}
+
+/**
+ * Importação da tabela de preço (ESTAHORA) — foge do padrão de "uma linha
+ * vira um insert" do resto da tela: cada `tabela` detectada
+ * (packages/dbf/tabelaPreco.ts) vira 1 linha em `tabelas_preco` + N linhas em
+ * `tabela_preco_faixas` (a grade ATE/HOR/CON, "achatada" em várias colunas no
+ * .dbf). Um `tipo` que já tem tabela VIGENTE (vigencia_fim null) na filial é
+ * ignorado — igual ao resto da importação, nunca sobrescreve o que já existe
+ * (mudar o preço de uma tabela em uso é decisão de quem mexe em Preços, não
+ * algo pra acontecer sozinho numa reimportação).
+ */
+export async function importarTabelasPreco({ perfil, tabelas }) {
+  const resultado = { criados: 0, ignorados: 0, erros: [] };
+  if (!tabelas.length) return resultado;
+
+  const { data: existentes, error: errExistentes } = await supabase
+    .from('tabelas_preco').select('tipo').eq('filial_id', perfil.filial_id).is('vigencia_fim', null);
+  if (errExistentes) { resultado.erros.push({ linha: 0, motivo: `Erro ao consultar tabelas existentes: ${errExistentes.message}` }); return resultado; }
+  const tiposExistentes = new Set((existentes || []).map((r) => r.tipo));
+
+  for (const tabela of tabelas) {
+    if (!tabela.tipo) { resultado.erros.push({ linha: 0, motivo: 'Linha sem código de tabela (TIPO) — ignorada.' }); continue; }
+    if (tiposExistentes.has(tabela.tipo)) { resultado.ignorados++; continue; }
+    tiposExistentes.add(tabela.tipo); // protege contra o mesmo tipo duplicado dentro do próprio arquivo
+
+    const { data: nova, error: errTabela } = await supabase.from('tabelas_preco').insert({
+      filial_id: perfil.filial_id, tipo: tabela.tipo, descricao: tabela.descricao || tabela.tipo,
+      valor_antes: tabela.valorAntes || 0, qte_pontos: tabela.qtePontos || 0,
+    }).select('id').single();
+    if (errTabela) { resultado.erros.push({ linha: tabela.tipo, motivo: errTabela.message }); continue; }
+
+    if (tabela.faixas.length) {
+      const payloadFaixas = tabela.faixas.map((f) => ({
+        filial_id: perfil.filial_id, tabela_preco_id: nova.id, ordem: f.ordem,
+        ate: f.ate, valor_hora: f.valorHora, valor_convenio: f.valorConvenio,
+      }));
+      const { error: errFaixas } = await supabase.from('tabela_preco_faixas').insert(payloadFaixas);
+      if (errFaixas) {
+        resultado.erros.push({ linha: tabela.tipo, motivo: `Tabela criada, mas as faixas falharam: ${errFaixas.message}` });
+        continue;
+      }
+    }
+    resultado.criados++;
   }
 
   return resultado;

@@ -10,6 +10,18 @@ export type ColunaDestino = {
   obrigatorio?: boolean;  // sem valor -> linha rejeitada
   padrao?: ValorDbf;      // aplicado quando a coluna é NOT NULL no banco e o dbf não trouxe valor
   palpites?: string[];    // nomes de campo do dbf tentados automaticamente (case-insensitive)
+  /**
+   * Linha só entra na importação se o valor desta coluna (já convertido)
+   * bater com este texto (comparação sem diferenciar maiúsc./minúsc.) — ex.:
+   * ESTACONV.dbf mistura convênio e serviço na mesma tabela, distinguidos
+   * pelo campo TIPO ('C'/'S'); "Serviços" filtra TIPO='S'.
+   */
+  filtro?: string;
+  /**
+   * Coluna auxiliar (ex.: o próprio campo do filtro acima) que não é coluna
+   * de verdade da tabela de destino — fica de fora do INSERT.
+   */
+  naoGravar?: boolean;
 };
 
 export type Destino = {
@@ -21,8 +33,12 @@ export type Destino = {
    * existente. 'veiculos_extra': não cria nada em `tabela` — cada linha vira
    * um veículo (mensalista_veiculos) de um mensalista que JÁ existe, achado
    * pelo campo `codigo_mestre` (ver ESTASUBS.dbf, CARMESTRE/CARSUBST/NOMECAR).
+   * 'tabela_preco': foge do resto do mapeamento coluna-a-coluna — ver
+   * packages/dbf/tabelaPreco.ts (formato "largo" do ESTAHORA, detectado
+   * direto pelos nomes de campo, não escolhido à mão). `colunas` fica vazio
+   * pra esse tipo, só existe aqui pra aparecer no seletor "O que importar?".
    */
-  tipoImportacao?: 'cadastro' | 'veiculos_extra';
+  tipoImportacao?: 'cadastro' | 'veiculos_extra' | 'tabela_preco';
 };
 
 export const DESTINOS: Record<string, Destino> = {
@@ -96,13 +112,45 @@ export const DESTINOS: Record<string, Destino> = {
     rotulo: 'Formas de pagamento',
     tabela: 'formas_pagamento',
     colunas: [
-      { campo: 'codigo', rotulo: 'Código', obrigatorio: true, palpites: ['CODIGO'] },
+      // FORMAPGTO é o nome de verdade do campo código no ESTAPGTO.dbf do
+      // legado — antes de aprender isso, o palpite automático ficava sem
+      // achar nada e o operador tinha que escolher a coluna à mão toda vez.
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true, palpites: ['FORMAPGTO', 'CODIGO'] },
       { campo: 'descricao', rotulo: 'Descrição', obrigatorio: true, palpites: ['DESCRICAO', 'DESC', 'NOME'] },
       { campo: 'perc_ajuste', rotulo: 'Ajuste % (acréscimo/desconto)', tipo: 'number', palpites: ['PERCPGTO'], padrao: 0 },
       { campo: 'eh_dinheiro', rotulo: 'É dinheiro físico', tipo: 'bool', palpites: ['DINHEIRO'], padrao: false },
       { campo: 'rps_sempre', rotulo: 'Sempre gera RPS/NFS-e', tipo: 'bool', palpites: ['RPSSEMPRE'], padrao: false },
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
     ],
+  },
+  // ESTACONV.dbf mistura convênio e serviço na mesma tabela do legado,
+  // diferenciados pelo campo TIPO ('C' convênio, 'S' serviço) — aqui só
+  // filtra e traz os de serviço (Convênios continua sendo cadastro manual,
+  // ver docs). CODCONV/RAZAO/TABCONV são os mesmos nomes de campo de sempre
+  // nesse arquivo.
+  servicos: {
+    rotulo: 'Serviços (ESTACONV, tipo = Serviço)',
+    tabela: 'servicos',
+    colunas: [
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true, palpites: ['CODCONV'] },
+      { campo: 'descricao', rotulo: 'Descrição', obrigatorio: true, palpites: ['RAZAO'] },
+      { campo: 'tabela_tipo', rotulo: 'Tabela de preço', obrigatorio: true, palpites: ['TABCONV'] },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
+      {
+        campo: '_tipo_registro', rotulo: 'Tipo (filtra "S" = Serviço)', obrigatorio: true,
+        palpites: ['TIPO'], filtro: 'S', naoGravar: true,
+      },
+    ],
+  },
+  // ESTAHORA.dbf: uma linha por tabela de preço, faixas "largas" (ATE/HOR/CON
+  // até 45x lado a lado) — ver packages/dbf/tabelaPreco.ts. `colunas` fica
+  // vazio de propósito: ImportarDbf.jsx detecta os campos sozinho pra esse
+  // tipo, não usa o mapeamento manual coluna-a-coluna do resto da tela.
+  tabela_preco: {
+    rotulo: 'Tabela de preço (ESTAHORA)',
+    tabela: 'tabelas_preco',
+    tipoImportacao: 'tabela_preco',
+    colunas: [],
   },
 };
 
@@ -180,4 +228,22 @@ export function converterLinha(
     linha[col.campo] = convertido ?? col.padrao ?? null;
   }
   return linha;
+}
+
+/**
+ * Só as linhas que passam nos `filtro` das colunas (ex.: "servicos" filtra
+ * `_tipo_registro === 'S'`) — sem nenhuma coluna com `filtro`, devolve tudo.
+ * Comparação sem diferenciar maiúsc./minúsc. (o legado é inconsistente com
+ * isso em texto).
+ */
+export function filtrarLinhas(
+  colunas: ColunaDestino[],
+  linhas: Record<string, ValorDbf>[],
+): Record<string, ValorDbf>[] {
+  const filtros = colunas.filter((c) => c.filtro != null);
+  if (!filtros.length) return linhas;
+  return linhas.filter((linha) => filtros.every((c) => {
+    const valor = linha[c.campo];
+    return valor != null && String(valor).trim().toUpperCase() === c.filtro!.toUpperCase();
+  }));
 }
