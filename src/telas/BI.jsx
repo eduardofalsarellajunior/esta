@@ -24,7 +24,7 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     ['Tempo médio', fmtHora(dados.tempoMedio)],
     ['Mensalidades recebidas', `${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`],
     ['Venda de produtos', `${dados.produtosVendidos.length} · ${fmtBRL(dados.produtosTotal)}`],
-    ['Faturado (avulso + desconto conv. + serviços + mensalidades + produtos)', fmtBRL(dados.faturado)],
+    ['Faturado (valor cheio de tabela + mensalidades + produtos)', fmtBRL(dados.faturado)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
   const porTipo = Object.entries(dados.porTipo)
@@ -175,7 +175,7 @@ function textoRelatorio(dados, de, ate, filial) {
   }
   if (!dados.produtosVendidos.length) linhas.push('  Nenhuma venda de produto no período.');
   linhas.push('');
-  linhas.push(`Faturado (avulso + desconto conv. + serviços + mensalidades + produtos): ${fmtBRL(dados.faturado)}`);
+  linhas.push(`Faturado (valor cheio de tabela + mensalidades + produtos): ${fmtBRL(dados.faturado)}`);
   return linhas.join('\n');
 }
 
@@ -247,11 +247,12 @@ export default function BI({ perfil }) {
     if (errProd) { setErro(errProd.message); return; }
 
     const porTipo = {};
-    let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, valorAvulso = 0, minutosTotal = 0, saidasComTempo = 0;
+    let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, valorAvulso = 0, valorConvenioTotal = 0, minutosTotal = 0, saidasComTempo = 0;
     for (const m of movs) {
       porTipo[m.tipo_mens] = (porTipo[m.tipo_mens] || 0) + 1;
       recebidoSaidas += Number(m.valor || 0);
       tabelaCheia += Number(m.valor_proporcional || 0);
+      valorConvenioTotal += Number(m.valor_convenio || 0);
       if (movsComServico.has(m.id)) valorServicos += Number(m.valor || 0);
       // Avulso: o carro que passa pela balança normal (com convênio ou sem —
       // convênio é só um desconto em cima do avulso, não outra categoria).
@@ -304,9 +305,13 @@ export default function BI({ perfil }) {
     for (const v of produtosVendidos) recebidoPorForma[v.forma] = (recebidoPorForma[v.forma] || 0) + v.valor;
 
     // "Descontos (conv.)" é o quanto o convênio tirou do valor cheio da
-    // tabela — entra na conta do Faturado (que é o valor cheio, sem
-    // desconto: Avulso + Descontos + Serviços + Mensalidades).
-    const descontos = tabelaCheia - recebidoSaidas;
+    // tabela — usa a coluna valor_convenio (gravada pelo motor na saída,
+    // ver Patio.jsx/confirmarSaida), não "valor_proporcional - valor": essa
+    // diferença também inclui antecipado e bônus fidelidade (que não são
+    // desconto de convênio nenhum — ver comAntecipado/comBonus em
+    // Patio.jsx), senão um carro sem convênio nenhum mas com antecipado
+    // aparecia com "desconto de convênio" — foi exatamente o bug relatado.
+    const descontos = valorConvenioTotal;
 
     // Por tipo de lavagem/serviço: quantidade de vezes usado + valor total.
     // Serviço "Pede valor" (valor informado ao marcar) usa esse valor exato.
@@ -335,7 +340,12 @@ export default function BI({ perfil }) {
 
     setDados({
       totalVeic: movs.length, valorAvulso,
-      faturado: valorAvulso + descontos + valorServicos + mensalidadesTotal + produtosTotal,
+      // tabelaCheia já é o valor cheio de TODAS as saídas não-mensalista
+      // (avulso ou serviço, o motor grava valor_proporcional igual pros
+      // dois casos) — não precisa reconstruir via "avulso + descontos +
+      // serviços" (isso ficava sujeito ao mesmo problema de descontos
+      // acima: dava errado quando tinha antecipado/bônus no meio).
+      faturado: tabelaCheia + mensalidadesTotal + produtosTotal,
       recebidoSaidas, descontos, valorServicos,
       porTipo, porTipoCancelado, recebidoPorForma, porServico,
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
@@ -347,9 +357,11 @@ export default function BI({ perfil }) {
       id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: m.tipo_veic,
       dt_entrada: m.dt_entrada, hr_entrada: m.hr_entrada, dt_saida: m.dt_saida, hr_saida: m.hr_saida,
       valor: Number(m.valor || 0),
-      // Desconto de convênio desta saída (0 quando não teve convênio, ou
-      // quando o operador alterou o valor manualmente — ver valorCalculado).
-      descontoConvenio: Math.max(0, Number(m.valor_proporcional || 0) - Number(m.valor || 0)),
+      // Desconto de convênio desta saída — vem direto de valor_convenio
+      // (gravado pelo motor na saída), não de "proporcional - valor": essa
+      // diferença também pega antecipado/bônus fidelidade, que não são
+      // desconto de convênio nenhum.
+      descontoConvenio: Number(m.valor_convenio || 0),
       // Null quando o valor cobrado é o que o motor calculou; preenchido com o
       // valor original quando o operador alterou na saída (vira "*" na lista).
       valorCalculado: m.valor_calculado != null ? Number(m.valor_calculado) : null,
@@ -413,8 +425,8 @@ export default function BI({ perfil }) {
             <Kpi rotulo="Faturado" valor={fmtBRL(dados.faturado)} destaque moeda />
           </div>
           <p className="suave" style={{ marginTop: -4 }}>
-            Faturado = Avulso + Descontos (conv.) + Serviços + Mensalidades + Venda de produtos — o valor
-            cheio, antes do desconto de convênio.
+            Faturado = valor cheio de tabela das saídas (avulso + serviços, antes do desconto de
+            convênio) + Mensalidades + Venda de produtos.
           </p>
 
           <div className="card">

@@ -71,24 +71,29 @@ export async function carregarRelatorioCaixa(caixa) {
   const descTabela = {};
   for (const t of tabelasPreco || []) if (!descTabela[t.tipo]) descTabela[t.tipo] = t.descricao;
 
-  let valorFaturado = 0, valorProporcionalTotal = 0;
+  let valorFaturado = 0, valorProporcionalTotal = 0, valorConvenioTotal = 0;
   const porTipo = { avulso: 0, mensalista: 0 };
   const porConvenio = {};
   const porTabela = {};
   for (const m of movs || []) {
     valorFaturado += Number(m.valor || 0);
     valorProporcionalTotal += Number(m.valor_proporcional || 0);
+    valorConvenioTotal += Number(m.valor_convenio || 0);
     if (MENSALISTA.has(m.tipo_mens)) porTipo.mensalista++; else porTipo.avulso++;
     if (m.convenio_codigo) {
       const e = (porConvenio[m.convenio_codigo] ||= { qtd: 0, desconto: 0 });
       e.qtd++;
-      e.desconto += Math.max(0, Number(m.valor_proporcional || 0) - Number(m.valor || 0));
+      // Vem de valor_convenio (gravado pelo motor na saída), não de
+      // "proporcional - valor": essa diferença também pega antecipado/bônus
+      // fidelidade, que não são desconto de convênio nenhum (mesmo bug
+      // corrigido no BI.jsx, ver o comentário lá).
+      e.desconto += Number(m.valor_convenio || 0);
     }
     const et = (porTabela[m.tipo_veic] ||= { qtd: 0, valor: 0 });
     et.qtd++;
     et.valor += Number(m.valor || 0);
   }
-  const descontos = valorProporcionalTotal - valorFaturado;
+  const descontos = valorConvenioTotal;
 
   const mensalidades = (mensPagtos || []).map((p) => ({
     id: p.id, nome: p.mensalistas?.razao || '—', valor: Number(p.valor_pago || 0), forma: p.forma_pagamento,
