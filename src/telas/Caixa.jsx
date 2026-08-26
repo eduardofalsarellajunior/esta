@@ -176,7 +176,13 @@ export default function Caixa({ perfil }) {
     <>
       <div className="card">
         <div className="card-cab">
-          <div><h2>Caixa Nº {caixa.numero} aberto</h2><p className="suave">Desde {new Date(caixa.aberto_em).toLocaleString('pt-BR')}</p></div>
+          <div>
+            <h2>Caixa Nº {caixa.numero} aberto</h2>
+            <p className="suave">
+              Desde {new Date(caixa.aberto_em).toLocaleString('pt-BR')}
+              {' · Troco de abertura: '}<strong>{fmtBRL(Number(caixa.valor_abertura || 0))}</strong>
+            </p>
+          </div>
         </div>
         {resumo && (
           <div className="kpis">
