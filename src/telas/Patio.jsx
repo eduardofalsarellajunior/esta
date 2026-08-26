@@ -7,6 +7,7 @@ import { calcularTarifa, horas as horasDecorridas } from '../../packages/tarifac
 import { diaSemanaLegado, calcularRestricaoEntrada } from '../lib/restricaoMensalista.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
 import CapturaPlaca from '../componentes/CapturaPlaca.jsx';
+import DitarPlaca from '../componentes/DitarPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
 import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import VendaProdutosFluxo from '../componentes/VendaProdutos.jsx';
@@ -1284,6 +1285,9 @@ export default function Patio({ perfil }) {
           </div>
           {(filial?.config?.patio?.usaLeituraPlaca ?? true) && (
             <CapturaPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); detectar(p); }} />
+          )}
+          {(filial?.config?.patio?.usaDitadoPlaca ?? false) && (
+            <DitarPlaca onConfirmar={(p) => { setPlaca(p); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); detectar(p); }} />
           )}
           <div className="campo campo-busca" style={{ minWidth: 340 }}>
             <label>Carro</label>

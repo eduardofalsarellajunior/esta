@@ -189,6 +189,17 @@ export default function Configuracoes({ perfil }) {
                 Desmarcado, o botão de câmera (📷) some da tela de Entrada de veículo e do
                 cadastro de veículo do mensalista — digitar a placa continua funcionando normal.
               </p>
+              <label className="campo-check" style={{ marginBottom: 4 }}>
+                <input type="checkbox" checked={filial.config?.patio?.usaDitadoPlaca ?? false} disabled={!podeEditar}
+                  onChange={(e) => setPatio('usaDitadoPlaca', e.target.checked)} />
+                Usa entrada de placa por voz (microfone)?
+              </label>
+              <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+                Recurso novo, desligado por padrão — liga o botão de microfone (🎤) na tela de
+                Entrada de veículo. Usa o reconhecimento de voz do próprio navegador (só funciona
+                no Chrome/Android; sem custo, sem servidor); nunca preenche a placa sozinho —
+                sempre mostra o texto reconhecido pra conferir/corrigir antes de usar.
+              </p>
               {podeEditar
                 ? <button className="btn-primary" type="submit">Salvar</button>
                 : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
