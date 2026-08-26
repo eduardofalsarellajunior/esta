@@ -14,11 +14,12 @@ const SpeechRecognitionAPI = typeof window !== 'undefined'
  * corrige antes de usar (mesmo princípio da leitura de placa por foto, ver
  * CapturaPlaca.jsx).
  *
- * `continuous`/`interimResults` são o pulo do gato aqui: sem eles (como na
- * primeira versão), o reconhecimento PARA sozinho na primeira pausa entre
- * letras e descarta o resto — só pegava o começo da placa. Com eles ligados,
- * continua ouvindo e vai acumulando cada trecho reconhecido, até o operador
- * apertar "Parar" (ou uma pausa bem longa encerrar sozinho).
+ * Reconhecimento em CICLOS curtos (não `continuous: true`) — cada ciclo
+ * escuta só uma fala e reinicia sozinho assim que termina, dando a sensação
+ * de "vai ouvindo direto" sem usar o modo contínuo de verdade do navegador.
+ * O modo contínuo foi tentado antes e, num ambiente barulhento (pátio,
+ * carro, vento), trava repetindo o mesmo som curto sem parar ("ttltltl...")
+ * — cada ciclo isolado não sofre disso, porque começa do zero a cada vez.
  */
 export default function DitarPlaca({ onConfirmar, rotulo }) {
   const [aberto, setAberto] = useState(false);
@@ -27,42 +28,53 @@ export default function DitarPlaca({ onConfirmar, rotulo }) {
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState('');
   const recRef = useRef(null);
+  const continuarRef = useRef(false); // false = "Parar" foi apertado, não reinicia mais ciclos
   const brutoRef = useRef(''); // transcrição acumulada (antes de virar letras/números)
 
-  function ouvir() {
-    setErro(''); setTexto(''); setParcial('');
-    brutoRef.current = '';
+  function novoCiclo() {
     const rec = new SpeechRecognitionAPI();
     rec.lang = 'pt-BR';
-    rec.continuous = true;
+    rec.continuous = false; // um ciclo = uma fala só — ver comentário do componente
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.onresult = (e) => {
-      let finalNovo = '';
       let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const trecho = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalNovo += `${trecho} `;
-        else interim += trecho;
-      }
-      if (finalNovo) {
-        brutoRef.current += finalNovo;
-        setTexto(normalizarDitadoPlaca(brutoRef.current));
+      for (let i = 0; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) {
+          brutoRef.current += `${r[0].transcript} `;
+          setTexto(normalizarDitadoPlaca(brutoRef.current));
+        } else {
+          interim += r[0].transcript;
+        }
       }
       setParcial(interim);
     };
     rec.onerror = (e) => {
-      if (e.error === 'no-speech') return; // pausa normal — deixa continuar ouvindo
+      if (e.error === 'no-speech' || e.error === 'aborted') return; // silêncio normal entre letras — o onend cuida de reiniciar
       setErro('Não deu pra usar o microfone — confira a permissão do navegador e tenta de novo.');
+      continuarRef.current = false;
       setOuvindo(false);
     };
-    rec.onend = () => { setOuvindo(false); setParcial(''); };
+    rec.onend = () => {
+      setParcial('');
+      if (continuarRef.current) novoCiclo();
+      else setOuvindo(false);
+    };
     recRef.current = rec;
-    setOuvindo(true);
     rec.start();
   }
 
+  function ouvir() {
+    setErro(''); setTexto(''); setParcial('');
+    brutoRef.current = '';
+    continuarRef.current = true;
+    setOuvindo(true);
+    novoCiclo();
+  }
+
   function parar() {
+    continuarRef.current = false;
     recRef.current?.stop();
   }
 
@@ -77,6 +89,7 @@ export default function DitarPlaca({ onConfirmar, rotulo }) {
   }
 
   function fechar() {
+    continuarRef.current = false;
     recRef.current?.stop();
     setAberto(false); setOuvindo(false); setTexto(''); setParcial(''); setErro('');
   }
@@ -102,7 +115,7 @@ export default function DitarPlaca({ onConfirmar, rotulo }) {
               <>
                 <p className="suave">
                   {ouvindo
-                    ? <>Ouvindo… fale a placa letra por letra, sem pressa (ex.: "erre", "pê", "pê", "um", "um", "um", "um").</>
+                    ? <>Ouvindo… fale uma letra ou número de cada vez, com uma pausa entre eles (ex.: "erre", "pausa", "pê", "pausa", "um").</>
                     : 'Confira e corrija se precisar antes de usar.'}
                   {ouvindo && parcial && <><br />Reconhecendo: <em>{parcial}</em></>}
                 </p>
