@@ -224,12 +224,32 @@ export default function BI({ perfil }) {
       // ver Patio.jsx), então "quanto veio de serviço" é o valor inteiro dos
       // movimentos com pelo menos um serviço marcado, não uma fração.
       const { data: ms } = await supabase.from('movimento_servicos')
-        .select('movimento_id, servico_id, valor, servicos(codigo, descricao)').in('movimento_id', ids);
+        .select('movimento_id, servico_id, valor, servicos(codigo, descricao, tabela_tipo)').in('movimento_id', ids);
       servicosDoMovimento = ms || [];
       movsComServico = new Set(servicosDoMovimento.map((r) => r.movimento_id));
     }
     const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao');
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
+    // Tabela EFETIVA de cada saída pra mostrar na lista de veículos — nem
+    // sempre é a do cadastro do carro (tipo_veic): convênio com tabela
+    // alternativa (tab_conv) ou serviço marcado (cada um com sua própria
+    // tabela) trocam o que o motor usa de verdade pra calcular (ver
+    // calcularTarifa em packages/tarifacao — tipoEfetivo = tabConv || tipoVeic,
+    // e servicosTipos substitui isso inteiro quando tem serviço).
+    const { data: convenios } = await supabase.from('convenios').select('codigo, tab_conv');
+    const tabConvPorCodigo = Object.fromEntries((convenios || []).map((c) => [c.codigo, c.tab_conv]));
+    const tabelasServicoPorMov = {};
+    for (const r of servicosDoMovimento) {
+      const t = r.servicos?.tabela_tipo;
+      if (!t) continue;
+      const lista = (tabelasServicoPorMov[r.movimento_id] ||= []);
+      if (!lista.includes(t)) lista.push(t);
+    }
+    function tabelaEfetiva(m) {
+      if (tabelasServicoPorMov[m.id]) return tabelasServicoPorMov[m.id].join(' + ');
+      if (m.convenio_codigo && tabConvPorCodigo[m.convenio_codigo]) return tabConvPorCodigo[m.convenio_codigo];
+      return m.tipo_veic;
+    }
 
     // Recebimentos de mensalidade no período (evento gravado no cadastro do mensalista).
     const { data: mensPagtos, error: errMens } = await supabase.from('mensalista_pagamentos')
@@ -354,7 +374,7 @@ export default function BI({ perfil }) {
     });
 
     const detalheNormal = movs.map((m) => ({
-      id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: m.tipo_veic,
+      id: m.id, placa: m.placa, modelo: m.modelo, tipo_veic: tabelaEfetiva(m),
       dt_entrada: m.dt_entrada, hr_entrada: m.hr_entrada, dt_saida: m.dt_saida, hr_saida: m.hr_saida,
       valor: Number(m.valor || 0),
       // Desconto de convênio desta saída — vem direto de valor_convenio
