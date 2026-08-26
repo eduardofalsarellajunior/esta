@@ -21,10 +21,12 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     ['Avulso', fmtBRL(dados.valorAvulso)],
     ['Serviços', fmtBRL(dados.valorServicos)],
     ['Descontos (conv.)', fmtBRL(dados.descontos)],
+    ['Antecipados', fmtBRL(dados.antecipados)],
+    ['Bônus fidelidade', fmtBRL(dados.bonus)],
     ['Tempo médio', fmtHora(dados.tempoMedio)],
     ['Mensalidades recebidas', `${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`],
     ['Venda de produtos', `${dados.produtosVendidos.length} · ${fmtBRL(dados.produtosTotal)}`],
-    ['Faturado (valor cheio de tabela + mensalidades + produtos)', fmtBRL(dados.faturado)],
+    ['Faturado (avulso + serviços + descontos + antecipados + bônus + mensalidades + produtos)', fmtBRL(dados.faturado)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
   const porTipo = Object.entries(dados.porTipo)
@@ -143,6 +145,8 @@ function textoRelatorio(dados, de, ate, filial) {
   linhas.push(`Avulso: ${fmtBRL(dados.valorAvulso)}`);
   linhas.push(`Serviços: ${fmtBRL(dados.valorServicos)}`);
   linhas.push(`Descontos (conv.): ${fmtBRL(dados.descontos)}`);
+  linhas.push(`Antecipados: ${fmtBRL(dados.antecipados)}`);
+  linhas.push(`Bônus fidelidade: ${fmtBRL(dados.bonus)}`);
   linhas.push(`Tempo médio: ${fmtHora(dados.tempoMedio)}`);
   linhas.push('');
   linhas.push('Por tipo:');
@@ -175,7 +179,7 @@ function textoRelatorio(dados, de, ate, filial) {
   }
   if (!dados.produtosVendidos.length) linhas.push('  Nenhuma venda de produto no período.');
   linhas.push('');
-  linhas.push(`Faturado (valor cheio de tabela + mensalidades + produtos): ${fmtBRL(dados.faturado)}`);
+  linhas.push(`Faturado (avulso + serviços + descontos + antecipados + bônus + mensalidades + produtos): ${fmtBRL(dados.faturado)}`);
   return linhas.join('\n');
 }
 
@@ -267,12 +271,21 @@ export default function BI({ perfil }) {
     if (errProd) { setErro(errProd.message); return; }
 
     const porTipo = {};
-    let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, valorAvulso = 0, valorConvenioTotal = 0, minutosTotal = 0, saidasComTempo = 0;
+    let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, valorAvulso = 0, valorConvenioTotal = 0,
+      antecipadoTotal = 0, bonusTotal = 0, minutosTotal = 0, saidasComTempo = 0;
     for (const m of movs) {
       porTipo[m.tipo_mens] = (porTipo[m.tipo_mens] || 0) + 1;
       recebidoSaidas += Number(m.valor || 0);
       tabelaCheia += Number(m.valor_proporcional || 0);
       valorConvenioTotal += Number(m.valor_convenio || 0);
+      // Antecipado e bônus fidelidade também abatem do valor cobrado (ver
+      // comAntecipado/comBonus em Patio.jsx) sem mexer em valor_proporcional
+      // — precisam entrar na soma do Faturado igual o desconto de convênio,
+      // senão o total fica maior que a soma das colunas visíveis (Avulso +
+      // Serviço + Desconto conv. + Mensalidade + Produtos), sem dar pra
+      // conferir a conta batendo.
+      antecipadoTotal += Number(m.valor_antecipado || 0);
+      bonusTotal += Number(m.bonus_fidelidade || 0);
       if (movsComServico.has(m.id)) valorServicos += Number(m.valor || 0);
       // Avulso: o carro que passa pela balança normal (com convênio ou sem —
       // convênio é só um desconto em cima do avulso, não outra categoria).
@@ -360,13 +373,13 @@ export default function BI({ perfil }) {
 
     setDados({
       totalVeic: movs.length, valorAvulso,
-      // tabelaCheia já é o valor cheio de TODAS as saídas não-mensalista
-      // (avulso ou serviço, o motor grava valor_proporcional igual pros
-      // dois casos) — não precisa reconstruir via "avulso + descontos +
-      // serviços" (isso ficava sujeito ao mesmo problema de descontos
-      // acima: dava errado quando tinha antecipado/bônus no meio).
-      faturado: tabelaCheia + mensalidadesTotal + produtosTotal,
-      recebidoSaidas, descontos, valorServicos,
+      // Soma explícita de tudo que abate do valor cheio (convênio,
+      // antecipado, bônus) de volta — cada parcela é um KPI visível na
+      // tela, então o Faturado sempre bate com a soma das colunas que dá
+      // pra conferir a olho (era esse o problema antes: antecipado/bônus
+      // entravam na conta sem aparecer em lugar nenhum).
+      faturado: valorAvulso + valorServicos + valorConvenioTotal + antecipadoTotal + bonusTotal + mensalidadesTotal + produtosTotal,
+      recebidoSaidas, descontos, valorServicos, antecipados: antecipadoTotal, bonus: bonusTotal,
       porTipo, porTipoCancelado, recebidoPorForma, porServico,
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
       mensalidades, mensalidadesTotal,
@@ -443,14 +456,16 @@ export default function BI({ perfil }) {
             <Kpi rotulo="Avulso" valor={fmtBRL(dados.valorAvulso)} moeda />
             <Kpi rotulo="Serviços" valor={fmtBRL(dados.valorServicos)} moeda />
             <Kpi rotulo="Descontos (conv.)" valor={fmtBRL(dados.descontos)} moeda />
+            <Kpi rotulo="Antecipados" valor={fmtBRL(dados.antecipados)} moeda />
+            <Kpi rotulo="Bônus fidelidade" valor={fmtBRL(dados.bonus)} moeda />
             <Kpi rotulo="Tempo médio" valor={fmtHora(dados.tempoMedio)} />
             <Kpi rotulo="Mensalidades" valor={fmtBRL(dados.mensalidadesTotal)} moeda />
             <Kpi rotulo="Venda de produtos" valor={fmtBRL(dados.produtosTotal)} moeda />
             <Kpi rotulo="Faturado" valor={fmtBRL(dados.faturado)} destaque moeda />
           </div>
           <p className="suave" style={{ marginTop: -4 }}>
-            Faturado = valor cheio de tabela das saídas (avulso + serviços, antes do desconto de
-            convênio) + Mensalidades + Venda de produtos.
+            Faturado = Avulso + Serviços + Descontos (conv.) + Antecipados + Bônus fidelidade +
+            Mensalidades + Venda de produtos — o valor cheio, antes de qualquer desconto/abatimento.
           </p>
 
           <div className="card">
