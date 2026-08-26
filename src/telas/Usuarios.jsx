@@ -2,6 +2,20 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { PAPEIS, ehSupervisor, ehFornecedor } from '../lib/acesso.js';
 
+/**
+ * "AR7 Car Wash" -> "ar7carwash.com.br" — o domínio do e-mail de login segue
+ * sempre o nome fantasia da filial (convenção já usada manualmente antes de
+ * existir esse formulário), pra um supervisor menos cuidadoso não poder
+ * colocar qualquer coisa depois do @ ao criar um usuário novo.
+ */
+function dominioEmailDaFilial(nomeFantasia) {
+  const base = String(nomeFantasia || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  return base ? `${base}.com.br` : '';
+}
+
 // Quem acessa o sistema (perfis) — nome, papel e ativo/inativo.
 // Criar o login (e-mail/senha) roda em api/criar-usuario.js, que tem a chave
 // de service_role do Supabase — o navegador não pode ter essa chave. Se ela
@@ -13,6 +27,7 @@ export default function Usuarios({ perfil }) {
   const [trocandoSenha, setTrocandoSenha] = useState(null); // usuário no modal de troca de senha
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
+  const [dominioEmail, setDominioEmail] = useState('');
   const podeEditar = ehSupervisor(perfil);
 
   async function carregar() {
@@ -20,6 +35,10 @@ export default function Usuarios({ perfil }) {
     if (error) setErro(error.message); else setLista(data);
   }
   useEffect(() => { carregar(); }, []);
+  useEffect(() => {
+    supabase.from('filiais').select('nome_fantasia').eq('id', perfil.filial_id).maybeSingle()
+      .then(({ data }) => setDominioEmail(dominioEmailDaFilial(data?.nome_fantasia)));
+  }, [perfil.filial_id]);
 
   async function salvar(u) {
     setErro(''); setMsg('');
@@ -115,7 +134,7 @@ export default function Usuarios({ perfil }) {
       </div>
 
       {editando && (
-        <UsuarioModal inicial={editando.novo ? {} : editando} onSalvar={salvar}
+        <UsuarioModal inicial={editando.novo ? {} : editando} onSalvar={salvar} dominioEmail={dominioEmail}
           podeCriarFornecedor={ehFornecedor(perfil)} onFechar={() => setEditando(null)} />
       )}
 
@@ -163,16 +182,20 @@ function TrocarSenhaModal({ usuario, onConfirmar, onFechar }) {
   );
 }
 
-function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, onFechar }) {
+function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, dominioEmail, onFechar }) {
   const [u, setU] = useState({ modo: 'novo-login', ...inicial });
   const [salvando, setSalvando] = useState(false);
   const set = (k, v) => setU((o) => ({ ...o, [k]: v }));
   const criandoLogin = !u.id && u.modo === 'novo-login';
+  // Sem nome fantasia configurado, não tem como montar o domínio — cai pro
+  // campo de e-mail inteiro de sempre em vez de travar a criação de usuário.
+  const usaDominioFixo = criandoLogin && !!dominioEmail;
 
   async function enviar(e) {
     e.preventDefault();
     setSalvando(true);
-    await onSalvar(u);
+    const payload = usaDominioFixo ? { ...u, email: `${(u.emailLocal || '').trim()}@${dominioEmail}` } : u;
+    await onSalvar(payload);
     setSalvando(false);
   }
 
@@ -203,12 +226,32 @@ function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, onFechar }) {
             <label>Nome *</label>
             <input value={u.nome || ''} onChange={(e) => set('nome', e.target.value)} required />
           </div>
-          <div className="campo" style={{ marginBottom: 10 }}>
-            <label>E-mail {criandoLogin ? '*' : '(só referência)'}</label>
-            <input type="email" value={u.email || ''} onChange={(e) => set('email', e.target.value)}
-              required={criandoLogin} />
-            {criandoLogin && <span className="suave" style={{ fontSize: 11 }}>É com esse e-mail que a pessoa vai entrar.</span>}
-          </div>
+          {usaDominioFixo ? (
+            <div className="campo" style={{ marginBottom: 10 }}>
+              <label>Usuário (e-mail) *</label>
+              <div className="linha-form" style={{ gap: 4, flexWrap: 'nowrap', alignItems: 'center' }}>
+                <input value={u.emailLocal || ''} style={{ flex: 1 }} placeholder="joao" autoFocus
+                  onChange={(e) => set('emailLocal', e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                  required />
+                <span className="suave mono">@{dominioEmail}</span>
+              </div>
+              <span className="suave" style={{ fontSize: 11 }}>
+                É com esse e-mail que a pessoa vai entrar — o domínio é sempre o do estacionamento.
+              </span>
+            </div>
+          ) : (
+            <div className="campo" style={{ marginBottom: 10 }}>
+              <label>E-mail {criandoLogin ? '*' : '(só referência)'}</label>
+              <input type="email" value={u.email || ''} onChange={(e) => set('email', e.target.value)}
+                required={criandoLogin} />
+              {criandoLogin && (
+                <span className="suave" style={{ fontSize: 11 }}>
+                  É com esse e-mail que a pessoa vai entrar. Cadastre o nome fantasia da filial em
+                  Configurações pra esse campo virar só "usuário" com o domínio preenchido sozinho.
+                </span>
+              )}
+            </div>
+          )}
           {criandoLogin && (
             <div className="campo" style={{ marginBottom: 10 }}>
               <label>Senha inicial *</label>
