@@ -359,6 +359,15 @@ export default function Patio({ perfil }) {
     setBuscaModelo(m.nome);
     setMostrarSugestoes(false);
     setTabelaManual(''); setNomeCarroNovo('');
+    // Tabela com "Valor antecipado" configurado (ex.: promoção de evento
+    // vizinho, ver Preços) — já sugere o Vlr. Antecipado da Entrada com esse
+    // valor e em dinheiro, do jeito que sempre foi cobrado. Só sugestão: o
+    // operador ainda vê/edita no modal "Mais opções" antes de confirmar.
+    const valorAntes = Number(tabelas[m.tabela_tipo]?.valorAntes || 0);
+    if (valorAntes > 0) {
+      setValorAntecipado(String(valorAntes));
+      setFormaAntecipado(formas.find((f) => f.eh_dinheiro)?.codigo || '');
+    }
   }
 
   // Pré-preenche o nome do carro novo com o que foi digitado, enquanto nada foi
@@ -419,6 +428,14 @@ export default function Patio({ perfil }) {
    * (default explícito no parâmetro só entraria com `undefined`).
    */
   async function registrarEntrada(tipoVeic, nomeModelo, tipoMens, convenioCodigo, livreAPartir = livreAPartirEntrada) {
+    // Tabela com "Valor antecipado" configurado (ex.: evento/promoção, ver
+    // Preços) — normalmente já preenchido em `valorAntecipado` por
+    // selecionarModelo(), mas cobre também quem digitou o nome certinho e deu
+    // Enter sem clicar na sugestão (prosseguirEntrada/matchExato). Só pra
+    // avulso: mensalista/reserva não usam esse fallback (tipoMens vazio é o
+    // sinal de entrada avulsa "pura", ver chamada em prosseguirEntrada).
+    const antecipadoAuto = !tipoMens && !valorAntecipado ? Number(tabelas[tipoVeic]?.valorAntes || 0) : 0;
+    const valorAntecipadoEfetivo = Number(valorAntecipado) || antecipadoAuto;
     // Antecipado (desta entrada + o que já veio de uma reserva) conta como
     // pagamento recebido agora — precisa de caixa aberto pra não ficar de
     // fora do fechamento (ver AbrirCaixaInline). Busca direto no banco (não
@@ -426,7 +443,7 @@ export default function Patio({ perfil }) {
     // o operador abre o caixa (ver pendenteCaixa.executar mais abaixo), e o
     // state daquele render ainda não teria atualizado — bateria o gate de
     // novo e tentaria abrir um SEGUNDO caixa (erro de unicidade).
-    const precisaCaixa = (Number(valorAntecipado) || 0)
+    const precisaCaixa = valorAntecipadoEfetivo
       + Number(reservaParaChegadaRef.current?.placa === placa.trim().toUpperCase()
         ? reservaParaChegadaRef.current?.valor_antecipado || 0 : 0) > 0;
     if (precisaCaixa) {
@@ -457,7 +474,7 @@ export default function Patio({ perfil }) {
       // houver) — o da reserva já foi recebido/contado lá no caixa de quando
       // ela foi criada (ver 0040_reserva_antecipado.sql), então NÃO gera um
       // novo movimento_pagamentos abaixo, só entra no total a descontar na saída.
-      valor_antecipado: (Number(valorAntecipado) || 0) + Number(reservaParaChegadaRef.current?.placa === p
+      valor_antecipado: valorAntecipadoEfetivo + Number(reservaParaChegadaRef.current?.placa === p
         ? reservaParaChegadaRef.current?.valor_antecipado || 0 : 0) || null,
       // Dívida trazida de uma saída anterior (ver detectar()) — cobrada
       // junto com esta estadia na saída (dividaAnterior em calcularResultadoSaida).
@@ -478,13 +495,13 @@ export default function Patio({ perfil }) {
     // desconto lá na saída) — liga ao caixa aberto deste momento, que pode
     // ser um turno diferente do que vai fechar a saída (ver
     // 0039_valor_antecipado.sql e Caixa.jsx).
-    if (Number(valorAntecipado) > 0) {
+    if (valorAntecipadoEfetivo > 0) {
       const { data: cx } = await supabase.from('caixas').select('id')
         .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
       await supabase.from('movimento_pagamentos').insert({
         filial_id: perfil.filial_id, movimento_id: novo.id,
         forma_pagamento: formaAntecipado || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D',
-        valor: Number(valorAntecipado), caixa_id: cx?.id ?? null,
+        valor: valorAntecipadoEfetivo, caixa_id: cx?.id ?? null,
       });
     }
     // Reserva encontrada pra essa placa (ver detectarReserva) — marca só o

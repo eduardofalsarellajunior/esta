@@ -29,6 +29,7 @@ export async function carregarTabelasPreco() {
     mapa[t.tipo] = {
       tipo: t.tipo,
       qtePontos: Number(t.qte_pontos),
+      valorAntes: Number(t.valor_antes || 0),
       faixas: faixas
         .filter((f) => f.tabela_preco_id === t.id)
         .sort((a, b) => a.ordem - b.ordem)

@@ -20,6 +20,7 @@ export default function Precos({ perfil }) {
     const payload = {
       filial_id: perfil.filial_id, tipo: t.tipo, descricao: t.descricao,
       qte_pontos: Number(t.qte_pontos || 0),
+      valor_antes: Number(t.valor_antes || 0),
       selecao_manual: !!t.selecao_manual,
     };
     const res = t.id
@@ -49,7 +50,7 @@ export default function Precos({ perfil }) {
         {erro && <div className="aviso">{erro}</div>}
         <div className="tabela-scroll">
           <table>
-            <thead><tr><th>Tipo</th><th>Descrição</th><th>Seleção manual</th><th></th></tr></thead>
+            <thead><tr><th>Tipo</th><th>Descrição</th><th>Seleção manual</th><th>Vlr. antecipado</th><th></th></tr></thead>
             <tbody>
               {tabelas.map((t) => (
                 <Fragment key={t.id}>
@@ -59,12 +60,13 @@ export default function Precos({ perfil }) {
                     <td className="mono">{t.tipo}</td>
                     <td>{t.descricao}</td>
                     <td>{t.selecao_manual ? 'Sim' : 'Não'}</td>
+                    <td>{Number(t.valor_antes) > 0 ? fmtBRL(Number(t.valor_antes)) : '—'}</td>
                     <td style={{ textAlign: 'right' }}>
                       <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); setSel(t); setEditando(t); }}>Editar</button>
                     </td>
                   </tr>
                   {sel?.id === t.id && (
-                    <tr><td colSpan={4} className="linha-expandida"><Faixas perfil={perfil} tabela={sel} /></td></tr>
+                    <tr><td colSpan={5} className="linha-expandida"><Faixas perfil={perfil} tabela={sel} /></td></tr>
                   )}
                 </Fragment>
               ))}
@@ -88,6 +90,10 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
   const campos = [
     ['tipo', 'Tipo (código)', 'text'], ['descricao', 'Descrição', 'text'],
     ['qte_pontos', 'Pontos fidelidade', 'number'],
+    // Valor fixo já pago antecipado na entrada (ex.: promoção de evento
+    // vizinho) — ver "Vlr. Antecipado" na Entrada, preenchido sozinho quando
+    // o modelo do veículo usa essa tabela.
+    ['valor_antes', 'Valor antecipado (evento/promoção)', 'number'],
   ];
   return (
     <div className="modal-bg" onClick={onFechar}>
