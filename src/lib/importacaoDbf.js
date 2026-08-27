@@ -198,7 +198,7 @@ export async function importarTabelasPreco({ perfil, tabelas }) {
 
     const { data: nova, error: errTabela } = await supabase.from('tabelas_preco').insert({
       filial_id: perfil.filial_id, tipo: tabela.tipo, descricao: tabela.descricao || tabela.tipo,
-      valor_antes: tabela.valorAntes || 0, qte_pontos: tabela.qtePontos || 0,
+      valor_antes: tabela.valorAntes || 0, valor_servico: tabela.valorServico || 0, qte_pontos: tabela.qtePontos || 0,
     }).select('id').single();
     if (errTabela) { resultado.erros.push({ linha: tabela.tipo, motivo: errTabela.message }); continue; }
 

@@ -232,6 +232,19 @@ export default function BI({ perfil }) {
       servicosDoMovimento = ms || [];
       movsComServico = new Set(servicosDoMovimento.map((r) => r.movimento_id));
     }
+    // Valor FIXO de cada tabela usada como serviço (valor_servico/VALORSERV,
+    // ver Preços) — o que o serviço realmente vale, separado da estadia
+    // (faixas). Serviço "Pede valor" (movimento_servicos.valor preenchido)
+    // já tem seu próprio valor exato, não precisa disso.
+    const { data: tabelasPreco } = await supabase.from('tabelas_preco').select('tipo, valor_servico');
+    const valorServicoPorTipo = Object.fromEntries((tabelasPreco || []).map((t) => [t.tipo, Number(t.valor_servico || 0)]));
+    const porMovimento = {};
+    for (const r of servicosDoMovimento) (porMovimento[r.movimento_id] ||= []).push(r);
+    // Quanto de serviço (fixo) teve em cada movimento — o resto do valor
+    // cobrado é a estadia (faixas), ver totais logo abaixo e packages/tarifacao.
+    function valorServicoDoMovimento(itens) {
+      return itens.reduce((s, i) => s + (i.valor != null ? Number(i.valor) : (valorServicoPorTipo[i.servicos?.tabela_tipo] || 0)), 0);
+    }
     const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao');
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
     // Tabela EFETIVA de cada saída pra mostrar na lista de veículos — nem
@@ -286,11 +299,18 @@ export default function BI({ perfil }) {
       // conferir a conta batendo.
       antecipadoTotal += Number(m.valor_antecipado || 0);
       bonusTotal += Number(m.bonus_fidelidade || 0);
-      if (movsComServico.has(m.id)) valorServicos += Number(m.valor || 0);
+      // Serviço marcado: "valor do serviço" é só a soma dos valores FIXOS
+      // dos serviços (valor_servico/pede-valor) — o resto do valor cobrado é
+      // a estadia (faixas), que entra no Avulso igual qualquer outro carro
+      // (ver packages/tarifacao: valorProporcional = somaFixos + estadia).
+      if (movsComServico.has(m.id)) {
+        const totalServico = valorServicoDoMovimento(porMovimento[m.id] || []);
+        valorServicos += totalServico;
+        valorAvulso += Math.max(0, Number(m.valor || 0) - totalServico);
+      }
       // Avulso: o carro que passa pela balança normal (com convênio ou sem —
       // convênio é só um desconto em cima do avulso, não outra categoria).
-      // Fora daqui: mensalista/pacote/hóspede (0 nesta fase) e serviço (soma
-      // à parte, sempre substitui a tabela do veículo — ver Patio.jsx).
+      // Fora daqui: mensalista/pacote/hóspede (0 nesta fase).
       else if (!MENSALISTA.has(m.tipo_mens)) valorAvulso += Number(m.valor || 0);
       if (m.hr_saida != null && m.hr_entrada != null) {
         const decorrido = horas({
@@ -347,27 +367,16 @@ export default function BI({ perfil }) {
     const descontos = valorConvenioTotal;
 
     // Por tipo de lavagem/serviço: quantidade de vezes usado + valor total.
-    // Serviço "Pede valor" (valor informado ao marcar) usa esse valor exato.
-    // Serviço cobrado pela tabela (valor null) não tem o próprio valor
-    // separado — o motor calcula tudo junto quando há mais de um marcado no
-    // mesmo veículo (ver comSomaServicos em Patio.jsx) — então a parte "de
-    // tabela" do valor do movimento é dividida em partes iguais entre eles.
-    const valorPorMov = Object.fromEntries(movs.map((m) => [m.id, Number(m.valor || 0)]));
-    const porMovimento = {};
-    for (const r of servicosDoMovimento) (porMovimento[r.movimento_id] ||= []).push(r);
+    // Serviço "Pede valor" (valor informado ao marcar) usa esse valor exato;
+    // o cobrado pela tabela usa o valor_servico fixo dela (ver
+    // valorServicoDoMovimento acima) — nunca mais uma fatia igual pra todos.
     const porServico = {};
-    for (const [movId, itens] of Object.entries(porMovimento)) {
-      const comValorItens = itens.filter((i) => i.valor != null);
-      const semValorItens = itens.filter((i) => i.valor == null);
-      const somaComValor = comValorItens.reduce((t, i) => t + Number(i.valor), 0);
-      const fatiaSemValor = semValorItens.length
-        ? Math.max(0, (valorPorMov[movId] || 0) - somaComValor) / semValorItens.length
-        : 0;
+    for (const itens of Object.values(porMovimento)) {
       for (const i of itens) {
         const chave = i.servicos?.descricao || i.servico_id;
         const e = (porServico[chave] ||= { quantidade: 0, valor: 0 });
         e.quantidade++;
-        e.valor += i.valor != null ? Number(i.valor) : fatiaSemValor;
+        e.valor += i.valor != null ? Number(i.valor) : (valorServicoPorTipo[i.servicos?.tabela_tipo] || 0);
       }
     }
 

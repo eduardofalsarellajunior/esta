@@ -160,7 +160,7 @@ export default function ImportarDbf({ perfil }) {
           </p>
           <div className="tabela-scroll">
             <table>
-              <thead><tr><th>Tipo</th><th>Descrição</th><th>Faixas</th><th>Valor antes</th><th>Pontos</th></tr></thead>
+              <thead><tr><th>Tipo</th><th>Descrição</th><th>Faixas</th><th>Valor antes</th><th>Valor serviço</th><th>Pontos</th></tr></thead>
               <tbody>
                 {tabelasDetectadas.tabelas.slice(0, LIMITE_PREVIA).map((t, i) => (
                   <tr key={i}>
@@ -168,11 +168,12 @@ export default function ImportarDbf({ perfil }) {
                     <td>{t.descricao || '—'}</td>
                     <td>{t.faixas.length}</td>
                     <td>{t.valorAntes}</td>
+                    <td>{t.valorServico}</td>
                     <td>{t.qtePontos}</td>
                   </tr>
                 ))}
                 {tabelasDetectadas.tabelas.length === 0 && (
-                  <tr><td colSpan={5} className="suave">Nenhuma tabela com código (TIPO) encontrada.</td></tr>
+                  <tr><td colSpan={6} className="suave">Nenhuma tabela com código (TIPO) encontrada.</td></tr>
                 )}
               </tbody>
             </table>

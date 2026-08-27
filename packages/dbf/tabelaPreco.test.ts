@@ -30,15 +30,16 @@ test('detectarColunasFaixa: CON é opcional', () => {
 });
 
 test('detectarTabelasPreco: monta tabela com faixas, pulando as não usadas (ATE zerado)', () => {
-  const nomes = ['TIPO', 'DESCRICAO', 'VALORANTES', 'QTEPONTOS', 'ATE01', 'HOR01', 'CON01', 'ATE02', 'HOR02', 'CON02'];
+  const nomes = ['TIPO', 'DESCRICAO', 'VALORANTES', 'VALORSERV', 'QTEPONTOS', 'ATE01', 'HOR01', 'CON01', 'ATE02', 'HOR02', 'CON02'];
   const registros = [
-    { TIPO: 'P', DESCRICAO: 'Avulso Pequeno', VALORANTES: 5, QTEPONTOS: 1, ATE01: 1.0, HOR01: 10, CON01: 8, ATE02: 0, HOR02: 0, CON02: 0 },
+    { TIPO: 'P', DESCRICAO: 'Avulso Pequeno', VALORANTES: 5, VALORSERV: 12, QTEPONTOS: 1, ATE01: 1.0, HOR01: 10, CON01: 8, ATE02: 0, HOR02: 0, CON02: 0 },
   ];
   const { tabelas } = detectarTabelasPreco(nomes, registros);
   assert.equal(tabelas.length, 1);
   assert.equal(tabelas[0].tipo, 'P');
   assert.equal(tabelas[0].descricao, 'Avulso Pequeno');
   assert.equal(tabelas[0].valorAntes, 5);
+  assert.equal(tabelas[0].valorServico, 12);
   assert.equal(tabelas[0].qtePontos, 1);
   assert.equal(tabelas[0].faixas.length, 1); // ATE02 zerado -> não vira faixa
   assert.deepEqual(tabelas[0].faixas[0], { ordem: 1, ate: 1.0, valorHora: 10, valorConvenio: 8 });

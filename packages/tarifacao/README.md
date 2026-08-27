@@ -84,22 +84,26 @@ Na coluna `con` (grade de convênio), uma faixa `'valor'` vale `0` sem pedir
 nada — pedir um valor de convênio no meio do fluxo de saída é outra frente,
 fora de escopo por ora.
 
-## Serviços: soma de tabelas
+## Serviços: valor fixo + estadia de uma tabela
 
 Quando `servicosTipos` (lista de códigos de tabela) vem preenchida, o valor
-proporcional vira a **soma** do valor de cada uma dessas tabelas — calculadas
-sobre o mesmo tempo decorrido — em vez do valor da tabela do veículo
-(`tipoVeic`). O resto do pipeline (convênio, selos, vales, piso) segue igual,
-operando sobre esse total somado. Usado quando o operador marca serviços
-(lavagem, polimento etc.) no veículo — cada serviço tem sua própria tabela de
-preço (cadastro "Serviços"), e a saída cobra a soma delas.
+proporcional vira a **soma do `valorServico`** (fixo, legado VALORSERV) de
+cada uma dessas tabelas, **mais a estadia** (faixas) calculada por UMA delas —
+a primeira da lista, tanto faz qual, é a mesma permanência real — em vez do
+valor da tabela do veículo (`tipoVeic`). A estadia NÃO é somada de novo por
+serviço: um carro com 2 serviços marcados paga os dois valores fixos + 1
+estadia, não 2 estadias. O resto do pipeline (convênio, selos, vales, piso)
+segue igual, operando sobre esse total. Usado quando o operador marca
+serviços (lavagem, polimento etc.) no veículo — cada serviço tem sua própria
+tabela de preço (cadastro "Serviços"), e a saída cobra a soma dos fixos + a
+estadia.
 
 ## Cobertura atual (24 testes)
 
 Coberto e testado:
 - Tempo decorrido (`HORAS`), seleção de faixa (até 45).
 - Faixas fixo/hora (`calcularValorFaixas`) — 4 testes com o exemplo acima.
-- Serviços: soma de tabelas (`servicosTipos`).
+- Serviços: valor fixo + estadia de uma tabela (`servicosTipos`).
 - Convênio: tabela alternativa (`TABCONV`), grade própria (`TABHORAS/CON`),
   percentual (`PERCONV`), valor fixo (`VLRCONV`).
 - **Convênio em dois segmentos** (hora de corte `whoraconv`) — `ESTALAN2.PRG:473-534`.

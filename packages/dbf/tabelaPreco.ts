@@ -26,6 +26,7 @@ export type TabelaPrecoDetectada = {
   tipo: string;
   descricao: string;
   valorAntes: number;
+  valorServico: number;
   qtePontos: number;
   faixas: FaixaDetectada[];
 };
@@ -33,6 +34,7 @@ export type TabelaPrecoDetectada = {
 const PALPITES_TIPO = ['TIPO'];
 const PALPITES_DESCRICAO = ['DESCRICAO', 'DESCRI', 'DESCR'];
 const PALPITES_VALOR_ANTES = ['VALORANTES'];
+const PALPITES_VALOR_SERVICO = ['VALORSERV'];
 const PALPITES_QTE_PONTOS = ['QTEPONTOS'];
 
 function acharCampo(nomes: string[], candidatos: string[]): string | null {
@@ -86,6 +88,7 @@ export function detectarTabelasPreco(
   const campoTipo = acharCampo(nomesCampos, PALPITES_TIPO);
   const campoDescricao = acharCampo(nomesCampos, PALPITES_DESCRICAO);
   const campoValorAntes = acharCampo(nomesCampos, PALPITES_VALOR_ANTES);
+  const campoValorServico = acharCampo(nomesCampos, PALPITES_VALOR_SERVICO);
   const campoQtePontos = acharCampo(nomesCampos, PALPITES_QTE_PONTOS);
 
   const tabelas: TabelaPrecoDetectada[] = registros
@@ -105,6 +108,7 @@ export function detectarTabelasPreco(
         tipo: campoTipo ? paraTexto(r[campoTipo]) : '',
         descricao: campoDescricao ? paraTexto(r[campoDescricao]) : '',
         valorAntes: campoValorAntes ? paraNumero(r[campoValorAntes]) : 0,
+        valorServico: campoValorServico ? paraNumero(r[campoValorServico]) : 0,
         qtePontos: campoQtePontos ? paraNumero(r[campoQtePontos]) : 0,
         faixas,
       };

@@ -171,12 +171,12 @@ test('calcularTarifa: faixas normais continuam com pedeValor:false (mudança é 
   assert.equal(t.pedeValor, false);
 });
 
-test('calcularTarifa: pedeValor propaga pela soma de serviços (servicosTipos)', () => {
+test('calcularTarifa: pedeValor propaga da tabela usada pra estadia (1ª de servicosTipos)', () => {
   const V: TabelaPreco = { tipo: 'V', faixas: [f(99999.0, 0, 0, 'valor')] };
   const r = calcularTarifa({
     tabelas: { ...tabelas, V }, tipoVeic: 'G',
     movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 },
-    servicosTipos: ['G', 'V'],
+    servicosTipos: ['V', 'G'], // V é a 1ª — dela vem a estadia (e o pedeValor)
   });
   assert.equal(r.pedeValor, true);
 });
@@ -203,15 +203,19 @@ test('proporcional P: 2h54 = R$10', () => {
   assert.equal(r.valor, 10);
 });
 
-// Serviços (soma de tabelas) --------------------------------------------------
-test('servicosTipos: soma G (R$17) + P (R$10) no lugar da tabela do veículo', () => {
+// Serviços (valor fixo + estadia de uma só tabela) ---------------------------
+test('servicosTipos: soma valorServico de G (R$8) + P (R$12) mais a estadia de G (R$17, 1ª da lista)', () => {
+  const Gcv: TabelaPreco = { ...G, valorServico: 8 };
+  const Pcv: TabelaPreco = { ...P, valorServico: 12 };
   const r = calcularTarifa({
-    tabelas, tipoVeic: 'G', // ignorado — servicosTipos manda
+    tabelas: { G: Gcv, P: Pcv }, tipoVeic: 'G', // ignorado — servicosTipos manda
     movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 12.0 },
     servicosTipos: ['G', 'P'],
   });
-  assert.equal(r.valorProporcional, 27);
-  assert.equal(r.valor, 27);
+  // Fixo: 8 (G) + 12 (P) = 20. Estadia: faixas de G (2h = R$17) só uma vez —
+  // não soma a de P de novo, é a mesma permanência real.
+  assert.equal(r.valorProporcional, 37);
+  assert.equal(r.valor, 37);
   assert.equal(r.manual, false);
   // Pontos são a soma das tabelas dos serviços (G=0 + P=10), não da tabela
   // do veículo (ver teste seguinte pra isolar isso melhor).

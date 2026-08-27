@@ -49,6 +49,12 @@ export interface TabelaPreco {
   tipo: string;
   /** Pontos de fidelidade concedidos (QTEPONTOS). */
   qtePontos?: number;
+  /**
+   * Valor FIXO do serviço (VALORSERV) — só usado quando a tabela entra em
+   * `servicosTipos`: soma direto ao total, separado da estadia (faixas).
+   * Não tem efeito quando a tabela é usada como `tipoVeic` normal.
+   */
+  valorServico?: number;
   /** Faixas de preço (até 45), em ordem crescente de `ate`. */
   faixas: Faixa[];
 }
@@ -89,9 +95,11 @@ export interface EntradaCalculo {
   /**
    * Códigos de tabela dos serviços marcados no veículo (ex.: lavagem,
    * polimento). Quando presente e não vazio, o valor proporcional vira a
-   * SOMA do valor de cada uma dessas tabelas (calculadas sobre o mesmo tempo
-   * decorrido) — substitui o valor da tabela do veículo (`tipoVeic`). O
-   * resto do pipeline (convênio, selos, vales, piso) segue igual.
+   * SOMA do valor FIXO de cada uma dessas tabelas (`valorServico`, legado
+   * VALORSERV) MAIS a estadia (faixas) calculada por UMA delas — a primeira
+   * da lista, tanto faz qual, é a mesma permanência real — em vez de somar a
+   * estadia várias vezes. Substitui o valor da tabela do veículo (`tipoVeic`).
+   * O resto do pipeline (convênio, selos, vales, piso) segue igual.
    */
   servicosTipos?: string[];
   /** Quantidade de selos usados (dok="V" / conv.selos). */
@@ -316,26 +324,26 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     horaConvenio !== movimento.saida;
 
   if (servicosTipos && servicosTipos.length > 0) {
-    // Serviços marcados: soma o valor de cada tabela de serviço (mesmo tempo
-    // decorrido), no lugar da tabela do veículo.
-    let soma = 0;
-    let algumManual = false;
-    let algumPedeValor = false;
+    // Serviços marcados: soma o valor FIXO de cada tabela de serviço
+    // (valorServico/VALORSERV) — a estadia (faixas) entra só UMA vez, pela
+    // primeira tabela da lista (tanto faz qual: é a mesma permanência real,
+    // não uma por serviço — somar as faixas de novo pra cada serviço
+    // cobraria a estadia várias vezes).
+    let somaFixos = 0;
     let pontosServicos = 0;
     for (const tipoServico of servicosTipos) {
       const tblServico = tabelas[tipoServico];
       if (!tblServico) {
         throw new Error(`Tabela de preço não encontrada: "${tipoServico}"`);
       }
-      const r = calcularProporcional(tblServico, movimento);
-      if (r.pedeValor) algumPedeValor = true;
-      else if (r.valor === null) algumManual = true;
-      else soma += r.valor;
+      somaFixos += tblServico.valorServico ?? 0;
       pontosServicos += tblServico.qtePontos ?? 0;
     }
-    valorProporcional = soma;
-    manual = algumManual;
-    pedeValor = algumPedeValor;
+    const tblEstadia = tabelas[servicosTipos[0]];
+    const prop = calcularProporcional(tblEstadia, movimento);
+    valorProporcional = somaFixos + (prop.valor ?? 0);
+    manual = prop.valor === null;
+    pedeValor = !!prop.pedeValor;
     pontos = pontosServicos;
   } else if (doisSegmentos) {
     const tblOrig = tabelas[tipoVeic];
