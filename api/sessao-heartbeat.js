@@ -2,8 +2,9 @@
 // filial (licenciamento do fornecedor, ver
 // supabase/migrations/0032_limite_usuarios_simultaneos.sql). Chamada em loop
 // pelo front (ver src/telas/SessoesGate.jsx): cada chamada é um "heartbeat"
-// que renova a vaga do usuário e, se a filial já está no limite, barra vaga
-// nova sem apagar a de quem já está dentro.
+// que renova a vaga da SESSÃO (ver 0046_sessao_por_dispositivo.sql — um id
+// por aba/dispositivo, não por pessoa) e, se a filial já está no limite,
+// barra vaga nova sem apagar a de quem já está dentro.
 //
 // Mesmo padrão de auth de api/conferir-senha-mes.js. Variáveis de ambiente
 // exigidas:
@@ -18,6 +19,12 @@ export default async function handler(req, res) {
 
   const auth = req.headers.authorization || '';
   if (!auth.startsWith('Bearer ')) { res.status(401).json({ erro: 'Faça login no app.' }); return; }
+
+  // Gerado no navegador (sessionStorage — um por aba/dispositivo, ver
+  // SessoesGate.jsx), não um segredo: só distingue "quantas conexões" de
+  // "quantas pessoas" (ver 0046_sessao_por_dispositivo.sql).
+  const sessaoId = String(req.body?.sessaoId || '').trim();
+  if (!sessaoId) { res.status(400).json({ erro: 'Sessão sem id — recarregue a página.' }); return; }
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
@@ -56,15 +63,16 @@ export default async function handler(req, res) {
     // Sem limite: sempre libera, só mantém o próprio ping em dia (caso um
     // limite seja configurado depois, a contagem já começa correta).
     await admin.from('sessoes_ativas')
-      .upsert({ filial_id: filialId, perfil_id: meuPerfil.id, ultimo_ping: agora }, { onConflict: 'filial_id,perfil_id' });
+      .upsert({ filial_id: filialId, perfil_id: meuPerfil.id, sessao_id: sessaoId, ultimo_ping: agora },
+        { onConflict: 'filial_id,perfil_id,sessao_id' });
     res.status(200).json({ liberado: true });
     return;
   }
 
   const { data: minha } = await admin.from('sessoes_ativas')
-    .select('id').eq('filial_id', filialId).eq('perfil_id', meuPerfil.id).maybeSingle();
+    .select('id').eq('filial_id', filialId).eq('perfil_id', meuPerfil.id).eq('sessao_id', sessaoId).maybeSingle();
   if (minha) {
-    // Já tem vaga própria (outra aba, ou renovando o heartbeat) — nunca barra quem já está dentro.
+    // Já tem vaga própria (renovando o heartbeat desta mesma aba/dispositivo) — nunca barra quem já está dentro.
     await admin.from('sessoes_ativas').update({ ultimo_ping: agora }).eq('id', minha.id);
     res.status(200).json({ liberado: true });
     return;
@@ -77,6 +85,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  await admin.from('sessoes_ativas').insert({ filial_id: filialId, perfil_id: meuPerfil.id, ultimo_ping: agora });
+  await admin.from('sessoes_ativas').insert({ filial_id: filialId, perfil_id: meuPerfil.id, sessao_id: sessaoId, ultimo_ping: agora });
   res.status(200).json({ liberado: true });
 }

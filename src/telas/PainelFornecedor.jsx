@@ -73,7 +73,7 @@ export default function PainelFornecedor() {
             <thead>
               <tr>
                 <th>Filial</th>
-                <th>Usuários logados agora</th>
+                <th>Sessões ativas agora</th>
                 <th>Reconhecimentos de placa</th>
                 <th>Acessos</th>
               </tr>

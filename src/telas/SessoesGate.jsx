@@ -3,6 +3,20 @@ import { supabase } from '../lib/supabase.js';
 
 const INTERVALO_HEARTBEAT_MS = 45_000;
 const INTERVALO_RETRY_BLOQUEADO_MS = 20_000;
+const CHAVE_SESSAO_ID = 'esta_sessao_id';
+
+/**
+ * Id desta aba/dispositivo (não desta pessoa) — cada aba nova gera o seu,
+ * sessionStorage não é compartilhado entre abas. É o que faz 2 conexões do
+ * mesmo login contarem como 2 no limite de usuários simultâneos e no Painel
+ * de Uso (ver 0046_sessao_por_dispositivo.sql), em vez de uma só vaga
+ * reaproveitada por qualquer dispositivo que use o mesmo login.
+ */
+function sessaoId() {
+  let id = sessionStorage.getItem(CHAVE_SESSAO_ID);
+  if (!id) { id = crypto.randomUUID(); sessionStorage.setItem(CHAVE_SESSAO_ID, id); }
+  return id;
+}
 
 /**
  * Trava o login quando a filial já está no limite de usuários simultâneos
@@ -24,7 +38,8 @@ export default function SessoesGate({ children }) {
     try {
       const resp = await fetch('/api/sessao-heartbeat', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${sessaoAuth.session.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessaoAuth.session.access_token}` },
+        body: JSON.stringify({ sessaoId: sessaoId() }),
       });
       const dados = await resp.json().catch(() => ({}));
       if (!resp.ok || !dados.liberado) {
