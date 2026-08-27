@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { obterTema, aplicarTema } from '../lib/tema.js';
 import { imprimePedidosDaCabine, definirImprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
-import { ehFornecedor } from '../lib/acesso.js';
+import { ehFornecedor, ehSupervisor } from '../lib/acesso.js';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
 // Dados do estacionamento (nome/endereço/CNPJ/fiscal). Só o fornecedor altera:
@@ -15,7 +15,11 @@ export default function Configuracoes({ perfil }) {
   const [salvo, setSalvo] = useState(false);
   const [tema, setTema] = useState(obterTema());
   const [imprimeCabine, setImprimeCabine] = useState(imprimePedidosDaCabine());
+  const [previaLimpeza, setPreviaLimpeza] = useState(null);
+  const [limpando, setLimpando] = useState(false);
+  const [erroLimpeza, setErroLimpeza] = useState('');
   const podeEditar = ehFornecedor(perfil);
+  const podeLimpar = ehSupervisor(perfil);
 
   function mudarTema(novoTema) {
     aplicarTema(novoTema);
@@ -39,6 +43,7 @@ export default function Configuracoes({ perfil }) {
     const { error } = await supabase.from('filiais').update({
       numero_cliente: filial.numero_cliente || null,
       limite_usuarios_simultaneos: filial.limite_usuarios_simultaneos || null,
+      dias_guarda_lancamentos: filial.dias_guarda_lancamentos || null,
       nome_fantasia: filial.nome_fantasia || null,
       endereco: filial.endereco || null,
       numero: filial.numero || null,
@@ -53,6 +58,32 @@ export default function Configuracoes({ perfil }) {
       config: filial.config || {},
     }).eq('id', filial.id);
     if (error) setErro(error.message); else setSalvo(true);
+  }
+
+  /**
+   * Exclusão definitiva de movimentos encerrados há mais dias do que
+   * `dias_guarda_lancamentos` (ver 0047_limpeza_lancamentos_antigos.sql) —
+   * RPS/DPS ainda sem número de NFS-e (não finalizado com a prefeitura)
+   * nunca entra, mesmo vencido. Prévia primeiro, sempre: nada some sem o
+   * supervisor ver antes quantos registros seriam afetados.
+   */
+  async function verificarLimpeza() {
+    setErroLimpeza(''); setPreviaLimpeza(null);
+    const { data, error } = await supabase.rpc('contar_lancamentos_antigos').single();
+    if (error) { setErroLimpeza(error.message); return; }
+    setPreviaLimpeza(data);
+  }
+
+  async function confirmarLimpeza() {
+    if (!window.confirm(
+      `Excluir definitivamente ${previaLimpeza.elegiveis} movimento(s)? Não tem como desfazer.`
+    )) return;
+    setLimpando(true); setErroLimpeza('');
+    const { data, error } = await supabase.rpc('limpar_lancamentos_antigos');
+    setLimpando(false);
+    if (error) { setErroLimpeza(error.message); return; }
+    setPreviaLimpeza(null);
+    window.alert(`${data} movimento(s) excluído(s).`);
   }
 
   function setPatio(campo, valor) {
@@ -120,6 +151,15 @@ export default function Configuracoes({ perfil }) {
                   <input type="number" min="1" value={filial.limite_usuarios_simultaneos || ''} disabled={!podeEditar}
                     onChange={(e) => setFilial({ ...filial, limite_usuarios_simultaneos: e.target.value ? Number(e.target.value) : null })} />
                   <span className="suave" style={{ fontSize: 11 }}>Em branco = sem limite. Login extra fica bloqueado até alguém sair.</span>
+                </div>
+                <div className="campo" style={{ maxWidth: 220 }}>
+                  <label>Guardar lançamentos por (dias)</label>
+                  <input type="number" min="1" value={filial.dias_guarda_lancamentos || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, dias_guarda_lancamentos: e.target.value ? Number(e.target.value) : null })} />
+                  <span className="suave" style={{ fontSize: 11 }}>
+                    Em branco = limpeza desligada. O supervisor exclui em "Limpeza de lançamentos
+                    antigos" abaixo — RPS/DPS ainda sem NFS-e nunca é excluído.
+                  </span>
                 </div>
               </div>
               <div className="campo" style={{ marginBottom: 10, maxWidth: 420 }}>
@@ -207,6 +247,47 @@ export default function Configuracoes({ perfil }) {
           </>
         )}
       </div>
+
+      {podeLimpar && (
+        <div className="card">
+          <h2>Limpeza de lançamentos antigos</h2>
+          <p className="suave">
+            Exclui definitivamente (sem recuperação) movimentos do pátio já encerrados
+            há mais dias do que o configurado ao lado — junto com pagamentos, serviços
+            e a nota fiscal (RPS/DPS) ligados a eles. RPS/DPS gerado mas ainda sem
+            número de NFS-e (não finalizado com a prefeitura) nunca é excluído, mesmo
+            vencido.
+          </p>
+          {erroLimpeza && <div className="aviso">{erroLimpeza}</div>}
+          {!filial ? 'Carregando…' : !filial.dias_guarda_lancamentos ? (
+            <p className="suave">
+              Dias de guarda não configurado — peça pro suporte definir em "Dados do
+              estacionamento" (só o fornecedor mexe nisso).
+            </p>
+          ) : (
+            <>
+              <button className="btn-ghost" onClick={verificarLimpeza}>Verificar o que seria excluído</button>
+              {previaLimpeza && (
+                <p className="suave" style={{ marginTop: 10 }}>
+                  <strong>{previaLimpeza.elegiveis}</strong> movimento(s) anterior(es) a{' '}
+                  {previaLimpeza.dias} dias
+                  {previaLimpeza.notas_junto > 0 && <>, incluindo <strong>{previaLimpeza.notas_junto}</strong> nota(s) fiscal(is) já finalizada(s)</>}.
+                  {previaLimpeza.protegidos > 0 && (
+                    <> {previaLimpeza.protegidos} ficam de fora por ainda terem RPS/DPS sem número de NFS-e.</>
+                  )}
+                  {previaLimpeza.elegiveis > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <button className="btn-primary aviso-btn" onClick={confirmarLimpeza} disabled={limpando}>
+                        {limpando ? 'Excluindo…' : 'Excluir definitivamente'}
+                      </button>
+                    </div>
+                  )}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <h2>Fiscal (NFS-e)</h2>

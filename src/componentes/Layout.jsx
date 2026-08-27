@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { PAPEIS, podeAcessar, ehFornecedor } from '../lib/acesso.js';
+import { PAPEIS, podeAcessar, ehFornecedor, ehSupervisor } from '../lib/acesso.js';
 import { trocarFilialAtiva } from '../telas/EscolherFilial.jsx';
 import { imprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
 import { imprimirTicket } from './Ticket.jsx';
@@ -50,7 +50,20 @@ export default function Layout({ perfil }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [nomeFilial, setNomeFilial] = useState('');
   const [filiais, setFiliais] = useState([]); // só o fornecedor tem mais de uma
+  const [avisoLimpeza, setAvisoLimpeza] = useState(null); // {elegiveis} ou null
   const location = useLocation();
+
+  // Avisa a cada login (só quem pode agir: supervisor/fornecedor) que tem
+  // lançamento antigo esperando exclusão — ver Configurações → Limpeza de
+  // lançamentos antigos e 0047_limpeza_lancamentos_antigos.sql. Uma vez por
+  // carregamento do app é suficiente, não precisa repetir em loop.
+  useEffect(() => {
+    if (!ehSupervisor(perfil)) return;
+    supabase.rpc('contar_lancamentos_antigos').single()
+      .then(({ data }) => { if (data?.elegiveis > 0) setAvisoLimpeza(data); })
+      .catch(() => {});
+    // eslint-disable-next-line
+  }, []);
 
   useEffect(() => {
     // Fornecedor enxerga todas as filiais (é o que alimenta o seletor); os
@@ -166,6 +179,15 @@ export default function Layout({ perfil }) {
           </div>
           <button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button>
         </header>
+        {avisoLimpeza && (
+          <div className="aviso" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 10px' }}>
+            <span>
+              {avisoLimpeza.elegiveis} lançamento(s) antigo(s) já podem ser excluídos —{' '}
+              <NavLink to="/configuracoes">ver em Configurações</NavLink>.
+            </span>
+            <button className="btn-ghost" onClick={() => setAvisoLimpeza(null)} aria-label="Dispensar aviso">✕</button>
+          </div>
+        )}
         <div className="container">
           <Outlet />
         </div>
