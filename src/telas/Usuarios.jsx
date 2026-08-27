@@ -57,14 +57,18 @@ export default function Usuarios({ perfil }) {
       return;
     }
 
-    // E-mail só é gravável na criação — depois de criado o login, o campo é
-    // só histórico/exibição e não muda mais por aqui (ver nota no campo:
-    // trocar o e-mail de login de verdade mexe direto no Supabase Auth, não
-    // só em perfis, e já causou confusão de "troquei mas não mudou nada").
+    // E-mail só é gravável na criação (ou pra preencher um que nunca foi
+    // definido) — uma vez preenchido, o campo é só histórico/exibição e não
+    // muda mais por aqui (ver nota no campo: trocar o e-mail de login de
+    // verdade mexe direto no Supabase Auth, não só em perfis, e já causou
+    // confusão de "troquei mas não mudou nada"). Mesma condição do `disabled`
+    // do campo (ver UsuarioModal): o que já veio preenchido do banco não
+    // grava de novo por aqui.
+    const emailOriginal = u.id ? lista.find((x) => x.id === u.id)?.email : null;
     const payload = {
       filial_id: perfil.filial_id, nome: u.nome, papel: u.papel || 'operador',
       ativo: u.ativo ?? true,
-      ...(u.id ? {} : { email: u.email || null }),
+      ...(emailOriginal ? {} : { email: u.email || null }),
     };
     const res = u.id
       ? await supabase.from('perfis').update(payload).eq('id', u.id)
@@ -246,16 +250,21 @@ function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, dominioEmail, on
             </div>
           ) : (
             <div className="campo" style={{ marginBottom: 10 }}>
-              <label>E-mail {criandoLogin ? '*' : '(login — não muda por aqui)'}</label>
+              {/* Trava só depois de preenchido — o campo já teve confusão de
+                  quem achava que editar aqui trocava o login de verdade (ver
+                  auth.users). Em branco continua editável, pra dar pra
+                  preencher a referência de quem nunca teve (perfis antigos,
+                  de antes desse campo existir). */}
+              <label>E-mail {criandoLogin ? '*' : (u.id && u.email ? '(login — não muda por aqui)' : '(só referência)')}</label>
               <input type="email" value={u.email || ''} onChange={(e) => set('email', e.target.value)}
-                required={criandoLogin} disabled={!!u.id} />
+                required={criandoLogin} disabled={!!u.id && !!inicial.email} />
               {criandoLogin && (
                 <span className="suave" style={{ fontSize: 11 }}>
                   É com esse e-mail que a pessoa vai entrar. Cadastre o nome fantasia da filial em
                   Configurações pra esse campo virar só "usuário" com o domínio preenchido sozinho.
                 </span>
               )}
-              {!!u.id && (
+              {!!u.id && !!inicial.email && (
                 <span className="suave" style={{ fontSize: 11 }}>
                   Pra trocar o e-mail de login de verdade, peça pro suporte — mexe direto na
                   autenticação, não só no cadastro.
