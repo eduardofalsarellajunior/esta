@@ -461,7 +461,7 @@ export default function Patio({ perfil }) {
         ? reservaParaChegadaRef.current?.valor_antecipado || 0 : 0) || null,
       // Dívida trazida de uma saída anterior (ver detectar()) — cobrada
       // junto com esta estadia na saída (dividaAnterior em calcularResultadoSaida).
-      valor_dev: dividaDetectadaRef.current || null,
+      valor_dev: dividaDetectadaRef.current || 0,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
     // Serviços marcados antes de dar entrada (ver alternarServicoEntrada) —
