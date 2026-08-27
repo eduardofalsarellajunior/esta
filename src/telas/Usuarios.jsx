@@ -57,9 +57,14 @@ export default function Usuarios({ perfil }) {
       return;
     }
 
+    // E-mail só é gravável na criação — depois de criado o login, o campo é
+    // só histórico/exibição e não muda mais por aqui (ver nota no campo:
+    // trocar o e-mail de login de verdade mexe direto no Supabase Auth, não
+    // só em perfis, e já causou confusão de "troquei mas não mudou nada").
     const payload = {
       filial_id: perfil.filial_id, nome: u.nome, papel: u.papel || 'operador',
-      email: u.email || null, ativo: u.ativo ?? true,
+      ativo: u.ativo ?? true,
+      ...(u.id ? {} : { email: u.email || null }),
     };
     const res = u.id
       ? await supabase.from('perfis').update(payload).eq('id', u.id)
@@ -241,13 +246,19 @@ function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, dominioEmail, on
             </div>
           ) : (
             <div className="campo" style={{ marginBottom: 10 }}>
-              <label>E-mail {criandoLogin ? '*' : '(só referência)'}</label>
+              <label>E-mail {criandoLogin ? '*' : '(login — não muda por aqui)'}</label>
               <input type="email" value={u.email || ''} onChange={(e) => set('email', e.target.value)}
-                required={criandoLogin} />
+                required={criandoLogin} disabled={!!u.id} />
               {criandoLogin && (
                 <span className="suave" style={{ fontSize: 11 }}>
                   É com esse e-mail que a pessoa vai entrar. Cadastre o nome fantasia da filial em
                   Configurações pra esse campo virar só "usuário" com o domínio preenchido sozinho.
+                </span>
+              )}
+              {!!u.id && (
+                <span className="suave" style={{ fontSize: 11 }}>
+                  Pra trocar o e-mail de login de verdade, peça pro suporte — mexe direto na
+                  autenticação, não só no cadastro.
                 </span>
               )}
             </div>
