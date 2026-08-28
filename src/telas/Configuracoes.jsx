@@ -52,6 +52,7 @@ export default function Configuracoes({ perfil }) {
       uf: filial.uf || null,
       cep: filial.cep || null,
       cnpj: filial.cnpj || null,
+      razao_social: filial.razao_social || null,
       inscricao_mun: filial.inscricao_mun || null,
       inscricao_est: filial.inscricao_est || null,
       cod_ibge: filial.cod_ibge || null,
@@ -162,10 +163,26 @@ export default function Configuracoes({ perfil }) {
                   </span>
                 </div>
               </div>
-              <div className="campo" style={{ marginBottom: 10, maxWidth: 420 }}>
-                <label>Nome</label>
-                <input value={filial.nome_fantasia || ''} disabled={!podeEditar}
-                  onChange={(e) => setFilial({ ...filial, nome_fantasia: e.target.value })} />
+              <div className="linha-form" style={{ marginBottom: 10 }}>
+                <div className="campo" style={{ flex: 1, maxWidth: 420 }}>
+                  <label>Nome</label>
+                  <input value={filial.nome_fantasia || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, nome_fantasia: e.target.value })} />
+                  <span className="suave" style={{ fontSize: 11 }}>
+                    Aparece no cabeçalho do ticket, BI e menu. Se ficar grande demais na
+                    impressora de 58mm, encurte aqui ou tire o destaque grande do @ER@ em
+                    Modelos de ticket.
+                  </span>
+                </div>
+                <div className="campo" style={{ flex: 1, maxWidth: 420 }}>
+                  <label>Razão social</label>
+                  <input value={filial.razao_social || ''} disabled={!podeEditar}
+                    onChange={(e) => setFilial({ ...filial, razao_social: e.target.value })} />
+                  <span className="suave" style={{ fontSize: 11 }}>
+                    Só usada no RPS/DPS (nome do prestador na nota fiscal) — não aparece no
+                    ticket nem no menu.
+                  </span>
+                </div>
               </div>
               <div className="linha-form" style={{ marginBottom: 10 }}>
                 <div className="campo" style={{ flex: 2 }}>
