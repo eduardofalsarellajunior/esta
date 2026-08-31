@@ -78,7 +78,14 @@ function imprimirJanela(titulo, cabecalho, corpo, aoTerminar) {
       ${corpo}
     </body></html>`;
   const win = window.open('', '_blank', 'width=380,height=600');
-  if (!win) { window.alert('Permita pop-ups para imprimir o ticket.'); return; }
+  if (!win) {
+    window.alert(
+      'O navegador bloqueou a janela de impressão. Clique no ícone de pop-up '
+      + 'bloqueado na barra de endereço e escolha "Sempre permitir" para este '
+      + 'site — na cabine (pdv-cabine.bat/pdv-cabine-edge.bat) isso já vem liberado.'
+    );
+    return;
+  }
   win.document.write(html);
   win.document.close();
   win.onafterprint = () => { win.close(); aoTerminar?.(); };
