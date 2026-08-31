@@ -21,6 +21,22 @@ chrome.exe --app=<url> --kiosk-printing --user-data-dir=%LOCALAPPDATA%\esta-pdv
 Rodar sem argumento abre a produção; passando uma URL (`pdv-cabine.bat
 http://localhost:5174`) dá pra testar o mesmo comportamento no dev.
 
+## Chrome pedindo login (tela de escolher conta) — use o Edge
+
+Em máquina de cliente, às vezes o Chrome já instalado tem alguma política
+corporativa de login obrigatório (`BrowserSignin` forçado — comum em máquina
+que veio com Chrome de uma instalação/gerenciamento anterior). Isso trava até
+um perfil novo (`--user-data-dir`, o que o `.bat` usa) na tela de escolher
+conta assim que abre — o `--no-first-run` não sobrepõe essa política, e o
+modo kiosk não funciona (a janela que abre é a de login, não o app).
+
+Solução: [`scripts/pdv-cabine-edge.bat`](../scripts/pdv-cabine-edge.bat) é o
+mesmo script, mas abre o **Microsoft Edge** em vez do Chrome — é Chromium por
+baixo, aceita as mesmas flags de linha de comando, e por ser outro executável
+não cai na mesma política do Chrome daquela máquina. Todo o resto deste
+documento (checklist, impressora padrão, impressão puxando do celular) vale
+igual pro Edge.
+
 ## Por que não dá pra ligar/desligar pelo app
 
 `--kiosk-printing` é lida **na subida do processo do Chrome** e vale enquanto
