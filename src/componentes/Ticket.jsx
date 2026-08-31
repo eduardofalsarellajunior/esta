@@ -46,6 +46,9 @@ function modeloParaHtml(modelo, dados) {
 // específica. Teste do Eduardo, ver conversa de 2026-08-31.
 const TOKEN_CORTE = /@b@/i;
 
+// Respiro entre escrever o documento e mandar imprimir (ver imprimirEmSequencia).
+const ESPERA_ENTRE_PRINTS_MS = 400;
+
 const ESTILO_TICKET = `
       /* Bobina de 58mm (a impressora de hoje) — ajustar aqui se algum outro
          cliente tiver bobina de outra largura (80mm é o outro padrão comum).
@@ -104,12 +107,13 @@ function imprimirEmSequencia(titulo, cabecalho, corpos) {
     win.document.write(html);
     win.document.close();
     win.onafterprint = () => imprimirPedaco(i + 1);
-    // Espera o "load" do documento recém-escrito antes de chamar print() —
-    // sem isso, a partir do 2º pedaço (janela que já tinha conteúdo antes)
-    // o print() ficava silencioso, sem abrir diálogo nenhum (só funcionava
-    // clicando em Imprimir manualmente). No 1º pedaço (janela ainda em
-    // branco) o load é praticamente imediato, então não muda nada ali.
-    win.onload = () => { win.focus(); win.print(); };
+    // Por que setTimeout e não o evento "load": document.close() pode
+    // disparar o load de forma SÍNCRONA, antes desta linha — um win.onload
+    // atribuído aqui nunca chegaria a rodar (era o bug: a 2ª parte aparecia
+    // na tela mas o diálogo nunca abria). O respiro também dá tempo do
+    // navegador encerrar o print anterior: print() chamado colado no
+    // afterprint do anterior é ignorado em silêncio.
+    setTimeout(() => { win.focus(); win.print(); }, ESPERA_ENTRE_PRINTS_MS);
   }
   imprimirPedaco(0);
 }
