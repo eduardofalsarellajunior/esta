@@ -193,9 +193,15 @@ export function gzipBase64(texto) {
 // endpoint nacional compartilhado (sefin.nfse.gov.br) ainda não têm URL
 // confirmada pra Campinas — api/gerar-nfse.js bloqueia esses dois padrões
 // antes de chegar aqui (ver `padrao` em filial.config.nfse).
+//
+// "notafiscal-ws" (era "notafiscal-adn-ws"): trecho da URL trocado pra
+// conformidade com o layout nacional (aviso oficial recebido em 2026-08-31).
+// Homologação ainda redireciona da URL antiga pra não quebrar quem estava
+// configurado nela, mas produção pode não ter esse redirect — por isso as
+// duas já saem atualizadas aqui.
 const URL_POR_AMBIENTE = {
-  homologacao: 'https://preprod-nfse.ima.sp.gov.br/notafiscal-adn-ws/api/adn/dps',
-  producao: 'https://novanfse.campinas.sp.gov.br/notafiscal-adn-ws/api/adn/dps',
+  homologacao: 'https://preprod-nfse.ima.sp.gov.br/notafiscal-ws/api/adn/dps',
+  producao: 'https://novanfse.campinas.sp.gov.br/notafiscal-ws/api/adn/dps',
 };
 
 /**
