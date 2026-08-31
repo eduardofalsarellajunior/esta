@@ -36,23 +36,17 @@ function modeloParaHtml(modelo, dados) {
     .join('');
 }
 
-// Impressão numa janela dedicada (não no modal): evita a duplicação de página que
-// ocorre ao imprimir conteúdo dentro de um overlay position:fixed.
-export function imprimirTicket(ticket, filial) {
-  // Com modelo, o cabeçalho do estabelecimento já faz parte do texto (tokens
-  // @ER@/@EE@/…) — não repetir aqui.
-  const usaModelo = !!ticket.modelo;
-  const cabecalho = !usaModelo && filial && (filial.nome_fantasia || filial.endereco || filial.cnpj) ? `
-    ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
-    ${filial.endereco ? `<div class="linha-end">${escapeHtml(filial.endereco)}</div>` : ''}
-    ${filial.cnpj ? `<div class="linha-end">CNPJ: ${escapeHtml(filial.cnpj)}</div>` : ''}
-    <hr>` : '';
-  const corpo = usaModelo
-    ? modeloParaHtml(ticket.modelo, ticket.dados)
-    : `<h2>${escapeHtml(ticket.titulo)}</h2>`
-      + ticket.linhas.map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(ticket.titulo)}</title>
-    <style>
+// Token @B@ dentro do MODELO (não é um token de dado — some sozinho em
+// qualquer outro destino, ver valorDoToken em modeloTicket.js): em vez de
+// virar comando de corte (só daria pra mandar via Bluetooth/ESC-POS, ver
+// escpos.js), corta o TICKET em pedaços e imprime cada um como um print()
+// separado — em impressora com guilhotina automática (corta sozinha ao
+// terminar cada trabalho de impressão), o efeito na prática é o mesmo corte
+// no meio do ticket, sem precisar saber o código de corte daquela impressora
+// específica. Teste do Eduardo, ver conversa de 2026-08-31.
+const TOKEN_CORTE = /@b@/i;
+
+const ESTILO_TICKET = `
       /* Bobina de 58mm (a impressora de hoje) — ajustar aqui se algum outro
          cliente tiver bobina de outra largura (80mm é o outro padrão comum).
          "auto" na altura é o que evita a impressora saltar um monte de linha
@@ -73,7 +67,13 @@ export function imprimirTicket(ticket, filial) {
       .t-negrito { font-weight: 700; }
       .t-italico { font-style: italic; }
       .t-sublinhado { text-decoration: underline; }
-    </style></head><body>
+`;
+
+// Abre uma janela, imprime UM pedaço e chama `aoTerminar` quando fecha —
+// quem encadeia os pedaços é imprimirTicket, abaixo.
+function imprimirJanela(titulo, cabecalho, corpo, aoTerminar) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(titulo)}</title>
+    <style>${ESTILO_TICKET}</style></head><body>
       ${cabecalho}
       ${corpo}
     </body></html>`;
@@ -81,9 +81,41 @@ export function imprimirTicket(ticket, filial) {
   if (!win) { window.alert('Permita pop-ups para imprimir o ticket.'); return; }
   win.document.write(html);
   win.document.close();
-  win.onafterprint = () => win.close();
+  win.onafterprint = () => { win.close(); aoTerminar?.(); };
   win.focus();
   win.print();
+}
+
+// Impressão numa janela dedicada (não no modal): evita a duplicação de página que
+// ocorre ao imprimir conteúdo dentro de um overlay position:fixed.
+export function imprimirTicket(ticket, filial) {
+  // Com modelo, o cabeçalho do estabelecimento já faz parte do texto (tokens
+  // @ER@/@EE@/…) — não repetir aqui.
+  const usaModelo = !!ticket.modelo;
+  const cabecalho = !usaModelo && filial && (filial.nome_fantasia || filial.endereco || filial.cnpj) ? `
+    ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
+    ${filial.endereco ? `<div class="linha-end">${escapeHtml(filial.endereco)}</div>` : ''}
+    ${filial.cnpj ? `<div class="linha-end">CNPJ: ${escapeHtml(filial.cnpj)}</div>` : ''}
+    <hr>` : '';
+
+  if (usaModelo && TOKEN_CORTE.test(ticket.modelo)) {
+    // Cada pedaço é renderizado do zero (renderizarModelo/modeloParaHtml) —
+    // um @PG+@ aberto antes do @B@ sem o @PG-@ correspondente não vaza pro
+    // pedaço seguinte, já que cada print() é um documento HTML novo.
+    const pedacos = ticket.modelo.split(TOKEN_CORTE).map((m) => m.trim()).filter(Boolean);
+    const imprimirPedaco = (i) => {
+      if (i >= pedacos.length) return;
+      imprimirJanela(ticket.titulo, '', modeloParaHtml(pedacos[i], ticket.dados), () => imprimirPedaco(i + 1));
+    };
+    imprimirPedaco(0);
+    return;
+  }
+
+  const corpo = usaModelo
+    ? modeloParaHtml(ticket.modelo, ticket.dados)
+    : `<h2>${escapeHtml(ticket.titulo)}</h2>`
+      + ticket.linhas.map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
+  imprimirJanela(ticket.titulo, cabecalho, corpo);
 }
 
 export function linkWhatsApp(ticket, celular, filial) {
