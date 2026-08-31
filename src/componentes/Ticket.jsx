@@ -104,8 +104,12 @@ function imprimirEmSequencia(titulo, cabecalho, corpos) {
     win.document.write(html);
     win.document.close();
     win.onafterprint = () => imprimirPedaco(i + 1);
-    win.focus();
-    win.print();
+    // Espera o "load" do documento recém-escrito antes de chamar print() —
+    // sem isso, a partir do 2º pedaço (janela que já tinha conteúdo antes)
+    // o print() ficava silencioso, sem abrir diálogo nenhum (só funcionava
+    // clicando em Imprimir manualmente). No 1º pedaço (janela ainda em
+    // branco) o load é praticamente imediato, então não muda nada ali.
+    win.onload = () => { win.focus(); win.print(); };
   }
   imprimirPedaco(0);
 }
