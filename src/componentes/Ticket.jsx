@@ -69,14 +69,18 @@ const ESTILO_TICKET = `
       .t-sublinhado { text-decoration: underline; }
 `;
 
-// Abre uma janela, imprime UM pedaço e chama `aoTerminar` quando fecha —
-// quem encadeia os pedaços é imprimirTicket, abaixo.
-function imprimirJanela(titulo, cabecalho, corpo, aoTerminar) {
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(titulo)}</title>
-    <style>${ESTILO_TICKET}</style></head><body>
-      ${cabecalho}
-      ${corpo}
-    </body></html>`;
+/**
+ * Abre UMA janela e imprime `corpos` em sequência — um `print()` por vez, só
+ * avança pro próximo depois do `afterprint` do anterior. Importante ser a
+ * MESMA janela sempre: abrir uma janela nova a cada pedaço (como era antes)
+ * esbarra no bloqueio de pop-up mesmo com o site liberado nas configurações
+ * do navegador — `window.open()` chamado de dentro de um callback
+ * assíncrono (`afterprint`) não conta como gesto direto do usuário pra
+ * boa parte dos navegadores, então só o PRIMEIRO print (o clique real do
+ * operador) abre janela sem drama; os demais pedaços reaproveitam essa
+ * mesma janela já aberta, sem precisar de outro `window.open()`.
+ */
+function imprimirEmSequencia(titulo, cabecalho, corpos) {
   const win = window.open('', '_blank', 'width=380,height=600');
   if (!win) {
     window.alert(
@@ -86,11 +90,24 @@ function imprimirJanela(titulo, cabecalho, corpo, aoTerminar) {
     );
     return;
   }
-  win.document.write(html);
-  win.document.close();
-  win.onafterprint = () => { win.close(); aoTerminar?.(); };
-  win.focus();
-  win.print();
+  function imprimirPedaco(i) {
+    if (i >= corpos.length) { win.close(); return; }
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(titulo)}</title>
+      <style>${ESTILO_TICKET}</style></head><body>
+        ${cabecalho}
+        ${corpos[i]}
+      </body></html>`;
+    // document.open()/write()/close() de novo NA MESMA janela — troca o
+    // conteúdo sem abrir outra (ver comentário acima). onafterprint precisa
+    // ser reatribuído a cada troca de documento.
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.onafterprint = () => imprimirPedaco(i + 1);
+    win.focus();
+    win.print();
+  }
+  imprimirPedaco(0);
 }
 
 // Impressão numa janela dedicada (não no modal): evita a duplicação de página que
@@ -110,11 +127,7 @@ export function imprimirTicket(ticket, filial) {
     // um @PG+@ aberto antes do @B@ sem o @PG-@ correspondente não vaza pro
     // pedaço seguinte, já que cada print() é um documento HTML novo.
     const pedacos = ticket.modelo.split(TOKEN_CORTE).map((m) => m.trim()).filter(Boolean);
-    const imprimirPedaco = (i) => {
-      if (i >= pedacos.length) return;
-      imprimirJanela(ticket.titulo, '', modeloParaHtml(pedacos[i], ticket.dados), () => imprimirPedaco(i + 1));
-    };
-    imprimirPedaco(0);
+    imprimirEmSequencia(ticket.titulo, '', pedacos.map((p) => modeloParaHtml(p, ticket.dados)));
     return;
   }
 
@@ -122,7 +135,7 @@ export function imprimirTicket(ticket, filial) {
     ? modeloParaHtml(ticket.modelo, ticket.dados)
     : `<h2>${escapeHtml(ticket.titulo)}</h2>`
       + ticket.linhas.map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
-  imprimirJanela(ticket.titulo, cabecalho, corpo);
+  imprimirEmSequencia(ticket.titulo, cabecalho, [corpo]);
 }
 
 export function linkWhatsApp(ticket, celular, filial) {
