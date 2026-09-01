@@ -438,6 +438,21 @@ test('corte de convênio: minuto seguinte vira a hora certo (13.59 -> 14.00)', (
   assert.equal(r.segmentos?.[1]?.valor, 5);
 });
 
+test('corte de convênio: saiu do convênio no minuto da saída -> sem 2º período', () => {
+  // A saída sugere a hora de AGORA no campo; se o operador aceitar, o 2º
+  // período começaria DEPOIS da saída (13.30 + 1 min = 13.31 > 13.30). Sem a
+  // guarda, esse trecho de duração negativa ainda cairia na 1ª faixa e
+  // cobraria uma estadia que não existiu.
+  const r = calcularTarifa({
+    tabelas, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 13.3 },
+    convenio: { codigo: 'CABELO', perConv: 100, tabPreco: 'P' },
+    horaConvenio: 13.29, // um minuto antes da saída: 2º período começaria em 13.30
+  });
+  assert.equal(r.segmentos?.[1]?.valor, 0);
+  assert.equal(r.valor, 0); // convênio de 100% cobre tudo, nada sobra pro cliente
+});
+
 test('corte de convênio: valor fixo não pode bancar mais que o próprio trecho', () => {
   // Convênio paga R$ 50 fixos, mas o trecho dele só custou R$ 17 — o troco
   // não pode virar desconto no passeio que o cliente fez depois.

@@ -931,7 +931,8 @@ export default function Patio({ perfil }) {
     try {
       const servicosSelecionados = await buscarServicosDoMovimento(mov.id);
       const convenioCodigo = mov.convenio_codigo || '';
-      const resultado = calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados);
+      const horaConvenio = horaConvenioSugerida(convenioCodigo);
+      const resultado = calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados, 0, horaConvenio);
       const formaPadrao = formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
       const pagamentos = [{ forma: formaPadrao, valor: resultado.valor }];
 
@@ -947,7 +948,7 @@ export default function Patio({ perfil }) {
         return;
       }
 
-      setSaindo({ mov, convenioCodigo, servicosSelecionados, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos });
+      setSaindo({ mov, convenioCodigo, horaConvenio, servicosSelecionados, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos });
       abrirValorObrigatorioSePreciso(resultado);
       const bonus = await avaliarBonus(resultado, mov.placa);
       if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); }
@@ -957,18 +958,31 @@ export default function Patio({ perfil }) {
   function mudarConvenioSaida(codigo) {
     if (!saindo) return;
     try {
-      // Trocar de convênio zera a hora de corte: ela é do convênio anterior
-      // (e o novo pode nem pedir hora).
-      const resultado = calcularResultadoSaida(saindo.mov, codigo, saindo.servicosSelecionados);
+      // Trocar de convênio refaz a hora de corte: a anterior era do convênio
+      // antigo (e o novo pode nem pedir hora).
+      const horaConvenio = horaConvenioSugerida(codigo);
+      const resultado = calcularResultadoSaida(saindo.mov, codigo, saindo.servicosSelecionados, 0, horaConvenio);
       const formaAtual = saindo.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
       // Convênio pode trocar a tabela (Tabela alt.), o que muda os pontos —
       // reavalia o bônus do zero, descarta o que tinha sido aplicado antes.
-      setSaindo({ ...saindo, convenioCodigo: codigo, horaConvenio: '', resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
+      setSaindo({ ...saindo, convenioCodigo: codigo, horaConvenio, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
       abrirValorObrigatorioSePreciso(resultado);
       avaliarBonus(resultado, saindo.mov.placa).then((bonus) => {
         if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); }
       });
     } catch (e) { setErro(e.message); }
+  }
+
+  /**
+   * Hora de corte já sugerida ao abrir a saída: a de AGORA, que é o caso mais
+   * comum (o cliente saiu do convênio e veio direto pro portão) — aí os dois
+   * períodos coincidem e o convênio cobre tudo, igual a não preencher. Quando
+   * ele passeou antes de sair, o operador corrige pra hora do ticket.
+   * Formatada com 2 casas ("14.05", "14.30") pra ficar legível como HH.MM.
+   * Convênio que não pede hora fica em branco (o campo nem aparece).
+   */
+  function horaConvenioSugerida(codigo) {
+    return convenios[codigo]?.pede_hora ? agoraHHMM().toFixed(2) : '';
   }
 
   /**

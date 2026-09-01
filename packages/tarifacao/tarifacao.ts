@@ -388,10 +388,19 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     // Por isso a soma dos dois trechos fica 1 minuto abaixo da permanência
     // total — é assim que o legado sempre fechou os dois períodos.
     const inicioDepois = minutosParaHHMM(minuto(horaConvenio!) + 1);
-    const seg2 = calcularProporcional(tblDepois, {
-      dtEntrada: movimento.dtEntrada, entrada: inicioDepois,
-      dtSaida: movimento.dtSaida, saida: movimento.saida,
-    });
+    // Saiu do convênio no mesmo minuto em que saiu do pátio (ou no anterior):
+    // não existe 2º período. Sem esta guarda o trecho ficaria com duração
+    // zero/negativa e mesmo assim cairia na PRIMEIRA faixa da tabela,
+    // cobrando uma estadia que não houve — justo no caso mais comum, o
+    // operador aceitando a hora sugerida (a de agora).
+    const duracaoDepois = diffDias(movimento.dtEntrada, movimento.dtSaida) * 1440
+      + minuto(movimento.saida) - minuto(inicioDepois);
+    const seg2 = duracaoDepois > 0
+      ? calcularProporcional(tblDepois, {
+        dtEntrada: movimento.dtEntrada, entrada: inicioDepois,
+        dtSaida: movimento.dtSaida, saida: movimento.saida,
+      })
+      : { valor: 0 };
     valorProporcional = (seg1.valor ?? 0) + (seg2.valor ?? 0);
     // O convênio só banca o que aconteceu até o corte.
     baseConvenio = seg1.valor ?? 0;
