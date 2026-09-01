@@ -354,6 +354,72 @@ test('convênio em 2 segmentos (hora de corte): P até 13h + G depois', () => {
   assert.equal(r.segmentos?.[1]?.valor, 21);
 });
 
+test('corte de convênio: 100% banca só até o corte, o passeio depois é do cliente', () => {
+  // Caso real: cliente vai ao cabeleireiro (convênio paga 100%), fica 1h15 e
+  // depois passeia pela cidade até as 16h. O convênio paga a estadia dele; as
+  // horas de passeio saem pela tabela do convênio (tabPreco = P).
+  const r = calcularTarifa({
+    tabelas, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 16.0 },
+    convenio: { codigo: 'CABELO', perConv: 100, tabPreco: 'P' },
+    horaConvenio: 11.15,
+  });
+  // seg1 (G 10h->11h15) = R$17 ; seg2 (P 11h15->16h = 4h45) = R$15
+  assert.equal(r.segmentos?.[0]?.valor, 17);
+  assert.equal(r.segmentos?.[1]?.valor, 15);
+  assert.equal(r.valorProporcional, 32);
+  // 100% de desconto, mas SÓ sobre o trecho do convênio.
+  assert.equal(r.valorConvenio, 17);
+  assert.equal(r.valor, 15);
+});
+
+test('corte de convênio: sem hora de corte, os 100% cobrem a estadia inteira', () => {
+  // Mesmo convênio, mas o cliente saiu direto do cabeleireiro pro portão —
+  // sem corte não há segundo trecho, e aí o convênio banca tudo (é o
+  // comportamento de sempre, não pode ter mudado).
+  const r = calcularTarifa({
+    tabelas, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 16.0 },
+    convenio: { codigo: 'CABELO', perConv: 100, tabPreco: 'P' },
+  });
+  assert.equal(r.segmentos, undefined);
+  assert.equal(r.valorConvenio, r.valorProporcional);
+  assert.equal(r.valor, 0);
+});
+
+test('corte de convênio: dispensa tabConv (convênio sem tabela própria também divide)', () => {
+  // Antes o corte só valia com `tabConv` preenchido — um convênio que só dá
+  // desconto (sem tabela própria) nunca se dividia, e o passeio depois saía
+  // no mesmo desconto.
+  const r = calcularTarifa({
+    tabelas, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 14.0 },
+    convenio: { codigo: 'X', perConv: 50 },
+    horaConvenio: 11.15,
+  });
+  assert.equal(r.segmentos?.length, 2);
+  // Sem tabPreco, o trecho de depois cai na tabela do próprio veículo (G).
+  // seg1 (G 1h15) = R$17 ; seg2 (G 11h15->14h = 2h45) = R$21
+  assert.equal(r.segmentos?.[0]?.valor, 17);
+  assert.equal(r.segmentos?.[1]?.valor, 21);
+  // 50% de 17 (só o trecho do convênio), não de 38.
+  assert.equal(r.valorConvenio, 8.5);
+  assert.equal(r.valor, 29.5);
+});
+
+test('corte de convênio: valor fixo não pode bancar mais que o próprio trecho', () => {
+  // Convênio paga R$ 50 fixos, mas o trecho dele só custou R$ 17 — o troco
+  // não pode virar desconto no passeio que o cliente fez depois.
+  const r = calcularTarifa({
+    tabelas, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 10.0, dtSaida: dia('2026-01-01'), saida: 16.0 },
+    convenio: { codigo: 'X', vlrConv: 50, tabPreco: 'P' },
+    horaConvenio: 11.15,
+  });
+  assert.equal(r.valorConvenio, 17); // limitado ao seg1, não os R$ 50
+  assert.equal(r.valor, 15); // o cliente paga o passeio inteiro
+});
+
 test('selos abatem do valor', () => {
   const r = calcularTarifa({
     tabelas, tipoVeic: 'G',

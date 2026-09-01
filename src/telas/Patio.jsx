@@ -789,7 +789,12 @@ export default function Patio({ perfil }) {
     setPlacaTicket('');
   }
 
-  function calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados, bonusFidelidade = 0) {
+  /**
+   * `horaConvenio` (HH.MM): hora em que o cliente saiu do convênio, pedida na
+   * saída quando o convênio tem "Pede hora" — o convênio banca até ali e o
+   * resto da estadia é cobrado do cliente (ver packages/tarifacao).
+   */
+  function calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados, bonusFidelidade = 0, horaConvenio) {
     if (MENSALISTA.has(mov.tipo_mens)) {
       // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
       return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, mensalista: true, tempoDecorrido: 0 };
@@ -881,6 +886,9 @@ export default function Patio({ perfil }) {
       servicosTipos: servicosTipos.length ? servicosTipos : undefined,
       movimento: { dtEntrada: dataDeISO(mov.dt_entrada), entrada: Number(mov.hr_entrada), dtSaida: new Date(), saida: agoraHHMM() },
       dividaAnterior: Number(mov.valor_dev || 0),
+      // Só divide em dois trechos com uma hora de corte válida digitada — em
+      // branco (ou 0) o convênio cobre a estadia inteira, como sempre.
+      horaConvenio: Number(horaConvenio) > 0 ? Number(horaConvenio) : undefined,
     }))));
   }
 
@@ -949,11 +957,13 @@ export default function Patio({ perfil }) {
   function mudarConvenioSaida(codigo) {
     if (!saindo) return;
     try {
+      // Trocar de convênio zera a hora de corte: ela é do convênio anterior
+      // (e o novo pode nem pedir hora).
       const resultado = calcularResultadoSaida(saindo.mov, codigo, saindo.servicosSelecionados);
       const formaAtual = saindo.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
       // Convênio pode trocar a tabela (Tabela alt.), o que muda os pontos —
       // reavalia o bônus do zero, descarta o que tinha sido aplicado antes.
-      setSaindo({ ...saindo, convenioCodigo: codigo, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
+      setSaindo({ ...saindo, convenioCodigo: codigo, horaConvenio: '', resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] });
       abrirValorObrigatorioSePreciso(resultado);
       avaliarBonus(resultado, saindo.mov.placa).then((bonus) => {
         if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); }
@@ -961,11 +971,28 @@ export default function Patio({ perfil }) {
     } catch (e) { setErro(e.message); }
   }
 
+  /**
+   * Hora em que o cliente saiu do convênio (convênio com "Pede hora"): o
+   * convênio banca até esse horário e o resto vira estadia normal, paga pelo
+   * cliente (ver calcularResultadoSaida/tarifacao). Recalcula a cada
+   * digitação — o operador vê o valor mudando enquanto confere o ticket.
+   */
+  function mudarHoraConvenio(valor) {
+    if (!saindo) return;
+    try {
+      const resultado = calcularResultadoSaida(
+        saindo.mov, saindo.convenioCodigo, saindo.servicosSelecionados, saindo.bonusAplicado?.valor_desconto || 0, valor
+      );
+      const formaAtual = saindo.pagamentos[0]?.forma || formas.find((f) => f.eh_dinheiro)?.codigo || formas[0]?.codigo || 'D';
+      setSaindo((s) => ({ ...s, horaConvenio: valor, resultado, pagamentos: [{ forma: formaAtual, valor: resultado.valor }] }));
+    } catch (e) { setErro(e.message); }
+  }
+
   /** Aplica a faixa de bônus oferecida — desconta valor_desconto e consome os pontos dela. */
   function confirmarBonus() {
     if (!modalBonus || !saindo) return;
     const resultado = calcularResultadoSaida(
-      saindo.mov, saindo.convenioCodigo, saindo.servicosSelecionados, modalBonus.faixa.valor_desconto
+      saindo.mov, saindo.convenioCodigo, saindo.servicosSelecionados, modalBonus.faixa.valor_desconto, saindo.horaConvenio
     );
     setSaindo((s) => ({
       ...s, resultado, bonusAplicado: modalBonus.faixa,
@@ -1099,7 +1126,7 @@ export default function Patio({ perfil }) {
    * sem passar pelo estado `saindo`.
    */
   async function confirmarSaida(tomadorDps, dadosOverride) {
-    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, servicosSelecionados } = dadosOverride || saindo;
+    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, servicosSelecionados, horaConvenio } = dadosOverride || saindo;
     // Cobrança real (dinheiro entrando agora) precisa de caixa aberto pra não
     // ficar de fora do fechamento — mensalista/hóspede sem pagamento (todos
     // os itens de `pagamentos` zerados) não passa por aqui. Busca direto no
@@ -1125,6 +1152,10 @@ export default function Patio({ perfil }) {
     const { error } = await supabase.from('movimentos').update({
       dt_saida: dtSaida, hr_saida: hrSaida,
       convenio_codigo: convenioCodigo || null,
+      // Hora em que o cliente saiu do convênio (ver mudarHoraConvenio) — o
+      // que dividiu a cobrança em dois trechos. Guardada pra reimpressão e
+      // pra explicar depois por que a conta ficou nesse valor.
+      hora_convenio: Number(horaConvenio) > 0 ? Number(horaConvenio) : 0,
       valor: resultado.valor, valor_proporcional: resultado.valorProporcional,
       valor_convenio: resultado.valorConvenio, pontos_ganhos: resultado.pontos,
       bonus_fidelidade: bonusAplicado?.valor_desconto || 0,
@@ -1915,6 +1946,28 @@ export default function Patio({ perfil }) {
                 </select>
               </div>
             )}
+            {/* Convênio que "pede hora": o ticket vem carimbado com o horário
+                em que o cliente saiu do convênio. Dali até a saída de verdade
+                é estadia normal, paga por ele (ver mudarHoraConvenio). */}
+            {!saindo.resultado.mensalista && convenios[saindo.convenioCodigo]?.pede_hora && (
+              <div className="campo" style={{ marginBottom: 10 }}>
+                <label>Hora em que saiu do convênio</label>
+                <input type="number" step="0.01" min="0" max="23.59" style={{ width: 120 }}
+                  placeholder="13.45" value={saindo.horaConvenio ?? ''}
+                  onChange={(e) => mudarHoraConvenio(e.target.value)} />
+                <span className="suave" style={{ fontSize: 11 }}>
+                  Formato HH.MM (13.45 = 13h45), como vem carimbado no ticket. Em branco, o
+                  convênio cobre a estadia inteira. Depois desse horário cobra pela tabela{' '}
+                  {convenios[saindo.convenioCodigo]?.tab_preco || saindo.mov.tipo_veic}.
+                </span>
+              </div>
+            )}
+            {saindo.resultado.segmentos?.length === 2 && (
+              <p className="suave" style={{ fontSize: 12 }}>
+                No convênio: {fmtBRL(saindo.resultado.segmentos[0].valor)} ·
+                depois do convênio: {fmtBRL(saindo.resultado.segmentos[1].valor)}
+              </p>
+            )}
             {saindo.resultado.mensalista ? (
               <p className="suave">Mensalista/hóspede — sem cobrança na saída (mensalidade paga à parte).</p>
             ) : (
@@ -2194,5 +2247,8 @@ function mapConvenio(c) {
   return {
     codigo: c.codigo, tabConv: c.tab_conv || undefined, tabHoras: c.tab_horas,
     perConv: Number(c.perc_conv || 0), vlrConv: Number(c.vlr_conv || 0),
+    // Tabela do tempo DEPOIS que o cliente saiu do convênio (ver
+    // packages/tarifacao: só entra em jogo junto com a hora de corte).
+    tabPreco: c.tab_preco || undefined,
   };
 }

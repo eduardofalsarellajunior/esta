@@ -63,6 +63,15 @@ export interface Convenio {
   codigo: string;
   /** Usa OUTRA tabela de preço (tipo). Corresponde a TABCONV. */
   tabConv?: string;
+  /**
+   * Tabela (tipo) que cobra o tempo DEPOIS que o cliente saiu do convênio
+   * (TABPRECO). Só entra em jogo quando há hora de corte (`horaConvenio`):
+   * o convênio banca até o corte, e daí até a saída é estadia normal, do
+   * bolso do cliente — ex.: o cabeleireiro paga 1h15, o cliente passeia mais
+   * 2h pela cidade e paga essas 2h. Sem isso configurado, o segundo trecho
+   * cai na tabela do próprio veículo.
+   */
+  tabPreco?: string;
   /** Usa as colunas CON da tabela como valor do convênio (TABHORAS="S"). */
   tabHoras?: boolean;
   /** Desconto percentual (PERCONV). */
@@ -86,10 +95,11 @@ export interface EntradaCalculo {
   movimento: Movimento;
   convenio?: Convenio;
   /**
-   * Hora de corte do convênio (whoraconv). Quando o convênio troca de tabela
-   * (`convenio.tabConv`) e a hora de corte é diferente da saída, a cobrança é
-   * feita em DOIS segmentos: entrada→corte na tabela do convênio, corte→saída
-   * na tabela original. Réplica de ESTALAN2.PRG:473-534.
+   * Hora em que o cliente saiu do convênio (whoraconv) — vem carimbada no
+   * ticket e é pedida na saída quando o convênio tem `pedeHora`. Sendo
+   * diferente da hora de saída, a cobrança é feita em DOIS segmentos:
+   * entrada→corte pelo convênio, corte→saída pelo cliente (ver
+   * `convenio.tabPreco`). Réplica de ESTALAN2.PRG:473-534.
    */
   horaConvenio?: HoraComercial;
   /**
@@ -316,10 +326,22 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
   // serviços, não do veículo (senão um cliente que só usa lava-rápido nunca
   // acumula ponto nenhum, mesmo a tabela do serviço tendo qte_pontos > 0).
   let pontos = tbl.qtePontos ?? 0;
+  /**
+   * Quanto da estadia entra na CONTA DO CONVÊNIO. Sem hora de corte é a
+   * estadia inteira; com corte, só o primeiro trecho — o tempo depois que o
+   * cliente saiu do convênio é dele, não do conveniado (ver doisSegmentos).
+   * `null` = sem corte, usa `valorProporcional`.
+   */
+  let baseConvenio: number | null = null;
+  let tempoConvenio = tempoDecorrido;
 
-  // Cobrança em DOIS segmentos: convênio com hora de corte + tabela original.
+  // Cobrança em DOIS segmentos: o cliente saiu do convênio às `horaConvenio`
+  // e ficou mais um tempo no pátio por conta própria. Basta haver corte —
+  // não exige que o convênio trocasse de tabela (`tabConv`), senão o caso
+  // mais comum (convênio que banca 100% do tempo lá dentro, sem tabela
+  // própria) nunca se dividiria e o passeio depois sairia de graça junto.
   const doisSegmentos =
-    convenio?.tabConv != null &&
+    convenio != null &&
     horaConvenio != null &&
     horaConvenio !== movimento.saida;
 
@@ -346,21 +368,31 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     pedeValor = !!prop.pedeValor;
     pontos = pontosServicos;
   } else if (doisSegmentos) {
-    const tblOrig = tabelas[tipoVeic];
-    if (!tblOrig) {
-      throw new Error(`Tabela original não encontrada: "${tipoVeic}"`);
+    // Depois do corte quem paga é o cliente, pela tabela indicada no convênio
+    // (TABPRECO) — sem ela configurada, pela tabela do próprio veículo.
+    const tipoDepois = convenio!.tabPreco || tipoVeic;
+    const tblDepois = tabelas[tipoDepois];
+    if (!tblDepois) {
+      throw new Error(`Tabela de preço não encontrada: "${tipoDepois}"`);
     }
-    // Segmento 1: entrada → corte, na tabela do convênio (tbl).
-    const seg1 = calcularProporcional(tbl, {
+    const trecho1 = {
       dtEntrada: movimento.dtEntrada, entrada: movimento.entrada,
       dtSaida: movimento.dtSaida, saida: horaConvenio!,
-    });
-    // Segmento 2: corte → saída, na tabela original.
-    const seg2 = calcularProporcional(tblOrig, {
+    };
+    // Segmento 1: entrada → corte, na tabela do convênio (tbl).
+    const seg1 = calcularProporcional(tbl, trecho1);
+    // Segmento 2: corte → saída, na tabela de depois do convênio. Começa no
+    // mesmo instante em que o primeiro termina (contíguo): abrir um minuto de
+    // folga entre os dois só faria a soma dos trechos ficar menor que a
+    // permanência real.
+    const seg2 = calcularProporcional(tblDepois, {
       dtEntrada: movimento.dtEntrada, entrada: horaConvenio!,
       dtSaida: movimento.dtSaida, saida: movimento.saida,
     });
     valorProporcional = (seg1.valor ?? 0) + (seg2.valor ?? 0);
+    // O convênio só banca o que aconteceu até o corte.
+    baseConvenio = seg1.valor ?? 0;
+    tempoConvenio = horas(trecho1);
     // valor só é null quando estourou as faixas (sem pedeValor — esse caso
     // sempre devolve valor:0, nunca null, ver calcularProporcional).
     manual = seg1.valor === null || seg2.valor === null;
@@ -374,21 +406,28 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
   }
 
   // Convênio: desconto por grade própria (CON), percentual ou valor fixo.
+  // Incide sobre `baseDesconto` — a estadia inteira no caso normal, ou só o
+  // trecho até o corte quando o cliente saiu do convênio antes (baseConvenio).
+  const baseDesconto = baseConvenio ?? valorProporcional;
   let valorConvenio = 0;
   if (convenio) {
     if (convenio.tabHoras) {
       // Grade própria: a coluna CON percorre as faixas com a MESMA regra da
       // HOR — numa faixa 'hora' ela soma por hora (CON=0 não acrescenta nada
       // ao valor achado até ali), numa faixa 'fixo' ela substitui o total.
-      const fc = calcularValorFaixas(tbl.faixas, tempoDecorrido, 'con');
+      const fc = calcularValorFaixas(tbl.faixas, tempoConvenio, 'con');
       valorConvenio = fc?.valor ?? 0;
     }
     if (convenio.perConv) {
-      valorConvenio = (valorProporcional * convenio.perConv) / 100;
+      valorConvenio = (baseDesconto * convenio.perConv) / 100;
     }
     if (convenio.vlrConv) {
       valorConvenio = convenio.vlrConv;
     }
+    // Com corte de horário, o convênio nunca paga mais do que o próprio
+    // trecho — senão um valor fixo (ou uma grade CON) maior que o segmento 1
+    // acabaria bancando também o passeio que o cliente fez depois.
+    if (baseConvenio != null && valorConvenio > baseConvenio) valorConvenio = baseConvenio;
   }
 
   const valorSelos = selos * valorSelo;
