@@ -381,12 +381,15 @@ export function calcularTarifa(input: EntradaCalculo): ResultadoTarifa {
     };
     // Segmento 1: entrada → corte, na tabela do convênio (tbl).
     const seg1 = calcularProporcional(tbl, trecho1);
-    // Segmento 2: corte → saída, na tabela de depois do convênio. Começa no
-    // mesmo instante em que o primeiro termina (contíguo): abrir um minuto de
-    // folga entre os dois só faria a soma dos trechos ficar menor que a
-    // permanência real.
+    // Segmento 2: do minuto SEGUINTE ao corte até a saída, na tabela de
+    // depois do convênio. O corte é o último minuto do convênio, não o
+    // primeiro do cliente: entrou 13h, saiu do convênio 13h30, saiu do pátio
+    // 14h30 -> período 1 = 13h00–13h30, período 2 = 13h31–14h30 (59 min).
+    // Por isso a soma dos dois trechos fica 1 minuto abaixo da permanência
+    // total — é assim que o legado sempre fechou os dois períodos.
+    const inicioDepois = minutosParaHHMM(minuto(horaConvenio!) + 1);
     const seg2 = calcularProporcional(tblDepois, {
-      dtEntrada: movimento.dtEntrada, entrada: horaConvenio!,
+      dtEntrada: movimento.dtEntrada, entrada: inicioDepois,
       dtSaida: movimento.dtSaida, saida: movimento.saida,
     });
     valorProporcional = (seg1.valor ?? 0) + (seg2.valor ?? 0);

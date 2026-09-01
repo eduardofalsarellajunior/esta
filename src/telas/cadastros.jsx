@@ -31,9 +31,13 @@ export function Convenios({ perfil }) {
         ajuda: 'Calcula por outra tabela de preço em vez da tabela de entrada do veículo. Combina com qualquer uma das três formas acima. Só aparecem tabelas vigentes e ativas.' },
       { campo: 'tab_horas', rotulo: 'Grade própria (CON)', tipo: 'bool', naTabela: false,
         ajuda: 'O convênio paga o valor da coluna "Valor convênio" da faixa — da tabela em vigor no cálculo, ou seja, da Tabela alt. quando ela estiver preenchida. Marcar isto NÃO troca a tabela.' },
-      { campo: 'hor_conv', rotulo: 'Hora corte', tipo: 'hora', naTabela: false },
+      // `hor_conv` (HORCONV do legado) fica de fora de propósito: nunca foi
+      // lido em cálculo nenhum e confundia com o "Pede hora" abaixo — a hora
+      // que divide os dois períodos é sempre a que o operador digita na saída,
+      // não uma hora fixa de cadastro. A coluna continua no banco (a
+      // importação do .dbf ainda preserva o valor do legado).
       { campo: 'pede_hora', rotulo: 'Pede hora', tipo: 'bool', naTabela: false,
-        ajuda: 'Na saída, o operador informa o horário em que o cliente saiu do convênio (vem carimbado no ticket). O convênio banca até esse horário; dali até a saída vira estadia normal, cobrada do cliente pela "Tabela depois do convênio".' },
+        ajuda: 'Na saída, o operador informa o horário em que o cliente saiu do convênio (vem carimbado no ticket). O convênio banca até esse horário; do minuto seguinte até a saída vira estadia normal, cobrada do cliente pela "Tabela depois do convênio".' },
       { campo: 'tab_preco', rotulo: 'Tabela depois do convênio', tipo: 'select', opcoes: tabelasOpcoes, naTabela: false,
         ajuda: 'Cobra o tempo que o cliente ficou no pátio DEPOIS de sair do convênio (só vale junto com "Pede hora"). Em branco, cobra pela tabela do próprio veículo. Ex.: o cabeleireiro paga 1h15 e o cliente paga as 2h que passeou pela cidade.' },
       { campo: 'selos', rotulo: 'Selos', tipo: 'number', naTabela: false },

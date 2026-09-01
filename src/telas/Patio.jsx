@@ -1956,9 +1956,10 @@ export default function Patio({ perfil }) {
                   placeholder="13.45" value={saindo.horaConvenio ?? ''}
                   onChange={(e) => mudarHoraConvenio(e.target.value)} />
                 <span className="suave" style={{ fontSize: 11 }}>
-                  Formato HH.MM (13.45 = 13h45), como vem carimbado no ticket. Em branco, o
-                  convênio cobre a estadia inteira. Depois desse horário cobra pela tabela{' '}
-                  {convenios[saindo.convenioCodigo]?.tab_preco || saindo.mov.tipo_veic}.
+                  Formato HH.MM (13.45 = 13h45), como vem carimbado no ticket. O convênio paga
+                  até esse horário; do minuto seguinte até a saída cobra do cliente pela tabela{' '}
+                  {convenios[saindo.convenioCodigo]?.tab_preco || saindo.mov.tipo_veic}. Em
+                  branco, o convênio cobre a estadia inteira.
                 </span>
               </div>
             )}

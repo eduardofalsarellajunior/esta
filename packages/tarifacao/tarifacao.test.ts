@@ -407,6 +407,37 @@ test('corte de convênio: dispensa tabConv (convênio sem tabela própria també
   assert.equal(r.valor, 29.5);
 });
 
+test('corte de convênio: o 2º período começa no minuto SEGUINTE ao corte', () => {
+  // Exemplo do Eduardo: entra 13h, sai do convênio 13h30, sai do pátio 14h30.
+  // Período 1 = 13h00–13h30; período 2 = 13h31–14h30, ou seja 59 min (não 60).
+  // A tabela BORDA vira de faixa exatamente em 0.59 pra diferença aparecer:
+  // com 59 min cai na de R$ 5; contíguo (60 min) cairia na de R$ 20.
+  const BORDA: TabelaPreco = { tipo: 'BORDA', faixas: [f(0.59, 5), f(4.0, 20)] };
+  const r = calcularTarifa({
+    tabelas: { ...tabelas, BORDA }, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 13.0, dtSaida: dia('2026-01-01'), saida: 14.3 },
+    convenio: { codigo: 'CABELO', perConv: 100, tabPreco: 'BORDA' },
+    horaConvenio: 13.3,
+  });
+  assert.equal(r.segmentos?.[1]?.valor, 5);
+  // Convênio banca os 30 min iniciais; o cliente paga só os 59 min de passeio.
+  assert.equal(r.valor, 5);
+});
+
+test('corte de convênio: minuto seguinte vira a hora certo (13.59 -> 14.00)', () => {
+  // 13.59 + 1 min não pode virar "13.60" — a hora comercial não tem isso.
+  const BORDA: TabelaPreco = { tipo: 'BORDA', faixas: [f(1.0, 5), f(4.0, 20)] };
+  const r = calcularTarifa({
+    tabelas: { ...tabelas, BORDA }, tipoVeic: 'G',
+    movimento: { dtEntrada: dia('2026-01-01'), entrada: 13.0, dtSaida: dia('2026-01-01'), saida: 15.0 },
+    convenio: { codigo: 'X', perConv: 100, tabPreco: 'BORDA' },
+    horaConvenio: 13.59,
+  });
+  // 2º período = 14h00 -> 15h00 = 1h exata -> faixa de R$ 5 (se tivesse
+  // virado 13.60, minuto() leria 13h60 e daria 1 minuto a menos).
+  assert.equal(r.segmentos?.[1]?.valor, 5);
+});
+
 test('corte de convênio: valor fixo não pode bancar mais que o próprio trecho', () => {
   // Convênio paga R$ 50 fixos, mas o trecho dele só custou R$ 17 — o troco
   // não pode virar desconto no passeio que o cliente fez depois.
