@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sugerirMapeamento, converterLinha, paraBool, paraNumero, paraTexto, paraData, DESTINOS } from './mapeamento.ts';
+import { sugerirMapeamento, converterLinha, filtrarLinhas, paraBool, paraNumero, paraTexto, paraData, DESTINOS } from './mapeamento.ts';
 
 test('sugerirMapeamento: acha o campo do dbf por palpite, case-insensitive', () => {
   const colunas = DESTINOS.modelos_veiculo.colunas;
@@ -114,4 +114,61 @@ test('ESTASUBS: sugerirMapeamento + converterLinha (CARMESTRE/CARSUBST/NOMECAR)'
   assert.equal(linha.codigo_mestre, 'ABC1234');
   assert.equal(linha.placa, 'XYZ9876');
   assert.equal(linha.modelo, 'GOL');
+});
+
+// ESTACONV: convênio, vale e serviço na mesma tabela ------------------------
+test('filtrarLinhas: destino Serviços pega só TIPO=S', () => {
+  const colunas = DESTINOS.servicos.colunas;
+  const linhas = [
+    { codigo: '1', _tipo_registro: 'S' },
+    { codigo: '2', _tipo_registro: 'C' },
+    { codigo: '3', _tipo_registro: 'V' },
+  ];
+  assert.deepEqual(filtrarLinhas(colunas, linhas).map((l) => l.codigo), ['1']);
+});
+
+test('filtrarLinhas: destino Convênios pega TIPO=C e TIPO=V (lista de aceitos)', () => {
+  const colunas = DESTINOS.convenios.colunas;
+  const linhas = [
+    { codigo: '1', tipo: 'C' },
+    { codigo: '2', tipo: 'S' },
+    { codigo: '3', tipo: 'V' },
+    { codigo: '4', tipo: null },
+  ];
+  assert.deepEqual(filtrarLinhas(colunas, linhas).map((l) => l.codigo), ['1', '3']);
+});
+
+test('filtrarLinhas: comparação ignora caixa e espaço (o legado é inconsistente)', () => {
+  const colunas = DESTINOS.convenios.colunas;
+  const linhas = [{ codigo: '1', tipo: ' c ' }, { codigo: '2', tipo: 'v' }];
+  assert.deepEqual(filtrarLinhas(colunas, linhas).map((l) => l.codigo), ['1', '2']);
+});
+
+test('convenios: TIPO é gravado (é a coluna `tipo`), diferente do filtro de Serviços', () => {
+  // Em Serviços o campo do filtro é auxiliar e sai do INSERT (naoGravar);
+  // aqui ele É a coluna `tipo` de `convenios`, então precisa ser gravado.
+  const tipoConv = DESTINOS.convenios.colunas.find((c) => c.campo === 'tipo');
+  assert.equal(tipoConv?.naoGravar, undefined);
+  const tipoServ = DESTINOS.servicos.colunas.find((c) => c.filtro != null);
+  assert.equal(tipoServ?.naoGravar, true);
+});
+
+test('convenios: mapeia os nomes de campo do ESTACONV e converte os tipos', () => {
+  const colunas = DESTINOS.convenios.colunas;
+  const mapa = sugerirMapeamento(colunas, ['CODCONV', 'TIPO', 'RAZAO', 'PERCONV', 'TABHORAS', 'CGC', 'ENDERECO', 'CEP']);
+  assert.equal(mapa.codigo, 'CODCONV');
+  assert.equal(mapa.razao, 'RAZAO');
+  assert.equal(mapa.cnpj, 'CGC');
+
+  const linha = converterLinha(
+    { CODCONV: 'HOSP', TIPO: 'C', RAZAO: 'Hospital X', PERCONV: 50, TABHORAS: 'N', CGC: '27346981000144', ENDERECO: 'Rua A', CEP: '13000-000' },
+    colunas, mapa,
+  );
+  assert.equal(linha.tipo, 'C');
+  assert.equal(linha.perc_conv, 50);
+  assert.equal(linha.tab_horas, false);
+  assert.equal(linha.endereco, 'Rua A');
+  // Campo ausente no dbf cai no padrão da coluna, não em null (a coluna é NOT NULL).
+  assert.equal(linha.vlr_conv, 0);
+  assert.equal(linha.ativo, true);
 });

@@ -12,11 +12,13 @@ export type ColunaDestino = {
   palpites?: string[];    // nomes de campo do dbf tentados automaticamente (case-insensitive)
   /**
    * Linha só entra na importação se o valor desta coluna (já convertido)
-   * bater com este texto (comparação sem diferenciar maiúsc./minúsc.) — ex.:
-   * ESTACONV.dbf mistura convênio e serviço na mesma tabela, distinguidos
-   * pelo campo TIPO ('C'/'S'); "Serviços" filtra TIPO='S'.
+   * bater com este texto — ou com UM dos textos, quando é lista (comparação
+   * sem diferenciar maiúsc./minúsc.). Ex.: ESTACONV.dbf mistura convênio,
+   * vale e serviço na mesma tabela, distinguidos pelo campo TIPO
+   * ('C'/'V'/'S'): "Serviços" filtra 'S', "Convênios e vales" filtra
+   * ['C', 'V'].
    */
-  filtro?: string;
+  filtro?: string | string[];
   /**
    * Coluna auxiliar (ex.: o próprio campo do filtro acima) que não é coluna
    * de verdade da tabela de destino — fica de fora do INSERT.
@@ -123,11 +125,54 @@ export const DESTINOS: Record<string, Destino> = {
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
     ],
   },
-  // ESTACONV.dbf mistura convênio e serviço na mesma tabela do legado,
-  // diferenciados pelo campo TIPO ('C' convênio, 'S' serviço) — aqui só
-  // filtra e traz os de serviço (Convênios continua sendo cadastro manual,
-  // ver docs). CODCONV/RAZAO/TABCONV são os mesmos nomes de campo de sempre
-  // nesse arquivo.
+  // Mesmo ESTACONV.dbf do destino "Serviços" abaixo, do outro lado do filtro:
+  // aqui entram os TIPO='C' (convênio) e TIPO='V' (vale). Diferente de lá, o
+  // campo TIPO não é só filtro — é a própria coluna `tipo` de `convenios`,
+  // então É gravado (por isso sem `naoGravar`).
+  //
+  // Traz junto as regras de desconto (TABCONV/PERCONV/VLRCONV/…): sem elas o
+  // convênio importado existiria como cadastro mas não descontaria nada. E os
+  // dados cadastrais (endereço etc., ver 0049), porque alguns clientes emitem
+  // DPS/RPS com o convênio como tomador.
+  convenios: {
+    rotulo: 'Convênios e vales (ESTACONV, tipo = C ou V)',
+    tabela: 'convenios',
+    colunas: [
+      { campo: 'codigo', rotulo: 'Código', obrigatorio: true, palpites: ['CODCONV'] },
+      { campo: 'tipo', rotulo: 'Tipo (C convênio / V vale)', obrigatorio: true, palpites: ['TIPO'], filtro: ['C', 'V'] },
+      { campo: 'razao', rotulo: 'Razão social', obrigatorio: true, palpites: ['RAZAO'] },
+      // Regras de desconto — o miolo do convênio.
+      { campo: 'tab_conv', rotulo: 'Tabela alternativa', palpites: ['TABCONV'] },
+      { campo: 'tab_horas', rotulo: 'Grade própria (CON)', tipo: 'bool', palpites: ['TABHORAS'], padrao: false },
+      { campo: 'perc_conv', rotulo: '% desconto', tipo: 'number', palpites: ['PERCONV'], padrao: 0 },
+      { campo: 'vlr_conv', rotulo: 'Valor fixo', tipo: 'number', palpites: ['VLRCONV'], padrao: 0 },
+      { campo: 'hor_conv', rotulo: 'Hora de corte', tipo: 'number', palpites: ['HORCONV'], padrao: 0 },
+      { campo: 'pede_hora', rotulo: 'Pede hora', tipo: 'bool', palpites: ['PEDEHORA'], padrao: false },
+      { campo: 'pede_cc', rotulo: 'Pede centro de custo', tipo: 'bool', palpites: ['PEDECC'], padrao: false },
+      { campo: 'selos', rotulo: 'Selos', tipo: 'number', palpites: ['SELOS'], padrao: 0 },
+      { campo: 'valor_selo', rotulo: 'Valor do selo', tipo: 'number', palpites: ['VALORSELO'], padrao: 0 },
+      { campo: 'so_supervisor', rotulo: 'Só supervisor', tipo: 'bool', palpites: ['SOSUPER'], padrao: false },
+      // Cadastrais (ver 0049_convenio_cadastro.sql).
+      { campo: 'grupo', rotulo: 'Grupo', palpites: ['GRUPO'] },
+      { campo: 'cnpj', rotulo: 'CNPJ/CPF', palpites: ['CGC', 'CNPJ', 'CPF'] },
+      { campo: 'inscricao', rotulo: 'Inscrição municipal', palpites: ['INSCRICAO', 'INSCRMUN', 'INSCR'] },
+      { campo: 'endereco', rotulo: 'Endereço', palpites: ['ENDERECO'] },
+      { campo: 'numero', rotulo: 'Número', palpites: ['NUMERO', 'NUM'] },
+      { campo: 'bairro', rotulo: 'Bairro', palpites: ['BAIRRO'] },
+      { campo: 'cidade', rotulo: 'Cidade', palpites: ['CIDADE'] },
+      { campo: 'uf', rotulo: 'UF', palpites: ['UF', 'ESTADO'] },
+      { campo: 'cep', rotulo: 'CEP', palpites: ['CEP'] },
+      { campo: 'telefone', rotulo: 'Telefone', palpites: ['TELEFONE', 'FONE'] },
+      { campo: 'email', rotulo: 'E-mail', palpites: ['EMAIL'] },
+      { campo: 'cod_ibge', rotulo: 'Código IBGE da cidade', palpites: ['CODIBGE', 'IBGE'] },
+      { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool', palpites: ['ATIVO'], padrao: true },
+    ],
+  },
+  // ESTACONV.dbf mistura convênio, vale e serviço na mesma tabela do legado,
+  // diferenciados pelo campo TIPO ('C' convênio, 'V' vale, 'S' serviço) —
+  // este destino filtra e traz só os de serviço (os outros dois entram pelo
+  // destino `convenios` acima). CODCONV/RAZAO/TABCONV são os mesmos nomes de
+  // campo de sempre nesse arquivo.
   servicos: {
     rotulo: 'Serviços (ESTACONV, tipo = Serviço)',
     tabela: 'servicos',
@@ -232,9 +277,9 @@ export function converterLinha(
 
 /**
  * Só as linhas que passam nos `filtro` das colunas (ex.: "servicos" filtra
- * `_tipo_registro === 'S'`) — sem nenhuma coluna com `filtro`, devolve tudo.
- * Comparação sem diferenciar maiúsc./minúsc. (o legado é inconsistente com
- * isso em texto).
+ * `_tipo_registro === 'S'`; "convenios" aceita 'C' ou 'V') — sem nenhuma
+ * coluna com `filtro`, devolve tudo. Comparação sem diferenciar
+ * maiúsc./minúsc. (o legado é inconsistente com isso em texto).
  */
 export function filtrarLinhas(
   colunas: ColunaDestino[],
@@ -244,6 +289,9 @@ export function filtrarLinhas(
   if (!filtros.length) return linhas;
   return linhas.filter((linha) => filtros.every((c) => {
     const valor = linha[c.campo];
-    return valor != null && String(valor).trim().toUpperCase() === c.filtro!.toUpperCase();
+    if (valor == null) return false;
+    const atual = String(valor).trim().toUpperCase();
+    const aceitos = Array.isArray(c.filtro) ? c.filtro : [c.filtro!];
+    return aceitos.some((f) => f.toUpperCase() === atual);
   }));
 }

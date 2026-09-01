@@ -36,6 +36,22 @@ export function Convenios({ perfil }) {
       { campo: 'selos', rotulo: 'Selos', tipo: 'number', naTabela: false },
       { campo: 'valor_selo', rotulo: 'Vlr selo', tipo: 'number', naTabela: false },
       { campo: 'so_supervisor', rotulo: 'Só supervisor', tipo: 'bool', naTabela: false },
+      // Cadastrais (0049): só fazem falta pra quem emite DPS/RPS com o
+      // convênio como tomador — por isso ficam fora da tabela, só no form.
+      { campo: 'grupo', rotulo: 'Grupo', naTabela: false,
+        ajuda: 'Agrupamento livre — junta convênios de uma mesma rede/matriz. Não afeta a cobrança.' },
+      { campo: 'cnpj', rotulo: 'CNPJ/CPF', naTabela: false },
+      { campo: 'inscricao', rotulo: 'Inscrição municipal', naTabela: false },
+      { campo: 'endereco', rotulo: 'Endereço', naTabela: false },
+      { campo: 'numero', rotulo: 'Número', naTabela: false },
+      { campo: 'bairro', rotulo: 'Bairro', naTabela: false },
+      { campo: 'cidade', rotulo: 'Cidade', naTabela: false },
+      { campo: 'uf', rotulo: 'UF', naTabela: false },
+      { campo: 'cep', rotulo: 'CEP', naTabela: false },
+      { campo: 'cod_ibge', rotulo: 'Cód. IBGE da cidade', naTabela: false,
+        ajuda: 'Exigido no DPS/RPS quando a nota sai no nome do convênio. 7 dígitos — o mesmo código usado no cadastro do mensalista.' },
+      { campo: 'telefone', rotulo: 'Telefone', naTabela: false },
+      { campo: 'email', rotulo: 'E-mail', naTabela: false },
     ]} />;
 }
 
