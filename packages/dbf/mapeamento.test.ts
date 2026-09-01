@@ -155,16 +155,23 @@ test('convenios: TIPO é gravado (é a coluna `tipo`), diferente do filtro de Se
 
 test('convenios: mapeia os nomes de campo do ESTACONV e converte os tipos', () => {
   const colunas = DESTINOS.convenios.colunas;
-  const mapa = sugerirMapeamento(colunas, ['CODCONV', 'TIPO', 'RAZAO', 'PERCONV', 'TABHORAS', 'CGC', 'ENDERECO', 'CEP']);
+  const mapa = sugerirMapeamento(colunas, ['CODCONV', 'TIPO', 'RAZAO', 'PERCONV', 'TABHORAS', 'CGC', 'ENDERECO', 'CEP', 'TABCONV', 'TABPRECO']);
   assert.equal(mapa.codigo, 'CODCONV');
   assert.equal(mapa.razao, 'RAZAO');
   assert.equal(mapa.cnpj, 'CGC');
+  // As duas tabelas do convênio são campos diferentes e não podem se
+  // confundir: TABCONV é a do 1º período, TABPRECO a do 2º (depois que o
+  // cliente sai do convênio).
+  assert.equal(mapa.tab_conv, 'TABCONV');
+  assert.equal(mapa.tab_preco, 'TABPRECO');
 
   const linha = converterLinha(
-    { CODCONV: 'HOSP', TIPO: 'C', RAZAO: 'Hospital X', PERCONV: 50, TABHORAS: 'N', CGC: '27346981000144', ENDERECO: 'Rua A', CEP: '13000-000' },
+    { CODCONV: 'HOSP', TIPO: 'C', RAZAO: 'Hospital X', PERCONV: 50, TABHORAS: 'N', CGC: '27346981000144', ENDERECO: 'Rua A', CEP: '13000-000', TABCONV: 'C', TABPRECO: 'P' },
     colunas, mapa,
   );
   assert.equal(linha.tipo, 'C');
+  assert.equal(linha.tab_conv, 'C');
+  assert.equal(linha.tab_preco, 'P');
   assert.equal(linha.perc_conv, 50);
   assert.equal(linha.tab_horas, false);
   assert.equal(linha.endereco, 'Rua A');

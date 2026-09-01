@@ -143,6 +143,9 @@ export const DESTINOS: Record<string, Destino> = {
       { campo: 'razao', rotulo: 'Razão social', obrigatorio: true, palpites: ['RAZAO'] },
       // Regras de desconto — o miolo do convênio.
       { campo: 'tab_conv', rotulo: 'Tabela alternativa', palpites: ['TABCONV'] },
+      // Tabela do 2º período (depois que o cliente sai do convênio), usada
+      // junto com "Pede hora" — ver 0050 e packages/tarifacao (`tabPreco`).
+      { campo: 'tab_preco', rotulo: 'Tabela depois do convênio', palpites: ['TABPRECO'] },
       { campo: 'tab_horas', rotulo: 'Grade própria (CON)', tipo: 'bool', palpites: ['TABHORAS'], padrao: false },
       { campo: 'perc_conv', rotulo: '% desconto', tipo: 'number', palpites: ['PERCONV'], padrao: 0 },
       { campo: 'vlr_conv', rotulo: 'Valor fixo', tipo: 'number', palpites: ['VLRCONV'], padrao: 0 },
