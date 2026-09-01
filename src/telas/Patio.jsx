@@ -18,6 +18,7 @@ import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.j
 import { buscarCnpj } from '../lib/cnpj.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
 import { ehGerente } from '../lib/acesso.js';
+import { configInfinitePay, ehCelular, parcelasPossiveis, cobrarNoInfiniteTap } from '../lib/infinitepay.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
 const EXCLUSAO_JANELA_MIN = 5; // operador só pode excluir nos primeiros N minutos da entrada
@@ -54,6 +55,7 @@ export default function Patio({ perfil }) {
   const [livreAPartirEntrada, setLivreAPartirEntrada] = useState(null); // valor a persistir na entrada (ver registrarEntrada)
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
+  const [parcelasCartao, setParcelasCartao] = useState(1); // só pro InfiniteTap em crédito
 
   // Busca de modelo de carro (Entrada) + fallback de tabela manual.
   const [modelos, setModelos] = useState([]);
@@ -1339,6 +1341,30 @@ export default function Patio({ perfil }) {
 
   const totalPago = (saindo?.pagamentos || []).reduce((s, p) => s + Number(p.valor || 0), 0);
 
+  // InfiniteTap (ver src/lib/infinitepay.js): só no celular, porque a leitura
+  // do cartão é pelo NFC do próprio aparelho — no PC da cabine o botão não
+  // teria como funcionar.
+  const infinitePay = configInfinitePay(filial);
+  const podeInfiniteTap = infinitePay.ativo && ehCelular();
+
+  /**
+   * Abre o app da InfinitePay já com o valor preenchido. O esta NÃO recebe o
+   * resultado de volta (ver infinitepay.js): depois de aproximar o cartão o
+   * operador volta pra cá e confirma a saída na mão, como sempre.
+   */
+  function cobrarNoCelular(pagamento, metodo) {
+    setErro('');
+    const maxParcelas = parcelasPossiveis(pagamento.valor);
+    const motivo = cobrarNoInfiniteTap({
+      valor: Number(pagamento.valor),
+      metodo,
+      parcelas: metodo === 'credit' ? Math.min(parcelasCartao, maxParcelas) : 1,
+      orderId: saindo?.mov?.id,
+      config: infinitePay,
+    });
+    if (motivo) setErro(motivo);
+  }
+
   return (
     <>
       {erro && <div className="card aviso">{erro}</div>}
@@ -1974,6 +2000,35 @@ export default function Patio({ perfil }) {
                 <button className="btn-ghost" onClick={addPagto} style={{ marginTop: 6 }}>+ dividir pagamento</button>
                 {Math.abs(totalPago - saindo.resultado.valor) > 0.005 && (
                   <p className="aviso">Soma dos pagamentos ({fmtBRL(totalPago)}) difere do valor.</p>
+                )}
+                {/* InfiniteTap: um botão por pagamento em cartão (o normal é um
+                    só). Abre o app da InfinitePay já com o valor — depois de
+                    aproximar o cartão, o operador volta aqui e confirma. */}
+                {podeInfiniteTap && saindo.pagamentos.map((p, i) => {
+                  const metodo = formas.find((f) => f.codigo === p.forma)?.infinitepay_metodo;
+                  if (!metodo || !(Number(p.valor) > 0)) return null;
+                  const maxParcelas = parcelasPossiveis(p.valor);
+                  return (
+                    <div className="linha-form" key={`itap-${i}`} style={{ marginTop: 8, alignItems: 'center' }}>
+                      {metodo === 'credit' && maxParcelas > 1 && (
+                        <select value={Math.min(parcelasCartao, maxParcelas)} style={{ width: 70 }}
+                          onChange={(e) => setParcelasCartao(Number(e.target.value))}>
+                          {Array.from({ length: maxParcelas }, (_, n) => n + 1).map((n) => (
+                            <option key={n} value={n}>{n}x</option>
+                          ))}
+                        </select>
+                      )}
+                      <button type="button" className="btn-ghost" onClick={() => cobrarNoCelular(p, metodo)}>
+                        💳 Cobrar {fmtBRL(Number(p.valor))} no celular
+                      </button>
+                    </div>
+                  );
+                })}
+                {podeInfiniteTap && saindo.pagamentos.some((p) => formas.find((f) => f.codigo === p.forma)?.infinitepay_metodo && Number(p.valor) > 0) && (
+                  <p className="suave" style={{ fontSize: 11, marginTop: 4 }}>
+                    Abre o app da InfinitePay já com o valor. Depois de aproximar o cartão,
+                    volte aqui e confirme a saída — o esta não recebe a confirmação sozinho.
+                  </p>
                 )}
               </div>
             )}

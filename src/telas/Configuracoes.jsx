@@ -91,6 +91,10 @@ export default function Configuracoes({ perfil }) {
     setFilial((f) => ({ ...f, config: { ...f.config, patio: { ...(f.config?.patio || {}), [campo]: valor } } }));
   }
 
+  function setInfinitePay(campo, valor) {
+    setFilial((f) => ({ ...f, config: { ...f.config, infinitepay: { ...(f.config?.infinitepay || {}), [campo]: valor } } }));
+  }
+
   function setNfse(campo, valor) {
     setFilial((f) => ({ ...f, config: { ...f.config, nfse: { ...(f.config?.nfse || {}), [campo]: valor } } }));
   }
@@ -262,6 +266,44 @@ export default function Configuracoes({ perfil }) {
                 : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
             </form>
           </>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Cobrança por aproximação (InfiniteTap)</h2>
+        <p className="suave">
+          O celular do operador vira a maquininha: o cliente aproxima o cartão no próprio
+          aparelho, sem leitor separado. Ligado, aparece um botão <strong>"Cobrar no
+          celular"</strong> na saída do pátio quando a forma de pagamento é cartão — ele abre
+          o app da InfinitePay já com o valor preenchido. Só cartão (crédito/débito); Pix não
+          faz parte dessa integração.
+        </p>
+        {!filial ? 'Carregando…' : (
+          <form onSubmit={salvar}>
+            <label className="campo-check" style={{ marginBottom: 4 }}>
+              <input type="checkbox" checked={!!filial.config?.infinitepay?.ativo} disabled={!podeEditar}
+                onChange={(e) => setInfinitePay('ativo', e.target.checked)} />
+              Usa o InfiniteTap nesta filial
+            </label>
+            <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+              Exige o app da InfinitePay instalado e logado no mesmo celular, com a conta do
+              estacionamento. O botão só aparece no celular — no PC da cabine não, porque a
+              leitura é pelo NFC do aparelho. Marque quais formas são crédito/débito em
+              Cadastros → Formas de pagamento.
+            </p>
+            <div className="campo" style={{ marginBottom: 10, maxWidth: 260 }}>
+              <label>Handle da conta InfinitePay (opcional)</label>
+              <input value={filial.config?.infinitepay?.handle || ''} disabled={!podeEditar}
+                placeholder="nome_da_conta" onChange={(e) => setInfinitePay('handle', e.target.value.trim())} />
+              <span className="suave" style={{ fontSize: 11 }}>
+                Serve pro app conferir que está logado na conta certa antes de cobrar. O CNPJ
+                usado nessa checagem é o do cadastro acima — não precisa digitar de novo.
+              </span>
+            </div>
+            {podeEditar
+              ? <button className="btn-primary" type="submit">Salvar</button>
+              : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
+          </form>
         )}
       </div>
 

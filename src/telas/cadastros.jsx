@@ -49,6 +49,13 @@ export function Formas({ perfil }) {
       { campo: 'eh_dinheiro', rotulo: 'É dinheiro', tipo: 'bool' },
       { campo: 'rps_sempre', rotulo: 'RPS/DPS sempre', tipo: 'bool', naTabela: false },
       { campo: 'eh_devedor', rotulo: 'É "Devedor" (vira dívida da placa)', tipo: 'bool', naTabela: false },
+      // Liga a forma ao botão "Cobrar no celular" (InfiniteTap) — ver
+      // src/lib/infinitepay.js. Vazio = forma que não é cartão.
+      { campo: 'infinitepay_metodo', rotulo: 'InfiniteTap', tipo: 'select', naTabela: false, opcoes: [
+        { valor: '', rotulo: '— não é cartão —' },
+        { valor: 'credit', rotulo: 'Crédito' },
+        { valor: 'debit', rotulo: 'Débito' },
+      ] },
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
     ]} />;
 }
