@@ -65,6 +65,60 @@ export function agruparPorConvenio(movimentos, convenios = {}) {
   };
 }
 
+const dataBR = (iso) => (iso ? String(iso).split('-').reverse().join('/') : '—');
+
+/**
+ * Versão em texto puro do relatório, pra WhatsApp/e-mail.
+ *
+ * `detalhar`: com as estadias uma a uma, ou só os totais. Diferente do BI (que
+ * tem tamanho limitado por natureza), aqui a listagem é ilimitada — um convênio
+ * movimentado vira centenas de linhas, que no WhatsApp ficam ilegíveis e ainda
+ * arriscam estourar o limite da URL do link. Por isso o padrão da tela é o
+ * resumo, e o detalhe é uma escolha consciente (útil no e-mail).
+ *
+ * `fmtBRL` entra por parâmetro só pra esta lib não depender de tempo.js e
+ * seguir testável sem o resto do app.
+ */
+export function textoRelatorioConvenios({
+  dados, de, ate, filial, convenioFiltro, grupoFiltro, detalhar = false, fmtBRL,
+}) {
+  const l = [];
+  if (filial?.nome_fantasia) l.push(filial.nome_fantasia);
+  if (filial?.endereco) l.push(filial.endereco);
+  if (filial?.cnpj) l.push(`CNPJ: ${filial.cnpj}`);
+  if (l.length) l.push('');
+
+  l.push('Relatório de convênios');
+  l.push(`Saídas de ${dataBR(de)} a ${dataBR(ate)}`);
+  if (convenioFiltro) l.push(`Convênio: ${convenioFiltro}`);
+  if (grupoFiltro) l.push(`Grupo: ${grupoFiltro}`);
+  l.push('');
+
+  if (!dados.grupos.length) {
+    l.push('Nenhuma estadia de convênio no período.');
+    return l.join('\n');
+  }
+
+  for (const g of dados.grupos) {
+    if (g.grupo) l.push(`GRUPO ${g.grupo}`);
+    for (const conv of g.convenios) {
+      l.push(`  ${conv.codigo}${conv.razao ? ` · ${conv.razao}` : ''} — ${conv.qtde} estadia(s): ${fmtBRL(conv.total)}`);
+      if (detalhar) {
+        for (const m of conv.linhas) {
+          const controle = m.controle != null ? String(m.controle).padStart(4, '0') : '—';
+          l.push(`    ${controle} ${m.placa || '—'} ${m.modelo || ''}`.trimEnd());
+          l.push(`      ${dataBR(m.dt_entrada)} → ${dataBR(m.dt_saida)}: ${fmtBRL(Number(m.valor_convenio || 0))}`);
+        }
+      }
+    }
+    if (g.grupo) l.push(`  TOTAL DO GRUPO ${g.grupo} — ${g.qtde} estadia(s): ${fmtBRL(g.total)}`);
+    l.push('');
+  }
+
+  l.push(`TOTAL GERAL — ${dados.qtde} estadia(s): ${fmtBRL(dados.total)}`);
+  return l.join('\n');
+}
+
 /** Grupos distintos cadastrados, pro seletor da tela. */
 export function gruposDeConvenios(convenios = []) {
   const nomes = new Set();

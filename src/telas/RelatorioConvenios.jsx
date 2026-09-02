@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, fmtBRL, fmtHora } from '../lib/tempo.js';
-import { agruparPorConvenio, gruposDeConvenios } from '../lib/relatorioConvenios.js';
+import { agruparPorConvenio, gruposDeConvenios, textoRelatorioConvenios } from '../lib/relatorioConvenios.js';
+
+// Acima disso o link do WhatsApp começa a arriscar ser cortado (o texto vai
+// dentro da URL). Não é limite oficial — é a faixa em que dá pra confiar em
+// qualquer navegador/celular.
+const LIMITE_WHATSAPP = 4000;
 
 // Relatório do que cada convênio deve — é com ele que se cobra o conveniado.
 // Filtra pelo período de SAÍDA (é quando o valor do convênio é apurado, ver
@@ -101,6 +106,11 @@ function imprimirRelatorio({ dados, de, ate, filial, convenioFiltro, grupoFiltro
   win.print();
 }
 
+function linkEmail(texto, de, ate) {
+  const assunto = `Relatório de convênios — ${dataBR(de)} a ${dataBR(ate)}`;
+  return `mailto:?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(texto)}`;
+}
+
 export default function RelatorioConvenios({ perfil }) {
   const [de, setDe] = useState(hojeISO());
   const [ate, setAte] = useState(hojeISO());
@@ -111,6 +121,26 @@ export default function RelatorioConvenios({ perfil }) {
   const [filial, setFilial] = useState(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
+  // Padrão desmarcado: no WhatsApp o resumo é o que se lê; a listagem estadia
+  // a estadia vira um paredão de texto (e pode estourar o link).
+  const [detalharEnvio, setDetalharEnvio] = useState(false);
+
+  const textoParaEnvio = () => textoRelatorioConvenios({
+    dados, de, ate, filial, convenioFiltro, grupoFiltro, detalhar: detalharEnvio, fmtBRL,
+  });
+
+  function enviarWhatsApp() {
+    const texto = textoParaEnvio();
+    if (texto.length > LIMITE_WHATSAPP) {
+      window.alert(
+        'O relatório ficou grande demais pro WhatsApp e seria cortado no meio.\n\n'
+        + 'Desmarque "Detalhar estadias no envio" (o resumo com os totais costuma bastar), '
+        + 'reduza o período, ou use o Email/Imprimir pra mandar o detalhe.'
+      );
+      return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener,noreferrer');
+  }
 
   useEffect(() => {
     supabase.from('convenios').select('codigo, razao, grupo').order('codigo')
@@ -161,10 +191,19 @@ export default function RelatorioConvenios({ perfil }) {
               total de cada um e o total do grupo no fim.
             </p>
           </div>
-          <button className="btn-ghost" disabled={!dados || carregando}
-            onClick={() => imprimirRelatorio({ dados, de, ate, filial, convenioFiltro, grupoFiltro })}>
-            Imprimir
-          </button>
+          <div className="linha-form">
+            <button className="btn-ghost" disabled={!dados || carregando} onClick={enviarWhatsApp}>
+              WhatsApp
+            </button>
+            <button className="btn-ghost" disabled={!dados || carregando}
+              onClick={() => { window.location.href = linkEmail(textoParaEnvio(), de, ate); }}>
+              Email
+            </button>
+            <button className="btn-primary" disabled={!dados || carregando}
+              onClick={() => imprimirRelatorio({ dados, de, ate, filial, convenioFiltro, grupoFiltro })}>
+              Imprimir
+            </button>
+          </div>
         </div>
         {erro && <div className="aviso">{erro}</div>}
         <div className="linha-form">
@@ -197,7 +236,16 @@ export default function RelatorioConvenios({ perfil }) {
               </span>
             )}
           </div>
+          <label className="campo-check">
+            <input type="checkbox" checked={detalharEnvio} onChange={(e) => setDetalharEnvio(e.target.checked)} />
+            Detalhar estadias no envio
+          </label>
         </div>
+        <p className="suave" style={{ fontSize: 11 }}>
+          Desmarcado, o WhatsApp e o e-mail levam só os totais por código e por grupo — que é o
+          que se lê num celular. Marcado, vai estadia por estadia (bom pro e-mail; no WhatsApp
+          pode ficar longo demais). A tela e a impressão sempre mostram o detalhe.
+        </p>
       </div>
 
       {carregando && <div className="card suave">Carregando…</div>}

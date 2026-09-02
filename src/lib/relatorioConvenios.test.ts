@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { agruparPorConvenio, gruposDeConvenios } from './relatorioConvenios.js';
+import { agruparPorConvenio, gruposDeConvenios, textoRelatorioConvenios } from './relatorioConvenios.js';
 
 /** Convênios do exemplo: C1/C2/C3 no grupo "C", e um avulso sem grupo. */
 const CONVENIOS = {
@@ -72,4 +72,58 @@ test('gruposDeConvenios: distintos, sem vazios, em ordem', () => {
     gruposDeConvenios([{ grupo: 'C' }, { grupo: '' }, { grupo: 'A' }, { grupo: 'C' }, {}]),
     ['A', 'C'],
   );
+});
+
+// Texto pro WhatsApp/e-mail -------------------------------------------------
+const brl = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
+const linhaMov = (codigo: string, valor: number, extra = {}) =>
+  ({ convenio_codigo: codigo, valor_convenio: valor, controle: 42, placa: 'ABC1D23', modelo: 'GOL',
+     dt_entrada: '2026-09-01', dt_saida: '2026-09-01', ...extra });
+
+test('texto: resumo traz totais por código e do grupo, sem listar estadia', () => {
+  const dados = agruparPorConvenio([linhaMov('C1', 10), linhaMov('C2', 20)], CONVENIOS);
+  const txt = textoRelatorioConvenios({
+    dados, de: '2026-09-01', ate: '2026-09-30', filial: { nome_fantasia: 'Ginpark' }, fmtBRL: brl,
+  });
+  assert.match(txt, /GRUPO C/);
+  assert.match(txt, /C1 · Loja Centro — 1 estadia\(s\): R\$ 10,00/);
+  assert.match(txt, /TOTAL DO GRUPO C — 2 estadia\(s\): R\$ 30,00/);
+  assert.match(txt, /TOTAL GERAL — 2 estadia\(s\): R\$ 30,00/);
+  // Sem detalhar, a placa não aparece — é o que mantém o texto curto o
+  // bastante pra caber num link de WhatsApp.
+  assert.ok(!txt.includes('ABC1D23'));
+});
+
+test('texto: detalhado lista cada estadia', () => {
+  const dados = agruparPorConvenio([linhaMov('C1', 10)], CONVENIOS);
+  const txt = textoRelatorioConvenios({
+    dados, de: '2026-09-01', ate: '2026-09-30', filial: {}, detalhar: true, fmtBRL: brl,
+  });
+  assert.match(txt, /0042 ABC1D23 GOL/);
+  assert.match(txt, /01\/09\/2026 → 01\/09\/2026: R\$ 10,00/);
+});
+
+test('texto: sem grupo não inventa cabeçalho nem total de grupo', () => {
+  const dados = agruparPorConvenio([linhaMov('X9', 5)], CONVENIOS);
+  const txt = textoRelatorioConvenios({
+    dados, de: '2026-09-01', ate: '2026-09-30', filial: {}, fmtBRL: brl,
+  });
+  assert.ok(!txt.includes('GRUPO'));
+  assert.match(txt, /TOTAL GERAL — 1 estadia\(s\): R\$ 5,00/);
+});
+
+test('texto: período vazio avisa em vez de sair só com cabeçalho', () => {
+  const txt = textoRelatorioConvenios({
+    dados: { grupos: [], total: 0, qtde: 0 }, de: '2026-09-01', ate: '2026-09-30', filial: {}, fmtBRL: brl,
+  });
+  assert.match(txt, /Nenhuma estadia de convênio no período/);
+});
+
+test('texto: filtros aplicados aparecem no cabeçalho', () => {
+  const dados = agruparPorConvenio([linhaMov('C1', 10)], CONVENIOS);
+  const txt = textoRelatorioConvenios({
+    dados, de: '2026-09-01', ate: '2026-09-30', filial: {}, convenioFiltro: 'C1', grupoFiltro: 'C', fmtBRL: brl,
+  });
+  assert.match(txt, /Convênio: C1/);
+  assert.match(txt, /Grupo: C/);
 });
