@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js';
 import { PAPEIS, podeAcessar, ehFornecedor, ehSupervisor } from '../lib/acesso.js';
 import { trocarFilialAtiva } from '../telas/EscolherFilial.jsx';
 import { imprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
+import { liberarSessao } from '../telas/SessoesGate.jsx';
 import { imprimirTicket } from './Ticket.jsx';
 
 const INTERVALO_VERIFICACAO_MS = 4000;
@@ -196,7 +197,11 @@ export default function Layout({ perfil }) {
               </span>
             )}
           </div>
-          <button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button>
+          {/* Devolve a vaga do limite de usuários simultâneos antes de sair —
+              senão ela ficaria presa até expirar por falta de heartbeat (2
+              min), e quem entrasse em seguida podia levar "limite atingido"
+              com o posto já livre. */}
+          <button className="btn-ghost" onClick={async () => { await liberarSessao(); supabase.auth.signOut(); }}>Sair</button>
         </header>
         {avisoLimpeza && (
           <div className="aviso" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 10px' }}>

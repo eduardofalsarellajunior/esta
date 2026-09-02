@@ -25,6 +25,9 @@ export default async function handler(req, res) {
   // "quantas pessoas" (ver 0046_sessao_por_dispositivo.sql).
   const sessaoId = String(req.body?.sessaoId || '').trim();
   if (!sessaoId) { res.status(400).json({ erro: 'Sessão sem id — recarregue a página.' }); return; }
+  // "Sair" no app: devolve a vaga na hora em vez de esperar os 2 min de
+  // expiração (ver liberarSessao em SessoesGate.jsx).
+  const liberar = req.body?.liberar === true;
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
@@ -47,6 +50,13 @@ export default async function handler(req, res) {
   const admin = createClient(process.env.VITE_SUPABASE_URL, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  if (liberar) {
+    await admin.from('sessoes_ativas').delete()
+      .eq('filial_id', filialId).eq('perfil_id', meuPerfil.id).eq('sessao_id', sessaoId);
+    res.status(200).json({ liberado: true });
+    return;
+  }
 
   const { data: filial } = await admin.from('filiais')
     .select('limite_usuarios_simultaneos').eq('id', filialId).maybeSingle();

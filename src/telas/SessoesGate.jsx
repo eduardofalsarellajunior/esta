@@ -6,16 +6,44 @@ const INTERVALO_RETRY_BLOQUEADO_MS = 20_000;
 const CHAVE_SESSAO_ID = 'esta_sessao_id';
 
 /**
- * Id desta aba/dispositivo (não desta pessoa) — cada aba nova gera o seu,
- * sessionStorage não é compartilhado entre abas. É o que faz 2 conexões do
- * mesmo login contarem como 2 no limite de usuários simultâneos e no Painel
- * de Uso (ver 0046_sessao_por_dispositivo.sql), em vez de uma só vaga
- * reaproveitada por qualquer dispositivo que use o mesmo login.
+ * Id deste NAVEGADOR (não desta aba, nem desta pessoa) — em localStorage, que
+ * sobrevive a recarregar e a fechar/reabrir o app.
+ *
+ * Era sessionStorage (um id por aba/janela) e isso furava o limite ao
+ * contrário: cada vez que a cabine era reaberta nascia uma sessão NOVA, e a
+ * anterior só sumia depois de 2 min sem heartbeat — reabrir o app duas vezes
+ * seguidas estourava um limite de 2 usuários tendo só duas pessoas de
+ * verdade. Foi o que aconteceu numa instalação, durante os testes de
+ * impressão.
+ *
+ * Por perfil de navegador é também o que "usuário simultâneo" significa numa
+ * licença: quantos POSTOS estão usando o sistema. Duas abas na mesma máquina
+ * são um posto só; a cabine (que roda em perfil próprio, --user-data-dir) e o
+ * celular continuam contando dois, cada um com seu id — que era o ponto da
+ * 0046_sessao_por_dispositivo.sql.
  */
 function sessaoId() {
-  let id = sessionStorage.getItem(CHAVE_SESSAO_ID);
-  if (!id) { id = crypto.randomUUID(); sessionStorage.setItem(CHAVE_SESSAO_ID, id); }
+  let id = localStorage.getItem(CHAVE_SESSAO_ID);
+  if (!id) { id = crypto.randomUUID(); localStorage.setItem(CHAVE_SESSAO_ID, id); }
   return id;
+}
+
+/**
+ * Devolve a vaga na hora, em vez de deixar o limite esperar os 2 min de
+ * expiração — chamado no "Sair" (ver Layout.jsx). Best-effort: falhando, a
+ * expiração por falta de heartbeat resolve sozinha.
+ */
+export async function liberarSessao() {
+  try {
+    const { data: sessaoAuth } = await supabase.auth.getSession();
+    if (!sessaoAuth.session) return;
+    await fetch('/api/sessao-heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessaoAuth.session.access_token}` },
+      body: JSON.stringify({ sessaoId: sessaoId(), liberar: true }),
+      keepalive: true,
+    });
+  } catch { /* a expiração por heartbeat cobre */ }
 }
 
 /**
