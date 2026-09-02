@@ -134,6 +134,12 @@ export default function Configuracoes({ perfil }) {
           celular pediu pra imprimir e manda pra impressora daqui, sem passar pelo diálogo do
           sistema. Recarregue a página depois de mudar esta opção.
         </p>
+        <p className="aviso" style={{ fontSize: 11, marginTop: 4 }}>
+          Marque esta opção <strong>dentro da janela aberta pelo <code>pdv-cabine.bat</code></strong>.
+          Ela fica guardada no navegador, e o <code>.bat</code> roda num perfil separado — marcada
+          numa janela comum, a janela da cabine continua sem escutar os pedidos do celular.
+          Quando estiver valendo, aparece <strong>🖨 cabine</strong> no topo da tela.
+        </p>
       </div>
 
       <div className="card">

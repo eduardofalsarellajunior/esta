@@ -83,11 +83,18 @@ Do mais provável pro menos, o que checar na máquina da cabine:
 
 1. **A janela da cabine está aberta?** O "servidor" de impressão é a própria
    aba — fechou, os pedidos ficam pendentes.
-2. **A opção está ligada nessa máquina?** *Configurações → Aparência →
-   "Este navegador imprime os pedidos vindos do celular"*. É preferência **de
-   navegador**, não da filial: ligar no celular ou noutro PC não adianta.
-   **Recarregue a página depois de marcar** — a verificação só começa no
-   carregamento seguinte.
+2. **A opção está ligada NA JANELA DO `.bat`?** *Configurações → Aparência →
+   "Este navegador imprime os pedidos vindos do celular"*. Esta é a pegadinha
+   que já custou uma instalação inteira: a preferência mora no `localStorage`,
+   e o `.bat` abre um **perfil separado** (`--user-data-dir`). Marcada numa
+   janela normal do Chrome, ela **não existe** no perfil da cabine — a janela
+   abre com a opção desligada e nunca procura pedido nenhum. Marque dentro da
+   janela do `.bat` e **recarregue**. Confirmação visual: com a escuta ativa
+   aparece **🖨 cabine** no topo da tela.
+
+   Repare que **imprimir clicando no botão funciona mesmo com a opção
+   desligada** — ela só liga a escuta em segundo plano. É por isso que dá pra
+   ter "a cabine imprime, o celular não" com tudo parecendo certo.
 3. **Foi aberto pelo `.bat`?** Este é o motivo mais traiçoeiro. O pedido do
    celular chega numa verificação em segundo plano, **sem clique**, e sem
    `--disable-popup-blocking` o navegador barra a janela de impressão em
@@ -96,6 +103,23 @@ Do mais provável pro menos, o que checar na máquina da cabine:
    sintoma de "a cabine imprime, o celular não".
 4. **Mesma filial nos dois lados?** O pedido é gravado na filial de quem
    mandou; a cabine só enxerga os da filial dela.
+
+Estar na **mesma rede não é requisito** e não ajuda no diagnóstico: o celular
+não fala com a cabine pela rede local — grava o pedido no Supabase e a cabine
+busca de lá. Funciona igual com o celular no 4G.
+
+Pra saber onde parou, olhe a tabela no SQL Editor:
+
+```sql
+select criado_em, status, erro from print_jobs order by criado_em desc limit 10;
+```
+
+| O que aparece | Onde está o problema |
+|---|---|
+| Nenhuma linha | O celular não chegou a gravar o pedido (botão não usado, ou erro no envio) |
+| `pendente` acumulando | A cabine não está escutando — caso 1, 2 ou 4 acima |
+| `erro` | A cabine pegou o pedido mas não imprimiu; a coluna `erro` diz o motivo (caso 3) |
+| `impresso` mas sem papel | Problema no driver/impressora, não no app |
 
 Desde a correção do pedido silencioso, o caso 3 deixa rastro: o pedido fica
 com status `erro` na tabela `print_jobs`, com a explicação — antes ele era

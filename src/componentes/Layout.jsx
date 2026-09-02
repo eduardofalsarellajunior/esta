@@ -184,6 +184,17 @@ export default function Layout({ perfil }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button className="menu-toggle btn-ghost" onClick={() => setMenuAberto((v) => !v)} aria-label="Menu">☰</button>
             <span className="filial-nome">{perfil.nome} · {PAPEIS[perfil.papel] || perfil.papel}</span>
+            {/* Estado que antes era invisível: dava pra passar o dia achando
+                que esta janela escutava os pedidos do celular sem escutar.
+                Como a preferência vive no localStorage, ela é POR PERFIL do
+                navegador — marcada numa janela normal, não vale na janela do
+                pdv-cabine.bat, que roda em perfil próprio (--user-data-dir). */}
+            {imprimePedidosDaCabine() && (
+              <span className="suave" style={{ fontSize: 11 }}
+                title="Esta janela imprime os pedidos de impressão vindos do celular (Configurações → Aparência).">
+                🖨 cabine
+              </span>
+            )}
           </div>
           <button className="btn-ghost" onClick={() => supabase.auth.signOut()}>Sair</button>
         </header>
