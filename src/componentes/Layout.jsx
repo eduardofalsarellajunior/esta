@@ -111,10 +111,18 @@ export default function Layout({ perfil }) {
           .eq('id', job.id).eq('status', 'pendente').select().maybeSingle();
         if (!reivindicado) continue;
         try {
-          imprimirTicket(job.ticket, filial);
+          // `avisar: false`: um alert aqui travaria a fila esperando alguém
+          // fechar — na cabine ninguém está olhando a tela. O retorno `false`
+          // (pop-up bloqueado) precisa virar erro no pedido: antes o job era
+          // dado como impresso e o papel nunca saía, sem deixar rastro.
+          const imprimiu = imprimirTicket(job.ticket, filial, { avisar: false });
+          if (!imprimiu) {
+            await supabase.from('print_jobs').update({
+              status: 'erro',
+              erro: 'Navegador bloqueou a janela de impressão. Abra a cabine pelo pdv-cabine.bat (ou pdv-cabine-edge.bat), que já libera pop-up.',
+            }).eq('id', job.id);
+          }
         } catch (e) {
-          // Não captura "pop-up bloqueado" (imprimirTicket só alerta, não lança) —
-          // só erros inesperados (ex.: ticket malformado).
           await supabase.from('print_jobs').update({ status: 'erro', erro: e.message }).eq('id', job.id);
         }
       }

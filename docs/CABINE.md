@@ -65,6 +65,47 @@ Daí o perfil separado: sem ele, a flag no atalho normal do Chrome faria
    pra ganhar o `--disable-popup-blocking`), feche e abra de novo — flag de
    linha de comando só vale a partir da próxima vez que o Chrome sobe.
 
+## Ticket sai sem formatação (tudo em texto puro)
+
+Quase sempre é o **driver da impressora**: instalada como **"Genérica / Somente
+texto"**, ela recebe só caracteres e ignora o que o navegador desenhou —
+negrito, fonte grande (`@PG+@`), alinhamento, tudo se perde. É comum a
+impressora vir assim numa máquina que rodava o sistema antigo (o Clipper
+mandava texto cru direto pra porta).
+
+Solução: reinstalar a impressora com o **driver do fabricante** (Epson,
+Elgin, Bematech, Daruma…), não com o genérico. Depois de trocar, imprima uma
+página de teste do Windows antes de testar pelo app.
+
+## Diagnóstico: celular manda, cabine não imprime
+
+Do mais provável pro menos, o que checar na máquina da cabine:
+
+1. **A janela da cabine está aberta?** O "servidor" de impressão é a própria
+   aba — fechou, os pedidos ficam pendentes.
+2. **A opção está ligada nessa máquina?** *Configurações → Aparência →
+   "Este navegador imprime os pedidos vindos do celular"*. É preferência **de
+   navegador**, não da filial: ligar no celular ou noutro PC não adianta.
+   **Recarregue a página depois de marcar** — a verificação só começa no
+   carregamento seguinte.
+3. **Foi aberto pelo `.bat`?** Este é o motivo mais traiçoeiro. O pedido do
+   celular chega numa verificação em segundo plano, **sem clique**, e sem
+   `--disable-popup-blocking` o navegador barra a janela de impressão em
+   silêncio. Abrir o app "na mão" numa aba normal imprime bem quando *você*
+   clica em Imprimir, mas nunca imprime o que vem do celular — exatamente o
+   sintoma de "a cabine imprime, o celular não".
+4. **Mesma filial nos dois lados?** O pedido é gravado na filial de quem
+   mandou; a cabine só enxerga os da filial dela.
+
+Desde a correção do pedido silencioso, o caso 3 deixa rastro: o pedido fica
+com status `erro` na tabela `print_jobs`, com a explicação — antes ele era
+marcado como impresso e o papel simplesmente não saía.
+
+**Windows 7** não é impedimento pro pedido do celular em si, mas prenda o
+detalhe: Chrome e Edge pararam de atualizar no Windows 7 na versão 109
+(início de 2023). O app roda nessa versão, só não há mais correção de
+segurança do navegador — vale planejar a troca da máquina.
+
 ## Como o app imprime
 
 `imprimirTicket` ([src/componentes/Ticket.jsx](../src/componentes/Ticket.jsx))

@@ -83,15 +83,20 @@ const ESTILO_TICKET = `
  * operador) abre janela sem drama; os demais pedaços reaproveitam essa
  * mesma janela já aberta, sem precisar de outro `window.open()`.
  */
-function imprimirEmSequencia(titulo, cabecalho, corpos) {
+function imprimirEmSequencia(titulo, cabecalho, corpos, avisar) {
   const win = window.open('', '_blank', 'width=380,height=600');
   if (!win) {
-    window.alert(
-      'O navegador bloqueou a janela de impressão. Clique no ícone de pop-up '
-      + 'bloqueado na barra de endereço e escolha "Sempre permitir" para este '
-      + 'site — na cabine (pdv-cabine.bat/pdv-cabine-edge.bat) isso já vem liberado.'
-    );
-    return;
+    // Quem imprime sozinho (pedido vindo do celular, ver Layout.jsx) não pode
+    // parar num alert que ninguém vai fechar na cabine — só recebe o `false`
+    // e registra o erro no pedido.
+    if (avisar) {
+      window.alert(
+        'O navegador bloqueou a janela de impressão. Clique no ícone de pop-up '
+        + 'bloqueado na barra de endereço e escolha "Sempre permitir" para este '
+        + 'site — na cabine (pdv-cabine.bat/pdv-cabine-edge.bat) isso já vem liberado.'
+      );
+    }
+    return false;
   }
   function imprimirPedaco(i) {
     if (i >= corpos.length) { win.close(); return; }
@@ -116,11 +121,19 @@ function imprimirEmSequencia(titulo, cabecalho, corpos) {
     setTimeout(() => { win.focus(); win.print(); }, ESPERA_ENTRE_PRINTS_MS);
   }
   imprimirPedaco(0);
+  return true;
 }
 
-// Impressão numa janela dedicada (não no modal): evita a duplicação de página que
-// ocorre ao imprimir conteúdo dentro de um overlay position:fixed.
-export function imprimirTicket(ticket, filial) {
+/**
+ * Impressão numa janela dedicada (não no modal): evita a duplicação de página
+ * que ocorre ao imprimir conteúdo dentro de um overlay position:fixed.
+ *
+ * Devolve `false` quando o navegador bloqueou a janela — quem imprime sozinho
+ * (pedidos vindos do celular, ver Layout.jsx) precisa saber disso pra marcar o
+ * pedido como erro em vez de dar como impresso e o papel nunca sair.
+ * `avisar: false` cala o alert, que na cabine ficaria travando a fila.
+ */
+export function imprimirTicket(ticket, filial, { avisar = true } = {}) {
   // Com modelo, o cabeçalho do estabelecimento já faz parte do texto (tokens
   // @ER@/@EE@/…) — não repetir aqui.
   const usaModelo = !!ticket.modelo;
@@ -135,15 +148,14 @@ export function imprimirTicket(ticket, filial) {
     // um @PG+@ aberto antes do @B@ sem o @PG-@ correspondente não vaza pro
     // pedaço seguinte, já que cada print() é um documento HTML novo.
     const pedacos = ticket.modelo.split(TOKEN_CORTE).map((m) => m.trim()).filter(Boolean);
-    imprimirEmSequencia(ticket.titulo, '', pedacos.map((p) => modeloParaHtml(p, ticket.dados)));
-    return;
+    return imprimirEmSequencia(ticket.titulo, '', pedacos.map((p) => modeloParaHtml(p, ticket.dados)), avisar);
   }
 
   const corpo = usaModelo
     ? modeloParaHtml(ticket.modelo, ticket.dados)
     : `<h2>${escapeHtml(ticket.titulo)}</h2>`
       + ticket.linhas.map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
-  imprimirEmSequencia(ticket.titulo, cabecalho, [corpo]);
+  return imprimirEmSequencia(ticket.titulo, cabecalho, [corpo], avisar);
 }
 
 export function linkWhatsApp(ticket, celular, filial) {
