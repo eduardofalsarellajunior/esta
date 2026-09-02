@@ -21,7 +21,7 @@ export const ROTAS_OPERADOR = ['/', '/caixa', '/reservas', '/sobre'];
 // saída (pagar/banco).
 export const ROTAS_GERENTE = [
   ...ROTAS_OPERADOR,
-  '/bi', '/mensalistas', '/convenios', '/servicos', '/modelos', '/fiscal', '/receber',
+  '/bi', '/relatorio-convenios', '/mensalistas', '/convenios', '/servicos', '/modelos', '/fiscal', '/receber',
 ];
 
 /** Rotas permitidas, ou `null` quando o papel acessa tudo. */

@@ -14,6 +14,7 @@ const GRUPOS = [
     { to: '/', rotulo: 'Pátio', fim: true },
     { to: '/caixa', rotulo: 'Caixa' },
     { to: '/bi', rotulo: 'BI / Painel' },
+    { to: '/relatorio-convenios', rotulo: 'Relatório de convênios' },
     { to: '/reservas', rotulo: 'Reservas de vaga' },
   ]},
   { titulo: 'Cadastros', itens: [
