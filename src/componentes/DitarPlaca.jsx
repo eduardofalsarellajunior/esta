@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { normalizarDitadoPlaca } from '../lib/ditadoPlaca.js';
+import { normalizarDitadoPlaca, acumularDitado } from '../lib/ditadoPlaca.js';
 
 const SpeechRecognitionAPI = typeof window !== 'undefined'
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
@@ -17,9 +17,13 @@ const SpeechRecognitionAPI = typeof window !== 'undefined'
  * Reconhecimento em CICLOS curtos (não `continuous: true`) — cada ciclo
  * escuta só uma fala e reinicia sozinho assim que termina, dando a sensação
  * de "vai ouvindo direto" sem usar o modo contínuo de verdade do navegador.
- * O modo contínuo foi tentado antes e, num ambiente barulhento (pátio,
- * carro, vento), trava repetindo o mesmo som curto sem parar ("ttltltl...")
- * — cada ciclo isolado não sofre disso, porque começa do zero a cada vez.
+ *
+ * O "ttltltl…" que aparecia no lugar de "TLI" NÃO era o barulho do pátio, como
+ * se pensou primeiro: era `event.results` ser cumulativo (traz de novo, a cada
+ * evento, os trechos já finais) enquanto o código concatenava a lista inteira
+ * toda vez. A mesma letra entrava várias vezes e enchia os 7 caracteres da
+ * placa antes de chegar aos números — o "trava no 8". Corrigido em
+ * `acumularDitado` (ditadoPlaca.js), com teste.
  */
 export default function DitarPlaca({ onConfirmar, rotulo }) {
   const [aberto, setAberto] = useState(false);
@@ -37,18 +41,19 @@ export default function DitarPlaca({ onConfirmar, rotulo }) {
     rec.continuous = false; // um ciclo = uma fala só — ver comentário do componente
     rec.interimResults = true;
     rec.maxAlternatives = 1;
+    // Quantos trechos desta sessão já foram aproveitados: `e.results` vem
+    // cumulativo a cada evento, e sem isso a mesma letra entrava várias vezes
+    // (ver acumularDitado em ditadoPlaca.js).
+    let consumidos = 0;
     rec.onresult = (e) => {
-      let interim = '';
-      for (let i = 0; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) {
-          brutoRef.current += `${r[0].transcript} `;
-          setTexto(normalizarDitadoPlaca(brutoRef.current));
-        } else {
-          interim += r[0].transcript;
-        }
+      const lista = Array.from(e.results, (r) => ({ transcript: r[0].transcript, isFinal: r.isFinal }));
+      const saida = acumularDitado(lista, consumidos);
+      consumidos = saida.consumidos;
+      if (saida.finais) {
+        brutoRef.current += saida.finais;
+        setTexto(normalizarDitadoPlaca(brutoRef.current));
       }
-      setParcial(interim);
+      setParcial(saida.interim);
     };
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') return; // silêncio normal entre letras — o onend cuida de reiniciar

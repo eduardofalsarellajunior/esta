@@ -21,6 +21,33 @@ function semAcento(s) {
 /** Placas têm no máximo 7 caracteres (padrão antigo e Mercosul) — corta com folga de 1. */
 const MAX_CARACTERES = 7;
 
+/**
+ * Separa, de um evento `onresult` do reconhecimento de voz, o que é trecho
+ * FINAL AINDA NÃO APROVEITADO do que é palpite parcial (só feedback na tela).
+ *
+ * Existe porque `event.results` do Web Speech API é CUMULATIVO: a cada evento
+ * ele traz de novo tudo que já veio na mesma sessão, inclusive os trechos que
+ * já estavam finais. Percorrer a lista inteira toda vez e ir concatenando
+ * refazia a mesma letra a cada evento — era o "ttltltl…" no lugar de "TLI":
+ * o T e o L entrando várias vezes, enchendo os 7 caracteres da placa antes de
+ * chegar nos números (daí a sensação de "trava no 8").
+ *
+ * `jaConsumidos` é quantos itens da lista já foram aproveitados nesta sessão;
+ * volta atualizado pra próxima chamada.
+ */
+export function acumularDitado(resultados, jaConsumidos = 0) {
+  let finais = '';
+  let interim = '';
+  let consumidos = jaConsumidos;
+  resultados.forEach((r, i) => {
+    if (!r.isFinal) { interim += r.transcript; return; }
+    if (i < jaConsumidos) return; // já entrou num evento anterior
+    finais += `${r.transcript} `;
+    consumidos = Math.max(consumidos, i + 1);
+  });
+  return { finais, interim, consumidos };
+}
+
 export function normalizarDitadoPlaca(transcript) {
   const limpo = semAcento(String(transcript || '').toUpperCase()).replace(/[^A-Z0-9\s]/g, ' ');
   const tokens = limpo.split(/\s+/).filter(Boolean);
