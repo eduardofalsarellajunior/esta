@@ -95,6 +95,10 @@ export default function Configuracoes({ perfil }) {
     setFilial((f) => ({ ...f, config: { ...f.config, infinitepay: { ...(f.config?.infinitepay || {}), [campo]: valor } } }));
   }
 
+  function setSemParar(campo, valor) {
+    setFilial((f) => ({ ...f, config: { ...f.config, semparar: { ...(f.config?.semparar || {}), [campo]: valor } } }));
+  }
+
   function setNfse(campo, valor) {
     setFilial((f) => ({ ...f, config: { ...f.config, nfse: { ...(f.config?.nfse || {}), [campo]: valor } } }));
   }
@@ -305,6 +309,45 @@ export default function Configuracoes({ perfil }) {
                 Serve pro app conferir que está logado na conta certa antes de cobrar. O CNPJ
                 usado nessa checagem é o do cadastro acima — não precisa digitar de novo.
               </span>
+            </div>
+            {podeEditar
+              ? <button className="btn-primary" type="submit">Salvar</button>
+              : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
+          </form>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Sem Parar</h2>
+        <p className="suave">
+          Pagamento por placa: na entrada o esta pergunta ao Sem Parar se o veículo pode pagar
+          assim aqui; se puder, na saída aparece marcada a forma "Sem Parar" (ver Cadastros →
+          Formas de pagamento) — só cobra se o operador escolher essa forma. Ver{' '}
+          <code>docs/SEMPARAR.md</code>.
+        </p>
+        {!filial ? 'Carregando…' : (
+          <form onSubmit={salvar}>
+            <label className="campo-check" style={{ marginBottom: 4 }}>
+              <input type="checkbox" checked={!!filial.config?.semparar?.ativo} disabled={!podeEditar}
+                onChange={(e) => setSemParar('ativo', e.target.checked)} />
+              Usa o Sem Parar nesta filial
+            </label>
+            <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+              A chave da integradora (x-api-key) é uma só pra todos os clientes do esta e fica só
+              nas variáveis de ambiente do Vercel — nunca aqui. Código e hash abaixo são só desta
+              filial, o Sem Parar entrega os dois juntos.
+            </p>
+            <div className="linha-form" style={{ marginBottom: 10 }}>
+              <div className="campo" style={{ maxWidth: 200 }}>
+                <label>Código do estabelecimento</label>
+                <input value={filial.config?.semparar?.codigoEstabelecimento || ''} disabled={!podeEditar}
+                  onChange={(e) => setSemParar('codigoEstabelecimento', e.target.value.trim())} />
+              </div>
+              <div className="campo" style={{ maxWidth: 320 }}>
+                <label>Hash do estabelecimento</label>
+                <input className="mono" value={filial.config?.semparar?.hash || ''} disabled={!podeEditar}
+                  onChange={(e) => setSemParar('hash', e.target.value.trim())} />
+              </div>
             </div>
             {podeEditar
               ? <button className="btn-primary" type="submit">Salvar</button>

@@ -483,6 +483,20 @@ export default function Patio({ perfil }) {
       valor_dev: dividaDetectadaRef.current || 0,
     });
     if (error) { setErro(error.code === '23505' ? 'Essa placa já está no pátio.' : error.message); return; }
+    // Sem Parar (ver docs/SEMPARAR.md): pergunta se esta placa pode pagar
+    // por lá — best-effort, não trava a entrada nem o ticket. O resultado só
+    // aparece no pátio (badge) e na saída (marcação na forma) quando/se essa
+    // chamada terminar antes; sem Sem Parar ligado na filial, nem dispara
+    // (o próprio endpoint devolve "desligado" sem custo).
+    if (filial?.config?.semparar?.ativo) {
+      supabase.auth.getSession().then(({ data: sessao }) => {
+        fetch('/api/semparar-autoriza', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessao.session?.access_token}` },
+          body: JSON.stringify({ movimentoId: novo.id }),
+        }).then(() => recarregar()).catch(() => {});
+      });
+    }
     // Serviços marcados antes de dar entrada (ver alternarServicoEntrada) —
     // grava agora que o movimento já existe (é o mesmo movimento_servicos
     // que o botão "Serviço" da lista usa, só que preenchido de antemão).
@@ -1159,6 +1173,30 @@ export default function Patio({ perfil }) {
     }
     const dtSaida = hojeISO();
     const hrSaida = agoraHHMM();
+
+    // Sem Parar (ver docs/SEMPARAR.md): só roda quando o operador escolheu
+    // essa forma nas formas de pagamento — nunca sozinho. Fica ANTES de
+    // qualquer efeito colateral (caixa, movimento, pagamento): se o Sem
+    // Parar recusar, a saída não avança nem um pouco — o operador só troca
+    // de forma e confirma de novo.
+    const formaSemParar = formas.find((f) => f.eh_semparar);
+    const pagSemParar = formaSemParar
+      ? (pagamentos || []).find((p) => p.forma === formaSemParar.codigo && Number(p.valor) > 0)
+      : null;
+    if (pagSemParar) {
+      const { data: sessao } = await supabase.auth.getSession();
+      const resp = await fetch('/api/semparar-saida', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessao.session?.access_token}` },
+        body: JSON.stringify({ movimentoId: mov.id, valor: Number(pagSemParar.valor), dtSaida, hrSaida }),
+      });
+      const dadosSemParar = await resp.json().catch(() => ({}));
+      if (!resp.ok || !dadosSemParar.ok) {
+        setErro(dadosSemParar.erro || 'Sem Parar recusou o pagamento — escolha outra forma.');
+        return;
+      }
+    }
+
     // Liga ao caixa aberto do operador (se houver), para o fechamento.
     const { data: cx } = await supabase.from('caixas').select('id')
       .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
@@ -1179,6 +1217,11 @@ export default function Patio({ perfil }) {
       valor_calculado: valorFoiAlterado ? valorCalculado : null,
       usuario_altera: valorFoiAlterado ? perfil.id : null,
       dt_altera: valorFoiAlterado ? new Date().toISOString() : null,
+      // Tinha autorização Sem Parar mas o operador cobrou por outra forma —
+      // marca só pra registro (não existe endpoint pra "desistir" de uma
+      // mera autorização, só de uma transação já confirmada — ver
+      // docs/SEMPARAR.md). Sem autorização nenhuma, nem mexe no campo.
+      ...(!pagSemParar && mov.semparar_status === 'autorizado' ? { semparar_status: 'nao_utilizado' } : {}),
     }).eq('id', mov.id);
     if (error) { setErro(error.message); return; }
 
@@ -1551,7 +1594,10 @@ export default function Patio({ perfil }) {
                     </td>
                     <td>{semChapa(m.placa)
                       ? <span className="suave">{rotuloPlaca(m.placa)}</span>
-                      : <span className="placa mono">{m.placa}</span>}</td>
+                      : <span className="placa mono">{m.placa}</span>}
+                      {m.semparar_status === 'autorizado' && (
+                        <span className="suave" title="Autorizado a pagar por Sem Parar"> 🅿️</span>
+                      )}</td>
                     <td>{m.modelo || '—'}</td>
                     <td>{m.tipo_veic}</td>
                     <td>
@@ -2058,7 +2104,14 @@ export default function Patio({ perfil }) {
                 {saindo.pagamentos.map((p, i) => (
                   <div className="linha-form" key={i} style={{ marginTop: 6 }}>
                     <select value={p.forma} onChange={(e) => atualizaPagto(i, 'forma', e.target.value)}>
-                      {formas.map((f) => <option key={f.codigo} value={f.codigo}>{f.descricao}</option>)}
+                      {formas.map((f) => (
+                        <option key={f.codigo} value={f.codigo}>
+                          {/* Marca a forma Sem Parar só quando ESTE veículo tem
+                              autorização válida — escolhê-la fora disso dá erro
+                              ao confirmar (ver confirmarSaida). */}
+                          {f.eh_semparar && saindo.mov.semparar_status === 'autorizado' ? '🅿️ ' : ''}{f.descricao}
+                        </option>
+                      ))}
                     </select>
                     <input type="number" step="0.01" value={p.valor}
                       onChange={(e) => atualizaPagto(i, 'valor', e.target.value)} style={{ width: 120 }} />

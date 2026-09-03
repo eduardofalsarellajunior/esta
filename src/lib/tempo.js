@@ -29,6 +29,19 @@ export function dataHoraDe(dtISO, hhmm) {
   return d;
 }
 
+/**
+ * Data ISO + hora comercial -> "YYYY-MM-DDTHH:MM:SS" LOCAL, sem sufixo de
+ * fuso — é o formato dos exemplos do manual do Sem Parar
+ * (dataEntrada/dataSaida, ver api/semparar-saida.js). `Date.toISOString()`
+ * não serve aqui: ele converte pra UTC, e um estabelecimento em -03:00
+ * mandaria a hora errada.
+ */
+export function dataHoraLocalISO(dtISO, hhmm) {
+  const d = dataHoraDe(dtISO, hhmm);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 /** Formata data ISO 'YYYY-MM-DD' como 'DD/MM/AAAA'. */
 export function fmtDataBR(iso) {
   return iso ? String(iso).split('-').reverse().join('/') : '—';

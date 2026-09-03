@@ -79,6 +79,9 @@ export function Formas({ perfil }) {
         { valor: 'credit', rotulo: 'Crédito' },
         { valor: 'debit', rotulo: 'Débito' },
       ] },
+      // Liga a forma ao fluxo Sem Parar (ver docs/SEMPARAR.md) — escolher
+      // esta forma na saída de um veículo autorizado dispara Recebe+Confirma.
+      { campo: 'eh_semparar', rotulo: 'É "Sem Parar"', tipo: 'bool', naTabela: false },
       { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
     ]} />;
 }
