@@ -9,3 +9,10 @@ dist/
 supabase/seed/local/
 .vercel
 .env*
+
+# Senhas/segredos que alguém deixe solto na pasta scripts/ (ex.: senha de
+# impressora/roteador anotada num .txt pra consulta rápida) — nunca versionar,
+# mesmo que ninguém tenha dado "git add" nele ainda.
+scripts/*senha*
+scripts/*password*
+scripts/*credencia*
