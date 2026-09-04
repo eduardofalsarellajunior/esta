@@ -21,6 +21,9 @@ rem ============================================================================
 
 set "URL=%~1"
 if "%URL%"=="" set "URL=https://sisparkweb.vercel.app"
+rem ?dispositivo_fixo=1: diz pro app que esta maquina guarda sessao entre
+rem aberturas (ver comentario equivalente em pdv-cabine.bat e src/lib/supabase.js).
+set "URL=%URL%?dispositivo_fixo=1"
 
 rem Perfil so do PDV: o operador loga uma vez aqui e fica logado, sem se
 rem misturar com a conta usada no Edge normal. Nome diferente do perfil do

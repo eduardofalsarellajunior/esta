@@ -21,6 +21,20 @@ chrome.exe --app=<url> --kiosk-printing --user-data-dir=%LOCALAPPDATA%\esta-pdv
 Rodar sem argumento abre a produção; passando uma URL (`pdv-cabine.bat
 http://localhost:5174`) dá pra testar o mesmo comportamento no dev.
 
+## Por que a sessão fica salva só aqui
+
+Por padrão, o esta **não guarda sessão em disco em lugar nenhum** — fechar a
+aba ou dar F5 desloga sozinho, exigindo login de novo. É de propósito: numa
+máquina de cliente usada por vários operadores ao longo do dia, ninguém pode
+sentar e continuar logado como o operador do turno anterior só porque ele
+fechou a janela sem clicar em "Sair".
+
+A cabine é a exceção: o `.bat` abre com `?dispositivo_fixo=1` na URL, que diz
+pro app "esta máquina pode guardar a sessão" (ver `src/lib/supabase.js`). Só
+funciona porque o perfil (`--user-data-dir`) é dedicado — ninguém mais usa
+essa janela específica, então não tem risco do próximo a chegar continuar
+logado sem querer.
+
 ## Chrome pedindo login (tela de escolher conta) — use o Edge
 
 Em máquina de cliente, às vezes o Chrome já instalado tem alguma política

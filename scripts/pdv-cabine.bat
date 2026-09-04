@@ -30,10 +30,19 @@ rem  permitido quando vem de um clique, mas os pedidos vindos do celular (ver
 rem  Layout.jsx) chegam por uma verificacao periodica em segundo plano, sem
 rem  clique nenhum -- e o Chrome bloqueia pop-up sem gesto do usuario por
 rem  padrao. A flag libera isso soh neste perfil dedicado.
+rem
+rem  Por que ?dispositivo_fixo=1 na URL:
+rem  eh o que diz pro app "esta maquina pode guardar a sessao entre uma
+rem  abertura e outra" (ver src/lib/supabase.js) -- sem isso, o padrao do
+rem  app e NAO guardar sessao (fechar a janela ou dar F5 desloga sozinho,
+rem  pra ninguem entrar direto num computador de cliente sem senha). So
+rem  faz sentido aqui porque este perfil (--user-data-dir) eh dedicado,
+rem  ninguem mais usa esta janela.
 rem ============================================================================
 
 set "URL=%~1"
 if "%URL%"=="" set "URL=https://sisparkweb.vercel.app"
+set "URL=%URL%?dispositivo_fixo=1"
 
 rem Perfil so do PDV: o operador loga uma vez aqui e fica logado, sem se
 rem misturar com a conta usada no Chrome normal.
