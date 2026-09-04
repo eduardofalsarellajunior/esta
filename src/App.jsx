@@ -137,15 +137,22 @@ function Login() {
   }
   return (
     <div className="centro">
-      <form className="card" style={{ width: 360 }} onSubmit={entrar}>
+      {/* autoComplete="off": ajuda em navegadores que respeitam a flag
+          (Firefox), mas Chrome/Edge ignoram isso de propósito em campo de
+          senha desde 2014 — é assim que impedem um site de desligar o
+          gerenciador de senhas do usuário. Pra login em máquina de
+          terceiro (ex.: computador de cliente), o que resolve de verdade
+          é abrir o app numa janela anônima (Ctrl+Shift+N): aí o Chrome
+          nem oferece salvar, e nada fica gravado depois de fechar. */}
+      <form className="card" style={{ width: 360 }} onSubmit={entrar} autoComplete="off">
         <h2>Entrar</h2>
         <div className="campo" style={{ marginBottom: 10 }}>
           <label>E-mail</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="off" />
         </div>
         <div className="campo" style={{ marginBottom: 16 }}>
           <label>Senha</label>
-          <input value={senha} onChange={(e) => setSenha(e.target.value)} type="password" autoComplete="current-password" />
+          <input value={senha} onChange={(e) => setSenha(e.target.value)} type="password" autoComplete="off" />
         </div>
         {erro && <p className="aviso">{erro}</p>}
         <button className="btn-primary" style={{ width: '100%' }} disabled={ocupado}>{ocupado ? '…' : 'Entrar'}</button>
