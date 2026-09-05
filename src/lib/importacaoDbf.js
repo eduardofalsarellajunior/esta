@@ -1,7 +1,10 @@
-// Grava no Supabase o que foi lido/mapeado do .dbf (packages/dbf). Só cria o
-// que for novo — código (ou placa) já existente é sempre ignorado, nunca
-// atualizado, pra não sobrescrever edição feita no app depois da última
-// importação.
+// Grava no Supabase o que foi lido/mapeado do .dbf (packages/dbf). Por
+// padrão só cria o que for novo — código (ou placa) já existente é
+// ignorado, pra não sobrescrever edição feita no app depois da última
+// importação. Passando `substituir: true`, um código já existente é
+// ATUALIZADO em vez de ignorado (mesmo `id`, nunca apaga+recria — cadastros
+// como mensalista têm outras tabelas referenciando esse id) — pensado pra
+// reimportar os dados de um cliente sem precisar apagar um por um antes.
 import { supabase } from './supabase.js';
 import { normalizar } from './texto.js';
 
@@ -48,26 +51,38 @@ function separarValidas(colunas, linhas) {
  * cadastrar esse veículo em `mensalista_veiculos`, o mensalista não seria
  * reconhecido entrando no pátio com o carro principal (só com os extras).
  */
-export async function importarDestino({ perfil, destino, colunas, linhas, codigoEhPlacaPrincipal = false }) {
+export async function importarDestino({ perfil, destino, colunas, linhas, codigoEhPlacaPrincipal = false, substituir = false }) {
   const { validas, erros } = separarValidas(colunas, linhas);
-  const resultado = { criados: 0, ignorados: 0, erros };
+  const resultado = { criados: 0, atualizados: 0, ignorados: 0, erros };
 
   const { data: existentesData, error: errExistentes } = await supabase
-    .from(destino.tabela).select('codigo').eq('filial_id', perfil.filial_id);
+    .from(destino.tabela).select('id, codigo').eq('filial_id', perfil.filial_id);
   if (errExistentes) { resultado.erros.push({ linha: 0, motivo: `Erro ao consultar cadastros existentes: ${errExistentes.message}` }); return resultado; }
-  const codigosExistentes = new Set((existentesData || []).map((r) => r.codigo));
-
-  const novas = [];
-  for (const linha of validas) {
-    if (codigosExistentes.has(linha.codigo)) { resultado.ignorados++; continue; }
-    novas.push(linha);
-    codigosExistentes.add(linha.codigo); // protege contra códigos duplicados dentro do próprio arquivo
-  }
+  const idsPorCodigo = new Map((existentesData || []).map((r) => [r.codigo, r.id]));
 
   // Colunas auxiliares (ex.: o campo TIPO só usado pra filtrar Serviços do
   // ESTACONV — ver mapeamento.ts `naoGravar`) não são coluna de verdade da
-  // tabela de destino, ficam fora do INSERT.
+  // tabela de destino, ficam fora do INSERT/UPDATE.
   const camposNaoGravar = colunas.filter((c) => c.naoGravar).map((c) => c.campo);
+  const limparPayload = (linha) => {
+    const resto = { ...linha };
+    delete resto.modelo;
+    for (const campo of camposNaoGravar) delete resto[campo];
+    return resto;
+  };
+
+  const novas = [];
+  const paraAtualizar = []; // { id, linha } — código já existia e substituir=true
+  for (const linha of validas) {
+    if (idsPorCodigo.has(linha.codigo)) {
+      const id = idsPorCodigo.get(linha.codigo);
+      if (substituir && id) paraAtualizar.push({ id, linha });
+      else if (!substituir) resultado.ignorados++;
+      continue;
+    }
+    novas.push(linha);
+    idsPorCodigo.set(linha.codigo, null); // protege contra códigos duplicados dentro do próprio arquivo
+  }
 
   for (const lote of emLotes(novas, TAMANHO_LOTE)) {
     // `modelo` (só existe nas colunas de mensalistas, ver mapeamento.ts) é do
@@ -75,12 +90,7 @@ export async function importarDestino({ perfil, destino, colunas, linhas, codigo
     // Guarda à parte por código antes de tirar do payload, pra usar em
     // importarVeiculoPrincipal.
     const modeloPorCodigo = new Map(lote.map((linha) => [linha.codigo, linha.modelo]));
-    const payload = lote.map((linha) => {
-      const resto = { ...linha };
-      delete resto.modelo;
-      for (const campo of camposNaoGravar) delete resto[campo];
-      return { ...resto, filial_id: perfil.filial_id };
-    });
+    const payload = lote.map((linha) => ({ ...limparPayload(linha), filial_id: perfil.filial_id }));
     const { data: inseridos, error } = await supabase.from(destino.tabela).insert(payload).select('id, codigo');
     if (error) {
       lote.forEach((linha) => resultado.erros.push({ linha: linha.codigo, motivo: error.message }));
@@ -93,7 +103,42 @@ export async function importarDestino({ perfil, destino, colunas, linhas, codigo
     }
   }
 
+  // Substituição: UPDATE mantendo o mesmo id — nunca apaga+recria (mensalista
+  // tem mensalista_veiculos apontando pro id dele; trocar o id quebraria isso).
+  if (paraAtualizar.length) {
+    const modeloPorId = new Map(paraAtualizar.map(({ id, linha }) => [id, linha.modelo]));
+    for (const { id, linha } of paraAtualizar) {
+      const payload = limparPayload(linha);
+      delete payload.codigo; // é a chave usada pra achar o registro, não muda
+      const { error } = await supabase.from(destino.tabela).update(payload).eq('id', id);
+      if (error) { resultado.erros.push({ linha: linha.codigo, motivo: error.message }); continue; }
+      resultado.atualizados++;
+    }
+    if (destino.tabela === 'mensalistas' && codigoEhPlacaPrincipal) {
+      await atualizarVeiculoPrincipal({ perfil, ids: paraAtualizar.map((p) => p.id), modeloPorId });
+    }
+  }
+
   return resultado;
+}
+
+/**
+ * Atualiza o modelo/tabela do veículo principal (placa = código do
+ * mensalista) quando um mensalista já existente é substituído — best-effort,
+ * não gera erro visível: o cadastro principal (mensalista) já foi atualizado
+ * de qualquer forma, isso é só o veículo acompanhar.
+ */
+async function atualizarVeiculoPrincipal({ perfil, ids, modeloPorId }) {
+  const { data: mensalistas } = await supabase.from('mensalistas').select('id, codigo').in('id', ids);
+  if (!mensalistas?.length) return;
+  const catalogo = await catalogoTabelaPorModelo(perfil.filial_id);
+  for (const m of mensalistas) {
+    const modelo = modeloPorId.get(m.id);
+    if (!modelo) continue;
+    await supabase.from('mensalista_veiculos')
+      .update({ modelo, tipo_veic: catalogo.get(normalizar(modelo)) || null })
+      .eq('filial_id', perfil.filial_id).eq('placa', String(m.codigo || '').trim().toUpperCase());
+  }
 }
 
 /** Cadastra o próprio código do mensalista (= placa do veículo principal) em mensalista_veiculos. */
@@ -133,21 +178,22 @@ async function importarVeiculoPrincipal({ perfil, inseridos, modeloPorCodigo, re
  * (CARMESTRE, o código/placa principal dele). Sem o mensalista já cadastrado,
  * a linha vira erro (não tem onde pendurar o veículo).
  */
-export async function importarVeiculosExtras({ perfil, linhas, colunas }) {
+export async function importarVeiculosExtras({ perfil, linhas, colunas, substituir = false }) {
   const { validas, erros } = separarValidas(colunas, linhas);
-  const resultado = { criados: 0, ignorados: 0, erros };
+  const resultado = { criados: 0, atualizados: 0, ignorados: 0, erros };
   if (!validas.length) return resultado;
 
   const [{ data: mensalistasData, error: errMens }, { data: jaExistem }, catalogo] = await Promise.all([
     supabase.from('mensalistas').select('id, codigo').eq('filial_id', perfil.filial_id),
-    supabase.from('mensalista_veiculos').select('placa').eq('filial_id', perfil.filial_id),
+    supabase.from('mensalista_veiculos').select('id, placa').eq('filial_id', perfil.filial_id),
     catalogoTabelaPorModelo(perfil.filial_id),
   ]);
   if (errMens) { resultado.erros.push({ linha: 0, motivo: `Erro ao consultar mensalistas: ${errMens.message}` }); return resultado; }
   const idPorCodigo = new Map((mensalistasData || []).map((m) => [m.codigo, m.id]));
-  const placasExistentes = new Set((jaExistem || []).map((r) => r.placa));
+  const idsPorPlaca = new Map((jaExistem || []).map((r) => [r.placa, r.id]));
 
   const payload = [];
+  const paraAtualizar = [];
   for (const linha of validas) {
     const p = String(linha.placa || '').trim().toUpperCase();
     const mensalistaId = idPorCodigo.get(linha.codigo_mestre);
@@ -155,8 +201,16 @@ export async function importarVeiculosExtras({ perfil, linhas, colunas }) {
       resultado.erros.push({ linha: linha.codigo_mestre, motivo: `Mensalista "${linha.codigo_mestre}" não encontrado — importe os mensalistas (ESTAEMPR) primeiro.` });
       continue;
     }
-    if (placasExistentes.has(p)) { resultado.ignorados++; continue; }
-    placasExistentes.add(p);
+    if (idsPorPlaca.has(p)) {
+      if (substituir) {
+        paraAtualizar.push({
+          id: idsPorPlaca.get(p), mensalista_id: mensalistaId, modelo: linha.modelo || null,
+          tipo_veic: catalogo.get(normalizar(linha.modelo)) || null,
+        });
+      } else resultado.ignorados++;
+      continue;
+    }
+    idsPorPlaca.set(p, null);
     payload.push({
       filial_id: perfil.filial_id, mensalista_id: mensalistaId, placa: p, modelo: linha.modelo || null,
       tipo_veic: catalogo.get(normalizar(linha.modelo)) || null,
@@ -167,6 +221,12 @@ export async function importarVeiculosExtras({ perfil, linhas, colunas }) {
     const { error } = await supabase.from('mensalista_veiculos').insert(lote);
     if (error) { lote.forEach((l) => resultado.erros.push({ linha: l.placa, motivo: error.message })); continue; }
     resultado.criados += lote.length;
+  }
+
+  for (const { id, ...campos } of paraAtualizar) {
+    const { error } = await supabase.from('mensalista_veiculos').update(campos).eq('id', id);
+    if (error) { resultado.erros.push({ linha: campos.mensalista_id, motivo: error.message }); continue; }
+    resultado.atualizados++;
   }
 
   return resultado;
